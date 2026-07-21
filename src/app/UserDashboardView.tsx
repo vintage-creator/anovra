@@ -5,8 +5,9 @@ import {
   Calendar, BarChart2, ShoppingBag, BookOpen, Flame, Lock,
   ExternalLink, Plus, X, ChevronDown,
 } from "lucide-react";
-import { cn } from "./types";
 import type { View } from "./types";
+import { cn } from "./types";
+import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 
 // ── Fake data ──────────────────────────────────────────────
 
@@ -162,21 +163,18 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Anovra Logo" className="h-10 w-auto object-contain shrink-0" />
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>Consumer dashboard</p>
-            <h1 className="text-2xl sm:text-3xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-              Welcome back, Adaeze
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Your skin score this month: <strong className="text-foreground">72 / 100</strong> · up from 65 last month
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-background pb-12">
+      <UnifiedDashboardHeader
+        currentView="userdashboard"
+        setView={setView}
+        title="My Skin Portal"
+        subtitle="Skin score: 72 / 100 · Personalised routines & scan history"
+        badgeText="CONSUMER PROFILE"
+        role="consumer"
+        showShopLink={false}
+      />
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative">
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <span className="text-xs bg-accent/15 text-accent border border-accent/20 px-3 py-1.5 rounded-full font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Premium Glow

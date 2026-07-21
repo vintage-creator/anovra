@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
+import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 
 // ---- ADMIN DATA ----
 
@@ -136,7 +137,7 @@ function generateCredentials(name: string) {
   return { username, password };
 }
 
-export function AdminView() {
+export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [tab, setTab] = useState<AdminTab>("overview");
   const [expandedFlag, setExpandedFlag] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -238,47 +239,31 @@ export function AdminView() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Admin header */}
-      <div className="bg-foreground text-primary-foreground">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-white px-2.5 py-1.5 rounded-xl shadow-xs shrink-0">
-                <img src="/logo.png" alt="Anovra Logo" className="h-10 sm:h-12 w-auto object-contain" />
-              </div>
-              <div>
-                <p className="text-xs text-white/40 mb-0.5 font-mono">PLATFORM ADMIN</p>
-                <h1
-                  className="text-2xl font-light text-primary-foreground"
-                  style={{ fontFamily: "'Fraunces', serif" }}
-                >
-                  Anovra Control Centre
-                </h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-right hidden sm:block">
-                <p className="text-xs text-white/40" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Signed in as</p>
-                <p className="text-sm text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>platform@anovra.africa</p>
-              </div>
-              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-medium shrink-0">
-                PL
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="min-h-screen bg-background pb-12">
+      {setView && (
+        <UnifiedDashboardHeader
+          currentView="admin"
+          setView={setView}
+          title="Anovra Control Centre"
+          subtitle="Platform Administration, NAFDAC Safety Queue & MRR Analytics"
+          badgeText="PLATFORM ADMIN"
+          role="admin"
+          showShopLink={false}
+        />
+      )}
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 relative pt-4">
         {/* Tab bar */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-0 border-t border-white/10 overflow-x-auto scrollbar-none">
+        <div className="flex gap-2 border-b border-border overflow-x-auto pb-2 mb-6">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => { setTab(t.id); setSearch(""); }}
               className={cn(
-                "relative flex items-center gap-2 px-4 py-3 text-sm transition-colors border-b-2",
+                "relative flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 font-medium whitespace-nowrap",
                 tab === t.id
-                  ? "border-accent text-white font-medium"
-                  : "border-transparent text-white/50 hover:text-white/80"
+                  ? "border-accent text-accent font-semibold"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               )}
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >

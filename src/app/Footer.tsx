@@ -8,7 +8,13 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
         {/* Brand column */}
         <div className="col-span-2 lg:col-span-2">
           <div className="mb-4">
-            <img src="/logo.png" alt="Anovra Logo" className="h-14 sm:h-20 w-auto object-contain brightness-0 invert" />
+            <button
+              onClick={() => setView("landing")}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl transition-transform hover:scale-105 active:scale-95 text-left inline-block"
+              aria-label="Anovra Home"
+            >
+              <img src="/logo.png" alt="Anovra Logo" className="h-14 sm:h-20 w-auto object-contain brightness-0 invert" />
+            </button>
           </div>
           <p
             className="text-sm text-white/50 leading-relaxed max-w-xs"

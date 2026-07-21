@@ -3,6 +3,7 @@ import {
   Camera, Upload, Shield, ChevronDown, ChevronUp, ChevronRight,
   CheckCircle, ArrowRight, MessageCircle, Zap, Globe, Lock,
   Scan, Activity, X, Check, Info, Store, Search, Star, AlertTriangle,
+  User, UserCheck, Square, Hand, Maximize2, MapPin, Sparkles, Smile
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -10,13 +11,13 @@ import { cn } from "./types";
 // ---- SKIN TEST DATA ----
 
 const SKIN_AREAS = [
-  { name: "Face", desc: "Cheeks, forehead, chin, nose", photo: "1531746020798-e6953c6e8e04", guide: "oval", icon: "🧖" },
-  { name: "Neck", desc: "Throat, nape, décolletage", photo: "1603291000179-afd74889979c", guide: "oval", icon: "👤" },
-  { name: "Back", desc: "Upper or lower back", photo: "1541752857837-f8a0154fd092", guide: "rect", icon: "🔲" },
-  { name: "Hands", desc: "Knuckles, palms, wrists", photo: "1558618666-fcd25c85cd64", guide: "rect", icon: "🤲" },
-  { name: "Legs", desc: "Thighs, shins, calves", photo: "1523297736436-356615162cc8", guide: "rect", icon: "🦵" },
-  { name: "Whole Body", desc: "Full-body video scan — face, torso, limbs and all visible skin areas analysed together", photo: "1707161256359-0919306e0d3c", guide: "rect", icon: "🧍" },
-  { name: "Other area", desc: "Any other visible skin area not listed above", photo: "1577746838851-816a43ca8733", guide: "rect", icon: "📍" },
+  { name: "Face", desc: "Cheeks, forehead, chin, nose", photo: "1531746020798-e6953c6e8e04", guide: "oval", icon: <User className="w-5 h-5 text-emerald-600 shrink-0" /> },
+  { name: "Neck", desc: "Throat, nape, décolletage", photo: "1603291000179-afd74889979c", guide: "oval", icon: <UserCheck className="w-5 h-5 text-emerald-600 shrink-0" /> },
+  { name: "Back", desc: "Upper or lower back", photo: "1541752857837-f8a0154fd092", guide: "rect", icon: <Square className="w-5 h-5 text-emerald-600 shrink-0" /> },
+  { name: "Hands", desc: "Knuckles, palms, wrists", photo: "1558618666-fcd25c85cd64", guide: "rect", icon: <Hand className="w-5 h-5 text-emerald-600 shrink-0" /> },
+  { name: "Legs", desc: "Thighs, shins, calves", photo: "1523297736436-356615162cc8", guide: "rect", icon: <Activity className="w-5 h-5 text-emerald-600 shrink-0" /> },
+  { name: "Whole Body", desc: "Full-body video scan — face, torso, limbs and all visible skin areas analysed together", photo: "1707161256359-0919306e0d3c", guide: "rect", icon: <Maximize2 className="w-5 h-5 text-emerald-600 shrink-0" /> },
+  { name: "Other area", desc: "Any other visible skin area not listed above", photo: "1577746838851-816a43ca8733", guide: "rect", icon: <MapPin className="w-5 h-5 text-emerald-600 shrink-0" /> },
 ];
 
 const ANALYSIS_STEPS_LABELS = [
@@ -135,7 +136,7 @@ const recommendations = [
 
 type SkinStep = 1 | 2 | 3 | 4 | 5;
 
-export function SkinTestView() {
+export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const [step, setStep] = useState<SkinStep>(1);
   const [selectedArea, setSelectedArea] = useState("");
   const [uploadMode, setUploadMode] = useState<"image" | "video" | null>(null);
@@ -195,14 +196,23 @@ export function SkinTestView() {
       {/* Step progress bar */}
       <div className="border-b border-border bg-card sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <button
+              onClick={() => setView?.("landing")}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg transition-transform hover:scale-105 active:scale-95 shrink-0"
+              aria-label="Anovra Home"
+            >
+              <img src="/logo.png" alt="Anovra Logo" className="h-8 sm:h-10 w-auto object-contain" />
+            </button>
             <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="Anovra" className="h-8 sm:h-10 w-auto object-contain" />
-              <span className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-                Anovra Skin Test
+              <span className="text-xs sm:text-sm font-semibold text-foreground tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                Anovra Skin Test Engine
+              </span>
+              <span className="text-[10px] font-mono bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> AI ACTIVE
               </span>
             </div>
-            <button onClick={() => setView("landing")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={() => setView?.("landing")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
               Cancel
             </button>
           </div>
@@ -270,7 +280,7 @@ export function SkinTestView() {
                 <option value="" disabled>Choose an area to analyse…</option>
                 {SKIN_AREAS.map((area) => (
                   <option key={area.name} value={area.name}>
-                    {area.icon}  {area.name}
+                    {area.name} — {area.desc}
                   </option>
                 ))}
               </select>
@@ -282,7 +292,7 @@ export function SkinTestView() {
           {selectedArea && (() => {
             const area = SKIN_AREAS.find((a) => a.name === selectedArea)!;
             return (
-              <div className="mb-8 rounded-2xl border-2 border-accent overflow-hidden flex gap-0">
+              <div className="mb-8 rounded-2xl border-2 border-emerald-500 overflow-hidden flex gap-0 shadow-xs">
                 <div className="relative w-28 flex-shrink-0">
                   <img
                     src={`https://images.unsplash.com/photo-${area.photo}?w=224&h=168&fit=crop&auto=format`}
@@ -293,9 +303,9 @@ export function SkinTestView() {
                 </div>
                 <div className="flex-1 p-4 bg-card flex flex-col justify-center">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-lg">{area.icon}</span>
+                    {area.icon}
                     <p className="font-semibold text-foreground text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{area.name}</p>
-                    <span className="ml-auto w-5 h-5 rounded-full bg-accent flex items-center justify-center flex-shrink-0">
+                    <span className="ml-auto w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
                       <Check className="w-3 h-3 text-white" />
                     </span>
                   </div>

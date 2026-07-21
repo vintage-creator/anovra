@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
+import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 
 // ---- CATALOG DATA ----
 
@@ -813,44 +814,90 @@ function AddProductDrawer({ onClose, onSave }: { onClose: () => void; onSave: (f
   );
 }
 
-export function CatalogView() {
+export function CatalogView({ setView }: { setView?: (v: View) => void }) {
   const [expandedFlag, setExpandedFlag] = useState<number | null>(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "blocked">("all");
+
+  const filteredProducts = catalogProducts.filter((p) => {
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.brand.toLowerCase().includes(searchQuery.toLowerCase()) || p.ingredients.some(i => i.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      {showAddProduct && (
-        <AddProductDrawer
-          onClose={() => setShowAddProduct(false)}
-          onSave={(f) => { console.log("New product:", f); setShowAddProduct(false); }}
+    <div className="min-h-screen bg-background pb-12">
+      {setView && (
+        <UnifiedDashboardHeader
+          currentView="catalog"
+          setView={setView}
+          title="Product Catalog"
+          subtitle={`${catalogProducts.filter((p) => p.status === "active").length} active products · NAFDAC Safety Screened`}
+          badgeText="NAFDAC Moderate"
+          role="vendor"
+          showShopLink={true}
         />
       )}
-      <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Anovra Logo" className="h-10 w-auto object-contain shrink-0" />
-          <div>
-            <h1
-              className="text-2xl sm:text-3xl font-light text-foreground"
-              style={{ fontFamily: "'Fraunces', serif" }}
-            >
-              Product Catalog
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {catalogProducts.filter((p) => p.status === "active").length} active products ·{" "}
-              <span className="text-amber-600 font-medium">
-                {catalogProducts.filter((p) => p.status === "blocked").length} blocked — safety review required
-              </span>
-            </p>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 relative">
+        {showAddProduct && (
+          <AddProductDrawer
+            onClose={() => setShowAddProduct(false)}
+            onSave={(f) => { console.log("New product:", f); setShowAddProduct(false); }}
+          />
+        )}
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs">
+            <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Total Products</p>
+            <p className="text-2xl font-semibold text-foreground">{catalogProducts.length}</p>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs">
+            <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Active Recommendations</p>
+            <p className="text-2xl font-semibold text-emerald-600">{catalogProducts.filter(p => p.status === "active").length}</p>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs">
+            <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Blocked / Under Review</p>
+            <p className="text-2xl font-semibold text-amber-600">{catalogProducts.filter(p => p.status === "blocked").length}</p>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs">
+            <p className="text-xs text-muted-foreground uppercase font-mono mb-1">NAFDAC Compliance</p>
+            <p className="text-2xl font-semibold text-emerald-600">92%</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowAddProduct(true)}
-          className="flex items-center gap-1.5 text-xs sm:text-sm bg-accent text-white px-3.5 py-2 rounded-lg hover:bg-accent/90 transition-colors font-medium shadow-xs"
-          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-        >
-          + Add product
-        </button>
-      </div>
+
+        {/* Catalog Search & Controls Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6 bg-card border border-border p-4 rounded-xl shadow-xs">
+          <div className="flex items-center gap-3 flex-1">
+            <input
+              type="text"
+              placeholder="Search by product name, brand, or ingredient..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full max-w-md bg-secondary border border-border rounded-lg px-3.5 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-accent"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              <option value="all">All Compliance Statuses</option>
+              <option value="active">Active Only</option>
+              <option value="blocked">Blocked / Review</option>
+            </select>
+          </div>
+          <button
+            onClick={() => setShowAddProduct(true)}
+            className="flex items-center justify-center gap-1.5 text-xs sm:text-sm bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors font-medium shadow-xs shrink-0"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            + Add product
+          </button>
+        </div>
 
       {/* Safety alert */}
       <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
@@ -866,7 +913,7 @@ export function CatalogView() {
       </div>
 
       <div className="space-y-3">
-        {catalogProducts.map((p) => (
+        {filteredProducts.map((p) => (
           <div
             key={p.id}
             className={cn(
@@ -969,6 +1016,7 @@ export function CatalogView() {
             )}
           </div>
         ))}
+      </div>
       </div>
     </div>
   );

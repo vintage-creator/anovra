@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Menu,
   ChevronDown,
@@ -238,22 +238,39 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("landing");
+  const getViewFromHash = (): View => {
+    const hash = window.location.hash.replace("#", "").replace(/^\//, "");
+    const validViews: View[] = [
+      "landing", "dashboard", "catalog", "skintest", "admin",
+      "adminlogin", "shop", "signin", "signup", "teamlogin",
+      "teamdashboard", "about", "contact", "userdashboard"
+    ];
+    return validViews.includes(hash as View) ? (hash as View) : "landing";
+  };
+
+  const [view, setViewState] = useState<View>(getViewFromHash);
+
+  const setView = (v: View) => {
+    setViewState(v);
+    if (v === "landing") {
+      if (window.location.hash) {
+        window.history.pushState(null, "", window.location.pathname);
+      }
+    } else {
+      window.location.hash = `#/${v}`;
+    }
+  };
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setViewState(getViewFromHash());
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
 
   const hideNav = [
-    "dashboard",
-    "userdashboard",
-    "catalog",
-    "admin",
-    "shop",
-    "signin",
-    "signup",
-    "adminlogin",
-    "teamlogin",
-    "teamdashboard",
-  ].includes(view);
-
-  const hideFooter = [
+    "skintest",
     "dashboard",
     "userdashboard",
     "catalog",
@@ -277,10 +294,10 @@ export default function App() {
         {view === "about" && <AboutView setView={setView} />}
         {view === "contact" && <ContactView setView={setView} />}
         {view === "dashboard" && <DashboardView setView={setView} />}
-        {view === "catalog" && <CatalogView />}
-        {view === "skintest" && <SkinTestView />}
+        {view === "catalog" && <CatalogView setView={setView} />}
+        {view === "skintest" && <SkinTestView setView={setView} />}
         {view === "adminlogin" && <AdminLoginView setView={setView} />}
-        {view === "admin" && <AdminView />}
+        {view === "admin" && <AdminView setView={setView} />}
         {view === "shop" && <ShopView setView={setView} />}
         {view === "signin" && <SignInView setView={setView} />}
         {view === "signup" && <SignUpView setView={setView} />}
@@ -288,7 +305,7 @@ export default function App() {
         {view === "teamdashboard" && <TeamDashboardView setView={setView} />}
         {view === "userdashboard" && <UserDashboardView setView={setView} />}
       </div>
-      {!hideFooter && <Footer setView={setView} />}
+      <Footer setView={setView} />
     </div>
   );
 }

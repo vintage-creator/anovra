@@ -111,7 +111,6 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
           }}
         />
         <div className="max-w-4xl mx-auto text-center relative z-10">
-          <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto mx-auto mb-4 object-contain" />
           <span className="inline-block text-xs text-accent uppercase tracking-widest mb-4 border border-accent/30 px-3 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>
             About Anovra
           </span>
@@ -359,7 +358,6 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
           style={{ backgroundImage: "radial-gradient(circle at 70% 40%, #C86B3A 0%, transparent 55%)" }}
         />
         <div className="max-w-2xl mx-auto relative z-10">
-          <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto mx-auto mb-4 object-contain" />
           <span className="inline-block text-xs text-accent uppercase tracking-widest mb-4 border border-accent/30 px-3 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>
             Contact us
           </span>
