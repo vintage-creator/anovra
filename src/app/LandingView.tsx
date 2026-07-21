@@ -568,18 +568,18 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
             <p className="text-muted-foreground text-base sm:text-lg leading-relaxed mb-8 max-w-md" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Give every vendor a white-labeled AI skin test. Customers take a selfie, answer 5 questions, and get matched to the right products from that vendor's catalog — not generic advice.
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col sm:flex-row gap-3.5 w-full sm:w-auto">
               <button
                 onClick={() => setView("skintest")}
-                className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-amber-950 font-bold px-5 py-3 rounded-lg shadow-sm hover:shadow transition-all"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all text-center"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 Try the skin test
-                <ArrowRight className="w-4 h-4 text-amber-950" />
+                <ArrowRight className="w-4 h-4 text-white" />
               </button>
               <button
                 onClick={() => setView("signup")}
-                className="flex items-center gap-2 border-2 border-emerald-500 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold px-5 py-3 rounded-lg transition-all"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 border-2 border-[#008236] bg-transparent hover:bg-[#008236]/10 text-[#008236] dark:text-emerald-400 font-bold px-6 py-3.5 rounded-xl transition-all text-center"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 Join/Register as a Vendor
