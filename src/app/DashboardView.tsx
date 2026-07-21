@@ -196,7 +196,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-muted rounded-xl p-1 mb-7 w-full sm:w-fit overflow-x-auto scrollbar-none">
+      <div className="flex gap-1.5 bg-muted rounded-xl p-1.5 mb-7 w-full sm:w-auto overflow-x-auto scrollbar-none border border-border/50">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -474,7 +474,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
       {/* ── SETTINGS ── */}
       {tab === "settings" && (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 w-full">
           {/* Branding */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-border">
@@ -593,7 +593,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
       {/* ── TEAM ── */}
       {tab === "team" && (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 w-full">
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div>
@@ -676,7 +676,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
       {/* ── API & DEV ── */}
       {tab === "api" && (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 w-full">
           {/* API key */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-border">
@@ -772,7 +772,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
       {/* ── SUPPORT ── */}
       {tab === "support" && (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 w-full">
           {/* Priority WhatsApp */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-border">
