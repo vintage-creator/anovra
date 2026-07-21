@@ -943,10 +943,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
 
       {/* Footer */}
       <footer className="border-t border-border py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            © 2025 Anovra · Not a medical diagnosis service
-          </p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-center gap-4 text-center">
           <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Results are cosmetic recommendations only. Consult a registered dermatologist for persistent skin conditions.
           </p>

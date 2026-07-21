@@ -240,7 +240,31 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
 export default function App() {
   const [view, setView] = useState<View>("landing");
 
-  const hideNav = ["shop", "signin", "signup", "adminlogin", "teamlogin", "teamdashboard"].includes(view);
+  const hideNav = [
+    "dashboard",
+    "userdashboard",
+    "catalog",
+    "admin",
+    "shop",
+    "signin",
+    "signup",
+    "adminlogin",
+    "teamlogin",
+    "teamdashboard",
+  ].includes(view);
+
+  const hideFooter = [
+    "dashboard",
+    "userdashboard",
+    "catalog",
+    "admin",
+    "shop",
+    "signin",
+    "signup",
+    "adminlogin",
+    "teamlogin",
+    "teamdashboard",
+  ].includes(view);
 
   return (
     <div
@@ -264,7 +288,7 @@ export default function App() {
         {view === "teamdashboard" && <TeamDashboardView setView={setView} />}
         {view === "userdashboard" && <UserDashboardView setView={setView} />}
       </div>
-      <Footer setView={setView} />
+      {!hideFooter && <Footer setView={setView} />}
     </div>
   );
 }
