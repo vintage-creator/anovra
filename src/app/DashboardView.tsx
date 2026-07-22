@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
+import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 
 // ---- DASHBOARD DATA ----
 
