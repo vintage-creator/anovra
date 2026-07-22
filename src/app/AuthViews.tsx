@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Eye, Check, CheckCircle, AlertCircle, Globe, Upload, ChevronDown, Scan, User, Store, ShieldCheck } from "lucide-react";
 import type { View } from "./types";
 import { toast } from "sonner";
+import { supabase } from "./utils/supabase";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -43,69 +44,19 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 function CACVerifier({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [status, setStatus] = useState<"idle" | "verifying" | "found" | "notfound">("idle");
-  const [bizName, setBizName] = useState("");
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const MOCK_CAC: Record<string, string> = {
-    "RC-123456": "Veraski Nigeria Limited",
-    "RC-987654": "GlowAfrique Cosmetics Ltd",
-    "RC-445566": "ClearSkin Ventures Nigeria",
-    "BN-112233": "SunGuard Skincare Enterprises",
-  };
-
-  const handleChange = (v: string) => {
-    onChange(v);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    const clean = v.trim().toUpperCase();
-    if (clean.length < 6) { setStatus("idle"); return; }
-    setStatus("verifying");
-    timerRef.current = setTimeout(() => {
-      const match = MOCK_CAC[clean];
-      if (match) { setStatus("found"); setBizName(match); }
-      else setStatus("notfound");
-    }, 900);
-  };
-
   return (
     <div>
-      <div className="relative">
-        <input
-          className={`w-full px-3 py-2.5 pr-10 bg-input-background border rounded-lg text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all ${
-            status === "found" ? "border-green-400 focus:ring-1 focus:ring-green-400/50" :
-            status === "notfound" ? "border-red-400 focus:ring-1 focus:ring-red-400/50" :
-            "border-border focus:ring-1 focus:ring-accent/50"
-          }`}
-          placeholder="e.g. RC-123456 or BN-112233"
-          value={value}
-          onChange={(e) => handleChange(e.target.value)}
-          style={{ fontFamily: "'DM Mono', monospace" }}
-        />
-        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-          {status === "verifying" && <div className="w-4 h-4 border-2 border-accent/40 border-t-accent rounded-full animate-spin" />}
-          {status === "found" && <CheckCircle className="w-4 h-4 text-green-500" />}
-          {status === "notfound" && <AlertCircle className="w-4 h-4 text-red-500" />}
-        </div>
-      </div>
-      {status === "verifying" && (
-        <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          <div className="w-3 h-3 border border-accent/40 border-t-accent rounded-full animate-spin flex-shrink-0" />
-          Verifying with CAC registry…
-        </p>
-      )}
-      {status === "found" && (
-        <p className="text-xs text-green-700 mt-1.5 flex items-center gap-1.5 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          <CheckCircle className="w-3 h-3 flex-shrink-0" /> Registered business found: <span className="font-semibold">{bizName}</span>
-        </p>
-      )}
-      {status === "notfound" && (
-        <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          <AlertCircle className="w-3 h-3 flex-shrink-0" /> No match found. Check the number and try again.
-        </p>
-      )}
+      <input
+        className="w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+        placeholder="e.g. RC-123456 or BN-112233"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+      />
     </div>
   );
 }
+
 
 function isSocialUrl(url: string): boolean {
   try {
@@ -124,11 +75,13 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
     email: "",
     whatsapp: "",
     cac: "",
+    businessName: "",
     cacDoc: "",
     password: "",
     confirmPassword: "",
     referralCode: "",
   });
+  const [cacDocFile, setCacDocFile] = useState<File | null>(null);
 
   const [socialAccounts, setSocialAccounts] = useState<
     { platform: string; url: string }[]
@@ -137,6 +90,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showPopupModal, setShowPopupModal] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -169,8 +123,9 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
   );
 
   // Vendor Step Validations
-  const step1Valid = form.fullName.trim().length > 2 && form.email.includes("@") && form.whatsapp.length === 10;
-  const step2Valid = form.cac.trim().length > 4 && form.cacDoc && socialAccounts[0].url.trim().length > 8 && validSocialUrls;
+  const step1Valid = form.fullName.trim().length >= 3 && form.email.includes("@") && form.whatsapp.length === 10;
+  const isCacValid = form.cac.trim().length >= 8 && form.cac.trim().length <= 14;
+  const step2Valid = isCacValid && form.businessName.trim().length >= 3 && form.cacDoc && socialAccounts[0].url.trim().length > 8 && validSocialUrls;
   const step3Valid = passwordScore >= 4 && passwordsMatch;
   const canSubmitVendor = step1Valid && step2Valid && step3Valid;
 
@@ -186,10 +141,94 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
   const labelCls =
     "block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-wider";
 
-  const handleFormSubmit = () => {
+  const handleFormSubmit = async () => {
     if (selectedRole === "customer" && !isCustomerValid) return;
     if (selectedRole === "vendor" && !canSubmitVendor) return;
-    setShowPopupModal(true);
+
+    setLoading(true);
+    try {
+      // 1. Upload CAC Document to Supabase Storage if vendor
+      let documentUrl = "";
+      if (selectedRole === "vendor" && cacDocFile) {
+        try {
+          const fileExt = cacDocFile.name.split('.').pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+          const filePath = `${fileName}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from("vendor-documents")
+            .upload(filePath, cacDocFile, {
+              cacheControl: '3600',
+              upsert: true
+            });
+            
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage
+              .from("vendor-documents")
+              .getPublicUrl(filePath);
+            documentUrl = publicUrl;
+          } else {
+            console.warn("Supabase Storage bucket upload failed, using filename fallback:", uploadError);
+            documentUrl = cacDocFile.name;
+          }
+        } catch (storageErr) {
+          console.warn("Storage upload exception, using filename fallback:", storageErr);
+          documentUrl = cacDocFile.name;
+        }
+      }
+
+      // 2. Sign up user via Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          data: {
+            full_name: form.fullName,
+            role: selectedRole,
+            cac_number: selectedRole === "vendor" ? form.cac : null,
+            cac_document_url: selectedRole === "vendor" ? documentUrl : null,
+          },
+        },
+      });
+
+      if (error) throw error;
+      if (!data.user) throw new Error("Registration failed: User details could not be generated.");
+
+      // 3. Insert details into public profiles table
+      const profileData = {
+        id: data.user.id,
+        name: form.fullName,
+        business_name: selectedRole === "vendor" ? form.businessName : null,
+        phone: selectedRole === "vendor" ? "+234" + form.whatsapp : null,
+        nafdac_number: selectedRole === "vendor" ? form.referralCode : null,
+        plan: "free",
+        is_verified: false,
+      };
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert([profileData]);
+
+      if (profileError) throw profileError;
+
+      // 3. Trigger onboarding email Edge Function for vendors
+      if (selectedRole === "vendor") {
+        try {
+          await supabase.functions.invoke("send-onboarding-email", {
+            body: { name: form.fullName, email: form.email },
+          });
+        } catch (emailErr) {
+          console.warn("Failed to dispatch onboarding email:", emailErr);
+        }
+      }
+
+      toast.success("Account created successfully!");
+      setShowPopupModal(true);
+    } catch (err: any) {
+      toast.error(err.message || "Registration encountered an unexpected error.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -406,18 +445,24 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                     <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
                   )}
                 </div>
-
                 <button
                   onClick={handleFormSubmit}
-                  disabled={!isCustomerValid}
-                  className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all mt-4 cursor-pointer ${
-                    isCustomerValid
+                  disabled={!isCustomerValid || loading}
+                  className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all mt-4 cursor-pointer flex items-center justify-center gap-1.5 ${
+                    isCustomerValid && !loading
                       ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg"
                       : "bg-muted text-muted-foreground cursor-not-allowed"
                   }`}
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
-                  Create Customer Account
+                  {loading ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-muted-foreground border-t-foreground rounded-full animate-spin" />
+                      <span>Creating Account...</span>
+                    </>
+                  ) : (
+                    "Create Customer Account"
+                  )}
                 </button>
               </div>
             )}
@@ -495,6 +540,23 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                     <div>
                       <label className={labelCls}>CAC Registration Number *</label>
                       <CACVerifier value={form.cac} onChange={(v) => set("cac", v)} />
+                      <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Must be between 8 and 14 characters.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Business / Company Name *</label>
+                      <input
+                        className={inputCls}
+                        placeholder="e.g. Veraski Skincare"
+                        value={form.businessName}
+                        onChange={(e) => set("businessName", e.target.value)}
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Minimum 3 characters.
+                      </p>
                     </div>
 
                     <div>
@@ -522,9 +584,22 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                           type="file"
                           accept=".pdf,image/*"
                           className="sr-only"
-                          onChange={(e) => set("cacDoc", e.target.files?.[0]?.name || "")}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 5 * 1024 * 1024) {
+                                toast.error("File size exceeds the 5MB limit.");
+                                return;
+                              }
+                              set("cacDoc", file.name);
+                              setCacDocFile(file);
+                            }
+                          }}
                         />
                       </label>
+                      <p className="text-[10px] text-muted-foreground mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Supported formats: PDF, PNG, JPG, JPEG · Max file size: 5MB
+                      </p>
                     </div>
 
                     <div>
@@ -672,15 +747,22 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                   ) : (
                     <button
                       onClick={handleFormSubmit}
-                      disabled={!canSubmitVendor}
-                      className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all cursor-pointer text-center ${
-                        canSubmitVendor
-                          ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg animate-pulse"
+                      disabled={!canSubmitVendor || loading}
+                      className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                        canSubmitVendor && !loading
+                          ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg"
                           : "bg-muted text-muted-foreground cursor-not-allowed"
                       }`}
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
-                      Submit Vendor Application
+                      {loading ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                          <span>Submitting...</span>
+                        </>
+                      ) : (
+                        "Submit Vendor Application"
+                      )}
                     </button>
                   )}
                 </div>
@@ -777,27 +859,134 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSignIn = () => {
+  // Email OTP states
+  const [useOtp, setUseOtp] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+
+  const handleSendOtp = async () => {
+    if (!email) { setError("Please enter your email address."); return; }
+    setError("");
+    setLoading(true);
+    try {
+      const { error: otpErr } = await supabase.auth.signInWithOtp({
+        email: email.trim().toLowerCase(),
+        options: {
+          shouldCreateUser: false,
+        }
+      });
+      if (otpErr) throw otpErr;
+      setOtpSent(true);
+      toast.success("Verification code dispatched to your inbox!");
+    } catch (err: any) {
+      let friendlyMsg = err.message || "Failed to send verification code.";
+      if (friendlyMsg.toLowerCase().includes("signups not allowed for otp")) {
+        friendlyMsg = "No account associated with this email. Please register first.";
+      }
+      setError(friendlyMsg);
+      toast.error(friendlyMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode) { setError("Please enter the 6-digit verification code."); return; }
+    setError("");
+    setLoading(true);
+    try {
+      const { data, error: verifyErr } = await supabase.auth.verifyOtp({
+        email: email.trim().toLowerCase(),
+        token: otpCode,
+        type: "email"
+      });
+
+      if (verifyErr) throw verifyErr;
+      if (!data.user) throw new Error("Verification failed: User profile not resolved.");
+
+      const userRole = data.user.user_metadata?.role;
+      const cleanEmail = email.trim().toLowerCase();
+
+      if (cleanEmail === "admin@anovra.africa") {
+        setView("admin");
+      } else if (userRole === "vendor") {
+        setView("dashboard");
+      } else if (userRole === "customer") {
+        setView("userdashboard");
+      } else {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("business_name")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profile?.business_name) {
+          setView("dashboard");
+        } else {
+          setView("userdashboard");
+        }
+      }
+      toast.success("Signed in successfully via OTP!");
+    } catch (err: any) {
+      setError(err.message || "Invalid or expired verification code.");
+      toast.error(err.message || "OTP verification failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignIn = async () => {
+    if (useOtp) {
+      if (otpSent) {
+        await handleVerifyOtp();
+      } else {
+        await handleSendOtp();
+      }
+      return;
+    }
+
     if (!email || !password) { setError("Please enter your email and password."); return; }
     setError("");
     setLoading(true);
     
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const { data, error: authErr } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authErr) throw authErr;
+      if (!data.user) throw new Error("Authentication failed: User profile not resolved.");
+
+      const userRole = data.user.user_metadata?.role;
       const cleanEmail = email.trim().toLowerCase();
-      
+
       if (cleanEmail === "admin@anovra.africa") {
-        if (password === "Admin@2025!") {
-          setView("admin");
-        } else {
-          setError("Invalid admin credentials. Access restricted.");
-        }
-      } else if (cleanEmail.includes("vendor") || cleanEmail.includes("store") || cleanEmail.includes("merchant")) {
+        setView("admin");
+      } else if (userRole === "vendor") {
         setView("dashboard");
-      } else {
+      } else if (userRole === "customer") {
         setView("userdashboard");
+      } else {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("business_name")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profile?.business_name) {
+          setView("dashboard");
+        } else {
+          setView("userdashboard");
+        }
       }
-    }, 1400);
+      toast.success("Signed in successfully!");
+    } catch (err: any) {
+      setError(err.message || "Invalid credentials. Please verify your details.");
+      toast.error(err.message || "Sign in failed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -878,50 +1067,95 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
 
           {/* Form Card */}
           <div className="bg-card border-2 border-border/80 p-6 sm:p-10 rounded-3xl shadow-xl space-y-5">
+            {/* OTP Toggle Link */}
+            <div className="flex justify-end mb-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setUseOtp((o) => !o);
+                  setOtpSent(false);
+                  setOtpCode("");
+                  setError("");
+                }}
+                className="text-xs text-[#C86B3A] hover:underline font-bold transition-all cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {useOtp ? "← Use Password Sign In" : "Sign in with Email OTP code →"}
+              </button>
+            </div>
+
             {/* Email */}
             <div>
               <label className="block text-xs font-bold text-[#008236] mb-1.5 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 Email address
               </label>
               <input
-                className="w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+                className="w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all disabled:opacity-60"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
+                disabled={useOtp && otpSent}
                 onChange={(e) => { setEmail(e.target.value); setError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               />
             </div>
 
-            {/* Password */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-[#008236] uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Password</label>
-                <button
-                  type="button"
-                  onClick={() => setView("forgotpassword")}
-                  className="text-xs text-[#008236] font-semibold hover:text-[#006c2c] underline underline-offset-2 cursor-pointer"
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                >
-                  Forgot password?
-                </button>
+            {/* Password or OTP input */}
+            {!useOtp ? (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-[#008236] uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Password</label>
+                  <button
+                    type="button"
+                    onClick={() => setView("forgotpassword")}
+                    className="text-xs text-[#008236] font-semibold hover:text-[#006c2c] underline underline-offset-2 cursor-pointer"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    className="w-full px-3.5 py-2.5 pr-10 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+                    type={showPass ? "text" : "password"}
+                    placeholder="Enter password"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                    onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  />
+                  <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    <Eye className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              <div className="relative">
-                <input
-                  className="w-full px-3.5 py-2.5 pr-10 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
-                  type={showPass ? "text" : "password"}
-                  placeholder="Enter password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                  onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                />
-                <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                  <Eye className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+            ) : (
+              otpSent && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-[#008236] uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Verification Code</label>
+                    <button
+                      type="button"
+                      onClick={() => setOtpSent(false)}
+                      className="text-xs text-[#008236] font-semibold hover:text-[#006c2c] underline underline-offset-2 cursor-pointer"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      Change email
+                    </button>
+                  </div>
+                  <input
+                    className="w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all text-center tracking-[0.4em] font-mono"
+                    type="text"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={otpCode}
+                    onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, "")); setError(""); }}
+                    onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
+                  />
+                </div>
+              )
+            )}
 
             {/* Error */}
             {error && (
@@ -939,8 +1173,12 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               {loading ? (
-                <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Signing in…</>
-              ) : "Sign In"}
+                <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Working…</>
+              ) : useOtp ? (
+                otpSent ? "Verify and Sign In" : "Send Verification Code"
+              ) : (
+                "Sign In"
+              )}
             </button>
 
             <p className="text-center text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -962,15 +1200,24 @@ export function ForgotPasswordView({ setView }: { setView: (v: View) => void }) 
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleForgot = () => {
+  const handleForgot = async () => {
     if (!email) { setError("Please enter your email address."); return; }
     setError("");
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/#resetpassword`,
+      });
+      if (resetErr) throw resetErr;
       setSuccess(true);
-    }, 1500);
+      toast.success("Verification link dispatched to your inbox!");
+    } catch (err: any) {
+      setError(err.message || "Failed to trigger recovery. Verify details.");
+      toast.error(err.message || "Password recovery error.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1136,17 +1383,26 @@ export function ResetPasswordView({ setView }: { setView: (v: View) => void }) {
   const passwordsMatch = password === confirmPassword;
   const isStrengthValid = password.length >= 8;
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!password || !confirmPassword) { setError("Please fill in both fields."); return; }
     if (!isStrengthValid) { setError("Password must be at least 8 characters."); return; }
     if (!passwordsMatch) { setError("Passwords do not match."); return; }
     setError("");
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const { error: resetErr } = await supabase.auth.updateUser({
+        password: password
+      });
+      if (resetErr) throw resetErr;
       setSuccess(true);
-    }, 1500);
+      toast.success("Your password has been successfully updated!");
+    } catch (err: any) {
+      setError(err.message || "Failed to update password. Please try again.");
+      toast.error(err.message || "Password update error.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

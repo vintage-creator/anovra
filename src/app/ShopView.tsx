@@ -4,6 +4,8 @@ import {
   Search, Store, Globe, MapPin, Shield, Zap, Lock, Package, Scan,
 } from "lucide-react";
 import type { View } from "./types";
+import { supabase } from "./utils/supabase";
+import { toast } from "sonner";
 
 // ---- CATALOG PRODUCTS (shared data) ----
 
@@ -95,19 +97,78 @@ const SHOP_VENDOR = {
 };
 
 export function ShopView({ setView }: { setView: (v: View) => void }) {
-  const activeProducts = catalogProducts.filter((p) => p.status === "active");
-  const allConcerns = ["All", ...Array.from(new Set(activeProducts.flatMap((p) => p.concerns)))];
+  const [productsList, setProductsList] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(true);
-  const [addedToCart, setAddedToCart] = useState<number | null>(null);
+  const [addedToCart, setAddedToCart] = useState<string | number | null>(null);
 
+  const activeProducts = productsList.filter((p) => p.status === "active");
+  const allConcerns = ["All", ...Array.from(new Set(activeProducts.flatMap((p) => p.concerns || [])))];
   const shopUrl = `anovra.africa/shop/${SHOP_VENDOR.slug}`;
 
   useEffect(() => {
-    const t = setTimeout(() => setGenerating(false), 1800);
-    return () => clearTimeout(t);
+    const loadProducts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("nafdac_status", "approved");
+
+        if (data && data.length > 0) {
+          const formatted = data.map((p) => ({
+            id: p.id,
+            name: p.name,
+            brand: p.brand || "Own Brand",
+            concerns: [p.category || "General"],
+            skinTypes: ["All"],
+            price: `₦${Number(p.price).toLocaleString()}`,
+            priceVal: p.price,
+            status: "active",
+            photo: p.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
+            ingredients: [],
+          }));
+          setProductsList(formatted);
+        } else {
+          setProductsList(catalogProducts);
+        }
+      } catch (err) {
+        console.error("Failed to query live shop items:", err);
+        setProductsList(catalogProducts);
+      } finally {
+        setGenerating(false);
+      }
+    };
+    loadProducts();
   }, []);
+
+  const handleAddToCart = async (product: any) => {
+    setAddedToCart(product.id);
+    try {
+      let sessionId = localStorage.getItem("anovra_session");
+      if (!sessionId) {
+        sessionId = crypto.randomUUID();
+        localStorage.setItem("anovra_session", sessionId);
+      }
+
+      const { error } = await supabase
+        .from("cart_items")
+        .insert([
+          {
+            session_id: sessionId,
+            product_id: typeof product.id === "string" ? product.id : null,
+            quantity: 1,
+          }
+        ]);
+
+      if (error && typeof product.id === "string") throw error;
+      toast.success(`${product.name} added to cart!`);
+    } catch (err: any) {
+      console.warn("Cart database insertion error:", err.message);
+    } finally {
+      setTimeout(() => setAddedToCart(null), 2000);
+    }
+  };
 
   const filtered = filter === "All" ? activeProducts : activeProducts.filter((p) => p.concerns.includes(filter));
 

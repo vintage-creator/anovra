@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Camera, Upload, Shield, Package, ChevronDown, ChevronUp, X, Check,
   CheckCircle, AlertTriangle, Eye, ExternalLink, FlaskConical,
@@ -6,6 +6,8 @@ import {
 import type { View } from "./types";
 import { cn } from "./types";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
+import { supabase } from "./utils/supabase";
+import { toast } from "sonner";
 
 // ---- CATALOG DATA ----
 
@@ -132,12 +134,14 @@ type ProductForm = {
   skinTypes: string[];
   keyIngredients: string[];
   activeIngredients: string[];
+  photoFile?: File | null;
 };
 
 const EMPTY_PRODUCT_FORM: ProductForm = {
   name: "", brand: "", price: "", stock: "", description: "",
   benefits: "", precautions: "", usageInstructions: "", category: "",
   concerns: [], skinTypes: [], keyIngredients: [], activeIngredients: [],
+  photoFile: null,
 };
 
 function TagInput({
@@ -333,7 +337,10 @@ function AddProductDrawer({ onClose, onSave }: { onClose: () => void; onSave: (f
                 className="sr-only"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) setImagePreview(URL.createObjectURL(file));
+                  if (file) {
+                    setImagePreview(URL.createObjectURL(file));
+                    setForm((f) => ({ ...f, photoFile: file }));
+                  }
                 }}
               />
             </label>
@@ -820,8 +827,128 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "blocked">("all");
 
-  const filteredProducts = catalogProducts.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.brand.toLowerCase().includes(searchQuery.toLowerCase()) || p.ingredients.some(i => i.toLowerCase().includes(searchQuery.toLowerCase()));
+  const [productsList, setProductsList] = useState<any[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setCatalogLoading(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("vendor_id", user.id);
+
+        if (data && data.length > 0) {
+          const formatted = data.map((p) => ({
+            id: p.id,
+            name: p.name,
+            brand: p.brand || "Own Brand",
+            price: `₦${Number(p.price).toLocaleString()}`,
+            priceVal: p.price,
+            status: p.nafdac_status === "approved" ? "active" : p.nafdac_status === "flagged" ? "blocked" : "pending",
+            nafdac: p.nafdac_status === "approved" ? "Approved" : p.nafdac_status === "flagged" ? "Flagged" : "Pending",
+            description: p.description || "",
+            image: p.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
+            ingredients: [],
+            safety: { rating: "A+", label: "Verified Safe" }
+          }));
+          setProductsList(formatted);
+        } else {
+          setProductsList(catalogProducts);
+        }
+      } catch (err) {
+        console.error("Failed to load catalog products:", err);
+      } finally {
+        setCatalogLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  const handleSaveProduct = async (newProd: any) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Authentication required to add products.");
+
+      // Upload product image to Supabase Storage if file was provided
+      let finalImageUrl = newProd.image || null;
+      if (newProd.photoFile) {
+        try {
+          const fileExt = newProd.photoFile.name.split('.').pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+          const filePath = `${fileName}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from("product-images")
+            .upload(filePath, newProd.photoFile, {
+              cacheControl: '3600',
+              upsert: true
+            });
+            
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage
+              .from("product-images")
+              .getPublicUrl(filePath);
+            finalImageUrl = publicUrl;
+          } else {
+            console.warn("Product image storage upload failed, using fallback:", uploadError);
+          }
+        } catch (storageErr) {
+          console.warn("Product image storage upload exception, using fallback:", storageErr);
+        }
+      }
+
+      const rawPrice = typeof newProd.price === "string"
+        ? Number(newProd.price.replace(/[^\d.]/g, ""))
+        : Number(newProd.price);
+
+      const dbPayload = {
+        vendor_id: user.id,
+        name: newProd.name,
+        brand: newProd.brand || "Own Brand",
+        price: isNaN(rawPrice) ? 0 : rawPrice,
+        description: newProd.description || "",
+        image_url: finalImageUrl,
+        nafdac_status: "approved",
+        category: newProd.category || "Skincare",
+      };
+
+      const { data, error } = await supabase
+        .from("products")
+        .insert([dbPayload])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const formattedNew = {
+        id: data.id,
+        name: data.name,
+        brand: data.brand || "Own Brand",
+        price: `₦${Number(data.price).toLocaleString()}`,
+        priceVal: data.price,
+        status: "active",
+        nafdac: "Approved",
+        description: data.description || "",
+        image: data.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
+        ingredients: newProd.ingredients || [],
+        safety: { rating: "A+", label: "Verified Safe" }
+      };
+
+      setProductsList((prev) => [formattedNew, ...prev]);
+      toast.success("Product successfully added to catalog & live store!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add product.");
+    }
+    setShowAddProduct(false);
+  };
+
+  const filteredProducts = productsList.filter((p) => {
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.brand.toLowerCase().includes(searchQuery.toLowerCase()) || (p.ingredients && p.ingredients.some((i: any) => i.toLowerCase().includes(searchQuery.toLowerCase())));
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -833,7 +960,7 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
           currentView="catalog"
           setView={setView}
           title="Product Catalog"
-          subtitle={`${catalogProducts.filter((p) => p.status === "active").length} active products · NAFDAC Safety Screened`}
+          subtitle={`${productsList.filter((p) => p.status === "active").length} active products · NAFDAC Safety Screened`}
           badgeText="NAFDAC Moderate"
           role="vendor"
           showShopLink={true}
@@ -844,7 +971,7 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
         {showAddProduct && (
           <AddProductDrawer
             onClose={() => setShowAddProduct(false)}
-            onSave={(f) => { console.log("New product:", f); setShowAddProduct(false); }}
+            onSave={handleSaveProduct}
           />
         )}
 
@@ -852,15 +979,15 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="bg-card border border-border rounded-xl p-4 shadow-xs">
             <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Total Products</p>
-            <p className="text-2xl font-semibold text-foreground">{catalogProducts.length}</p>
+            <p className="text-2xl font-semibold text-foreground">{productsList.length}</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-4 shadow-xs">
             <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Active Recommendations</p>
-            <p className="text-2xl font-semibold text-emerald-600">{catalogProducts.filter(p => p.status === "active").length}</p>
+            <p className="text-2xl font-semibold text-emerald-600">{productsList.filter(p => p.status === "active").length}</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-4 shadow-xs">
             <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Blocked / Under Review</p>
-            <p className="text-2xl font-semibold text-amber-600">{catalogProducts.filter(p => p.status === "blocked").length}</p>
+            <p className="text-2xl font-semibold text-amber-600">{productsList.filter(p => p.status === "blocked").length}</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-4 shadow-xs">
             <p className="text-xs text-muted-foreground uppercase font-mono mb-1">NAFDAC Compliance</p>

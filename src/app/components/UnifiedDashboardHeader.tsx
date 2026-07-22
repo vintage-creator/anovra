@@ -63,7 +63,7 @@ export function UnifiedDashboardHeader({
   const links = role === "consumer" ? consumerLinks : role === "admin" ? adminLinks : vendorLinks;
 
   return (
-    <div className="bg-card border-b border-border mb-6">
+    <div className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border shadow-xs mb-6 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
         {/* Top bar: Brand + Role-Specific Quick Nav + Actions */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -87,7 +87,7 @@ export function UnifiedDashboardHeader({
                     {badgeText}
                   </span>
                 )}
-                {onToggleVerify && (
+                {onToggleVerify ? (
                   <button
                     onClick={onToggleVerify}
                     title="Click to toggle verification status"
@@ -107,6 +107,24 @@ export function UnifiedDashboardHeader({
                       </>
                     )}
                   </button>
+                ) : (
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                      isVerified
+                        ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30"
+                        : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30"
+                    }`}
+                  >
+                    {isVerified ? (
+                      <>
+                        <CheckCircle className="w-3 h-3 text-emerald-500" /> VERIFIED VENDOR
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-3 h-3 text-amber-500" /> PENDING VERIFICATION
+                      </>
+                    )}
+                  </span>
                 )}
               </div>
 

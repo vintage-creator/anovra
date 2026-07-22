@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Scan, Star, FlaskConical, Share2, TrendingUp, Clock, Check,
   ChevronRight, Copy, MessageCircle, Users, Sparkles, Bell,
@@ -8,6 +8,8 @@ import {
 import type { View } from "./types";
 import { cn } from "./types";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
+import { supabase } from "./utils/supabase";
+import { toast } from "sonner";
 
 // ── Fake data ──────────────────────────────────────────────
 
@@ -133,6 +135,16 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [chatHistory, setChatHistory] = useState<{ from: "user" | "advisor"; text: string }[]>([
     { from: "advisor", text: "Hi Adaeze! I'm your certified skin advisor. I can review your latest analysis results and help you build a skincare plan. What would you like to know?" },
   ]);
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Authentication required to access skin portal.");
+        setView("signin");
+      }
+    };
+    checkAuth();
+  }, []);
 
   function copy(text: string, key: string) {
     setCopied(key);
