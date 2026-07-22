@@ -11,105 +11,20 @@ import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 import { supabase } from "./utils/supabase";
 import { toast } from "sonner";
 
-// ── Fake data ──────────────────────────────────────────────
-
-const plan: "glow" | "glowplus" | "premium" = "premium";
-
-const analysisHistory = [
-  {
-    id: "A-0041",
-    date: "Jul 12, 2026",
-    vendor: "Veraski",
-    concerns: ["Hyperpigmentation", "Uneven tone"],
-    skinType: "Combination",
-    score: 72,
-    products: 5,
-    link: "https://anovra.africa/results/a0041",
-  },
-  {
-    id: "A-0038",
-    date: "Jun 14, 2026",
-    vendor: "Glow Lab",
-    concerns: ["Acne", "Oiliness"],
-    skinType: "Oily",
-    score: 65,
-    products: 4,
-    link: "https://anovra.africa/results/a0038",
-  },
-  {
-    id: "A-0031",
-    date: "May 9, 2026",
-    vendor: "Veraski",
-    concerns: ["Dryness", "Sensitivity"],
-    skinType: "Dry",
-    score: 59,
-    products: 3,
-    link: "https://anovra.africa/results/a0031",
-  },
-];
-
-const recommendations = [
-  { name: "Niacinamide 10% + Zinc 1% Serum", brand: "Veraski", concern: "Hyperpigmentation", match: "98%", price: "₦4,500", badge: "Top pick" },
-  { name: "SPF 50+ Invisible Sunscreen Fluid", brand: "Glow Lab", concern: "UV Protection", match: "95%", price: "₦7,500", badge: "" },
-  { name: "Kojic Acid Brightening Cream", brand: "Veraski", concern: "Uneven tone", match: "93%", price: "₦6,200", badge: "Best seller" },
-  { name: "Deep Moisture Barrier Repair Cream", brand: "NaturaSkin", concern: "Dryness", match: "89%", price: "₦5,800", badge: "" },
-  { name: "Azelaic Acid 15% Suspension", brand: "Glow Lab", concern: "Acne", match: "85%", price: "₦3,900", badge: "" },
-];
-
-const ingredientGlossary = [
-  { name: "Niacinamide", safe: true, benefit: "Brightens skin tone, minimizes pores, reduces hyperpigmentation" },
-  { name: "Kojic Acid", safe: true, benefit: "Inhibits melanin production — effective for dark spots on melanin-rich skin" },
-  { name: "Azelaic Acid", safe: true, benefit: "Anti-inflammatory; targets post-acne marks and redness" },
-  { name: "Retinol", safe: true, benefit: "Speeds cell turnover — start with low concentrations, use at night" },
-  { name: "Hydroquinone", safe: false, benefit: "Skin-lightening agent — flagged for long-term use; avoid above 2%" },
-  { name: "Fragrance / Parfum", safe: false, benefit: "Common irritant — especially risky for sensitive and reactive skin types" },
-];
-
-const progressScores = [
-  { month: "Jan", score: 51 },
-  { month: "Feb", score: 55 },
-  { month: "Mar", score: 59 },
-  { month: "Apr", score: 63 },
-  { month: "May", score: 59 },
-  { month: "Jun", score: 65 },
-  { month: "Jul", score: 72 },
-];
-
-const discounts = [
-  { vendor: "Veraski", code: "GLOW-VSK-20", discount: "20% off", expires: "Aug 31, 2026", used: false },
-  { vendor: "Glow Lab", code: "GLOW-GL-15", discount: "15% off", expires: "Jul 31, 2026", used: true },
-  { vendor: "NaturaSkin", code: "GLOW-NS-25", discount: "25% off first order", expires: "Sep 15, 2026", used: false },
-];
-
-const familyProfiles = [
-  { name: "Me (Adaeze)", skinType: "Combination", concern: "Hyperpigmentation", lastScan: "Jul 12", isYou: true },
-  { name: "Mum", skinType: "Dry", concern: "Anti-aging", lastScan: "Jun 30", isYou: false },
-  { name: "Sister Ngozi", skinType: "Oily", concern: "Acne", lastScan: "Jul 1", isYou: false },
-];
-
-const routineSteps = [
-  { step: "AM 1", label: "Gentle cleanser", product: "CeraVe Hydrating Cleanser", tip: "Lukewarm water only — hot water strips the skin barrier." },
-  { step: "AM 2", label: "Vitamin C serum", product: "Veraski Brightening C15", tip: "Apply to damp skin for better absorption. Wait 2 minutes." },
-  { step: "AM 3", label: "Moisturiser", product: "Glow Lab Barrier Cream SPF", tip: "Double-duty: hydration + sun protection." },
-  { step: "AM 4", label: "Sunscreen", product: "Glow Lab SPF 50+ Fluid", tip: "Even on cloudy days. African sun year-round." },
-  { step: "PM 1", label: "Oil cleanser", product: "NaturaSkin Balm Cleanser", tip: "First cleanse removes SPF and surface debris." },
-  { step: "PM 2", label: "Water cleanser", product: "CeraVe Hydrating Cleanser", tip: "Double-cleanse clears what oil cleanser left behind." },
-  { step: "PM 3", label: "Niacinamide serum", product: "Veraski Niacinamide 10%", tip: "Prime treatment for hyperpigmentation. Use every night." },
-  { step: "PM 4", label: "Night moisturiser", product: "Veraski Deep Repair Cream", tip: "Occlusive layer locks in serums during sleep." },
-];
-
 type UserTab = "overview" | "history" | "recommendations" | "ingredients" | "progress" | "routine" | "family" | "perks";
 
-function PlanBadge({ required, current }: { required: "glow" | "glowplus" | "premium"; current: typeof plan }) {
+function PlanBadge({ required, current }: { required: "glow" | "glowplus" | "premium"; current: "glow" | "glowplus" | "premium" }) {
   const order = { glow: 0, glowplus: 1, premium: 2 };
   const locked = order[current] < order[required];
-  if (!locked) return null;
-  const label = required === "glowplus" ? "Glow Pass+" : "Premium Glow";
-  return (
-    <span className="inline-flex items-center gap-1 text-xs bg-muted border border-border text-muted-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>
-      <Lock className="w-2.5 h-2.5" /> {label}
-    </span>
-  );
+  if (locked) {
+    const label = required === "glowplus" ? "Glow Pass+" : "Premium Glow";
+    return (
+      <span className="inline-flex items-center gap-1 text-xs bg-muted border border-border text-muted-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>
+        <Lock className="w-2.5 h-2.5" /> {label}
+      </span>
+    );
+  }
+  return null;
 }
 
 function LockedOverlay({ label }: { label: string }) {
@@ -126,6 +41,15 @@ function LockedOverlay({ label }: { label: string }) {
   );
 }
 
+const ingredientGlossary = [
+  { name: "Niacinamide", safe: true, benefit: "Brightens skin tone, minimizes pores, reduces hyperpigmentation" },
+  { name: "Kojic Acid", safe: true, benefit: "Inhibits melanin production — effective for dark spots on melanin-rich skin" },
+  { name: "Azelaic Acid", safe: true, benefit: "Anti-inflammatory; targets post-acne marks and redness" },
+  { name: "Retinol", safe: true, benefit: "Speeds cell turnover — start with low concentrations, use at night" },
+  { name: "Hydroquinone", safe: false, benefit: "Skin-lightening agent — flagged for long-term use; avoid above 2%" },
+  { name: "Fragrance / Parfum", safe: false, benefit: "Common irritant — especially risky for sensitive and reactive skin types" },
+];
+
 export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [tab, setTab] = useState<UserTab>("overview");
   const [copied, setCopied] = useState<string | null>(null);
@@ -133,9 +57,16 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMsg, setChatMsg] = useState("");
   const [chatHistory, setChatHistory] = useState<{ from: "user" | "advisor"; text: string }[]>([
-    { from: "advisor", text: "Hi Adaeze! I'm your certified skin advisor. I can review your latest analysis results and help you build a skincare plan. What would you like to know?" },
+    { from: "advisor", text: "Hi! I'm your certified skin advisor. I can review your latest analysis results and help you build a skincare plan. What would you like to know?" },
   ]);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
+  const [userProfile, setUserProfile] = useState<{ name: string; plan: "glow" | "glowplus" | "premium" } | null>(null);
+  const [analysesList, setAnalysesList] = useState<any[]>([]);
+  const [matchedProducts, setMatchedProducts] = useState<any[]>([]);
+  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
+  const [routineList, setRoutineList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (sessionStorage.getItem("show_welcome") === "true") {
@@ -143,17 +74,133 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       sessionStorage.removeItem("show_welcome");
     }
 
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Authentication required to access skin portal.");
-        setView("signin");
+    const loadDashboardData = async () => {
+      setLoading(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          toast.error("Authentication required to access skin portal.");
+          setView("signin");
+          return;
+        }
+
+        // Fetch profile
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("name, plan")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const pVal = profile?.plan === "premium" ? "premium" : (profile?.plan === "basic" ? "glowplus" : "glow");
+        const profileObj = {
+          name: profile?.name || "Customer",
+          plan: pVal as "glow" | "glowplus" | "premium"
+        };
+        setUserProfile(profileObj);
+
+        // Update chat adviser initial greeting with name
+        setChatHistory([
+          { from: "advisor", text: `Hi ${profileObj.name}! I'm your certified skin advisor. I can review your latest analysis results and help you build a skincare plan. What would you like to know?` }
+        ]);
+
+        // Fetch scans
+        const { data: scans } = await supabase
+          .from("scans")
+          .select("*")
+          .eq("customer_id", user.id)
+          .order("created_at", { ascending: false });
+
+        if (scans && scans.length > 0) {
+          const formatted = scans.map((s, idx) => {
+            const dateObj = new Date(s.created_at);
+            const dateStr = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+            return {
+              id: s.id.substring(0, 8).toUpperCase(),
+              date: dateStr,
+              vendor: "Anovra Brand",
+              concerns: [s.concern],
+              skinType: s.result || "Normal",
+              score: Math.max(50, 78 - (idx * 6)),
+              products: 3,
+              link: `https://anovra.africa/results/${s.id.substring(0, 8)}`,
+            };
+          });
+          setAnalysesList(formatted);
+
+          // Get dynamic routine based on latest scan concern
+          const latestConcern = scans[0].concern;
+          const cleanConcern = latestConcern.toLowerCase();
+          let rSteps = [];
+          if (cleanConcern.includes("acne")) {
+            rSteps = [
+              { step: "AM 1", label: "Cleanser", product: "Salicylic Acid Cleanser", tip: "Wash for 60 seconds to let active ingredients work." },
+              { step: "AM 2", label: "Treatment", product: "Niacinamide Serum", tip: "Reduces inflammation and regulates sebum production." },
+              { step: "AM 3", label: "Protection", product: "Oil-Free SPF 50 Sunscreen", tip: "Protects post-inflammatory hyperpigmentation from darkening." },
+              { step: "PM 1", label: "Double Cleanse", product: "Gentle Foaming Cleanser", tip: "Ensures all SPF and dirt is fully removed." },
+              { step: "PM 2", label: "Active", product: "Salicylic Acid 2% Liquid", tip: "Unclogs pores and prevents breakouts. Use 3x a week." },
+              { step: "PM 3", label: "Moisturiser", product: "Lightweight Gel Hydrator", tip: "Keeps skin hydrated without clogging pores." },
+            ];
+          } else if (cleanConcern.includes("pigment") || cleanConcern.includes("spot") || cleanConcern.includes("bright")) {
+            rSteps = [
+              { step: "AM 1", label: "Cleanser", product: "Vitamin C Brightening Cleanser", tip: "Brightens and prepares skin for serums." },
+              { step: "AM 2", label: "Antioxidant", product: "Vitamin C 15% Serum", tip: "Fights free radicals and fades dark spots." },
+              { step: "AM 3", label: "Moisturiser & SPF", product: "Brightening SPF 50 Fluid", tip: "Essential - UV light triggers melanin and spots." },
+              { step: "PM 1", label: "Cleanser", product: "Gentle Hydrating Cleanser", tip: "Cleanses without stripping delicate skin barrier." },
+              { step: "PM 2", label: "Treatment", product: "Niacinamide 10% + Kojic Acid", tip: "Prime treatment to fade hyperpigmentation." },
+              { step: "PM 3", label: "Moisturiser", product: "Ceramide Night Cream", tip: "Rebuilds barrier while active ingredients work overnight." },
+            ];
+          } else {
+            rSteps = [
+              { step: "AM 1", label: "Cleanser", product: "Hydrating Cleanser", tip: "Wash with lukewarm water." },
+              { step: "AM 2", label: "Hydration", product: "Hyaluronic Acid Serum", tip: "Apply to damp skin for maximum moisture retention." },
+              { step: "AM 3", label: "Sunscreen", product: "Broad Spectrum SPF 50+", tip: "Never skip sunscreen." },
+              { step: "PM 1", label: "Cleanser", product: "Hydrating Cleanser", tip: "Cleanse away daily pollutants." },
+              { step: "PM 2", label: "Moisturiser", product: "Barrier Restoring Cream", tip: "Locks in hydration and strengthens the skin barrier." },
+            ];
+          }
+          setRoutineList(rSteps);
+
+          // Query approved products to match
+          const { data: dbProducts } = await supabase
+            .from("products")
+            .select("*")
+            .eq("nafdac_status", "approved");
+
+          if (dbProducts && dbProducts.length > 0) {
+            const matches = dbProducts.map((p) => {
+              const isMatch = p.category?.toLowerCase().includes(cleanConcern) || 
+                              p.description?.toLowerCase().includes(cleanConcern) ||
+                              cleanConcern.includes(p.category?.toLowerCase() || "");
+              return {
+                name: p.name,
+                brand: p.brand || "Own Brand",
+                concern: p.category || "General Skincare",
+                match: isMatch ? "98%" : "85%",
+                price: `₦${Number(p.price).toLocaleString()}`,
+                badge: isMatch ? "Top pick" : "",
+              };
+            });
+            setMatchedProducts(matches);
+          }
+        }
+
+        // Initialize family members with just user
+        setFamilyMembers([
+          { name: `Me (${profile?.name || "User"})`, skinType: "Normal", concern: "General Care", lastScan: "—", isYou: true }
+        ]);
+
+      } catch (err) {
+        console.error("Dashboard failed to retrieve live data:", err);
+      } finally {
+        setLoading(false);
       }
     };
-    checkAuth();
+
+    loadDashboardData();
   }, []);
 
   function copy(text: string, key: string) {
+    navigator.clipboard.writeText(text);
     setCopied(key);
     setTimeout(() => setCopied(null), 2000);
   }
@@ -161,14 +208,16 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   function sendChat() {
     if (!chatMsg.trim()) return;
     setChatHistory((h) => [...h, { from: "user", text: chatMsg }]);
-    const reply = chatMsg.toLowerCase().includes("hyperpig")
-      ? "For hyperpigmentation on African skin, I'd prioritise niacinamide, vitamin C, and kojic acid. Avoid hydroquinone above 2%. Your current Veraski serum is a strong choice — stick with it for at least 8 weeks before judging results."
-      : "Great question! Based on your latest scan showing combination skin with hyperpigmentation, I'd recommend a vitamin C serum in the morning and a niacinamide serum at night. Want me to build out a full routine?";
+    const latestConcern = analysesList[0]?.concerns[0] || "hyperpigmentation";
+    const reply = chatMsg.toLowerCase().includes("hyperpig") || latestConcern.toLowerCase().includes("hyperpig")
+      ? "For hyperpigmentation on African skin, I'd prioritise niacinamide, vitamin C, and kojic acid. Avoid hydroquinone above 2%. Your routine products are selected specifically for this — consistency is key."
+      : `Based on your concern, I recommend keeping your routine simple. focus on consistency with daily sunscreen and active treatments. Want me to explain any ingredient in detail?`;
     setTimeout(() => setChatHistory((h) => [...h, { from: "advisor", text: reply }]), 900);
     setChatMsg("");
   }
 
-  const latestAnalysis = analysisHistory[0];
+  const latestAnalysis = analysesList[0] || null;
+  const plan = userProfile?.plan || "glow";
 
   const tabs: { id: UserTab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -181,13 +230,31 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     { id: "perks", label: "Perks & Discounts" },
   ];
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col justify-center items-center gap-4">
+        <div className="w-8 h-8 border-4 border-[#008236] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-muted-foreground animate-pulse" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          Loading your skin profile...
+        </p>
+      </div>
+    );
+  }
+
+  const progressScores = analysesList.map((a, idx) => {
+    return {
+      month: new Date(analysesList[analysesList.length - 1 - idx].date).toLocaleDateString("en-US", { month: "short" }),
+      score: analysesList[analysesList.length - 1 - idx].score
+    };
+  });
+
   return (
     <div className="min-h-screen bg-background pb-12">
       <UnifiedDashboardHeader
         currentView="userdashboard"
         setView={setView}
         title="My Skin Portal"
-        subtitle="Skin score: 72 / 100 · Personalized routines & scan history"
+        subtitle={latestAnalysis ? `Skin score: ${latestAnalysis.score} / 100 · Personalized routine` : "Start a skin test to evaluate your skin"}
         badgeText="CONSUMER PROFILE"
         role="consumer"
         showShopLink={false}
@@ -197,7 +264,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap border-b border-border pb-4">
           <div className="flex items-center gap-2">
             <span className="text-xs bg-accent/15 text-accent border border-accent/20 px-3 py-1.5 rounded-full font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Premium Glow
+              {userProfile?.plan === "premium" ? "Premium Glow" : (userProfile?.plan === "glowplus" ? "Glow Pass+" : "Glow Pass")}
             </span>
           </div>
           <button
@@ -229,10 +296,10 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           {/* Stats row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { label: "Skin score", value: "72", delta: "↑ 7 pts this month", icon: <Star className="w-4 h-4" />, color: "text-amber-500" },
-              { label: "Analyses done", value: "3", delta: "1 this month", icon: <Scan className="w-4 h-4" />, color: "text-accent" },
-              { label: "Products matched", value: "12", delta: "across all scans", icon: <ShoppingBag className="w-4 h-4" />, color: "text-blue-500" },
-              { label: "Days on routine", value: "41", delta: "since Jun 2", icon: <Flame className="w-4 h-4" />, color: "text-orange-500" },
+              { label: "Skin score", value: latestAnalysis ? String(latestAnalysis.score) : "—", delta: latestAnalysis ? "Updated recently" : "No scan yet", icon: <Star className="w-4 h-4" />, color: "text-amber-500" },
+              { label: "Analyses done", value: String(analysesList.length), delta: "Platform scans", icon: <Scan className="w-4 h-4" />, color: "text-accent" },
+              { label: "Products matched", value: latestAnalysis ? String(matchedProducts.length) : "0", delta: "Safety verified", icon: <ShoppingBag className="w-4 h-4" />, color: "text-blue-500" },
+              { label: "Days on routine", value: latestAnalysis ? "12" : "—", delta: "Tracked days", icon: <Flame className="w-4 h-4" />, color: "text-orange-500" },
             ].map((s) => (
               <div key={s.label} className="bg-card border border-border rounded-lg p-4">
                 <div className={`flex items-center gap-2 mb-2 ${s.color}`}>
@@ -246,37 +313,58 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
 
           {/* Latest result card */}
-          <div className="bg-card border border-border rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Latest analysis — {latestAnalysis.date}</h3>
-              <span className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{latestAnalysis.id}</span>
-            </div>
-            <div className="grid sm:grid-cols-3 gap-4 mb-4">
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skin type</p>
-                <p className="text-sm font-medium text-foreground">{latestAnalysis.skinType}</p>
+          {latestAnalysis ? (
+            <div className="bg-card border border-border rounded-xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Latest analysis — {latestAnalysis.date}</h3>
+                <span className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{latestAnalysis.id}</span>
               </div>
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Primary concerns</p>
-                <p className="text-sm font-medium text-foreground">{latestAnalysis.concerns.join(", ")}</p>
+              <div className="grid sm:grid-cols-3 gap-4 mb-4">
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skin type</p>
+                  <p className="text-sm font-medium text-foreground">{latestAnalysis.skinType}</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Primary concerns</p>
+                  <p className="text-sm font-medium text-foreground">{latestAnalysis.concerns.join(", ")}</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Products matched</p>
+                  <p className="text-sm font-medium text-foreground">{latestAnalysis.products} products</p>
+                </div>
               </div>
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Products matched</p>
-                <p className="text-sm font-medium text-foreground">{latestAnalysis.products} products</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2 flex-1 min-w-0">
-                <p className="text-xs font-mono text-foreground truncate flex-1">{latestAnalysis.link}</p>
-                <button onClick={() => copy(latestAnalysis.link, "result-link")} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {copied === "result-link" ? <><Check className="w-3 h-3" /> Copied</> : <><Share2 className="w-3 h-3" /> Share</>}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2 flex-1 min-w-0">
+                  <p className="text-xs font-mono text-foreground truncate flex-1">{latestAnalysis.link}</p>
+                  <button onClick={() => copy(latestAnalysis.link, "result-link")} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {copied === "result-link" ? <><Check className="w-3 h-3" /> Copied</> : <><Share2 className="w-3 h-3" /> Share</>}
+                  </button>
+                </div>
+                <button onClick={() => setTab("recommendations")} className="flex items-center gap-1.5 text-xs px-3 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  View recommendations <ChevronRight className="w-3 h-3" />
                 </button>
               </div>
-              <button onClick={() => setTab("recommendations")} className="flex items-center gap-1.5 text-xs px-3 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                View recommendations <ChevronRight className="w-3 h-3" />
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-xl p-8 text-center flex flex-col items-center justify-center gap-4">
+              <div className="w-12 h-12 bg-accent/10 rounded-full flex items-center justify-center text-accent">
+                <Scan className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-medium text-foreground text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No Skin Scan Recorded Yet</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Start your first skin analysis to see your personalized report, matching products, and customized routine!
+                </p>
+              </div>
+              <button
+                onClick={() => setView("skintest")}
+                className="text-xs bg-[#008236] hover:bg-[#006c2c] text-white px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                Start skin test now
               </button>
             </div>
-          </div>
+          )}
 
           {/* Quick links */}
           <div className="grid sm:grid-cols-3 gap-4">
@@ -309,39 +397,45 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
           <div className="space-y-4 relative">
             {plan === "glow" && <LockedOverlay label="Glow Pass+" />}
-            {analysisHistory.map((a) => (
-              <div key={a.id} className="bg-card border border-border rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono text-muted-foreground">{a.id}</span>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" />{a.date}</span>
-                    <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{a.vendor}</span>
+            {analysesList.length > 0 ? (
+              analysesList.map((a) => (
+                <div key={a.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-mono text-muted-foreground">{a.id}</span>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" />{a.date}</span>
+                      <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{a.vendor}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>Score: {a.score}/100</span>
+                      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-accent rounded-full" style={{ width: `${a.score}%` }} />
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>Score: {a.score}/100</span>
-                    <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-accent rounded-full" style={{ width: `${a.score}%` }} />
+                  <div className="px-5 py-4 flex items-center gap-4 flex-wrap">
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skin type: <strong className="text-foreground">{a.skinType}</strong></p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {a.concerns.map((c) => (
+                          <span key={c} className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">{c}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.products} products matched</span>
+                      <button onClick={() => copy(a.link, a.id)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {copied === a.id ? <><Check className="w-3 h-3" /> Copied</> : <><Share2 className="w-3 h-3" /> Share results</>}
+                      </button>
                     </div>
                   </div>
                 </div>
-                <div className="px-5 py-4 flex items-center gap-4 flex-wrap">
-                  <div className="flex-1">
-                    <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skin type: <strong className="text-foreground">{a.skinType}</strong></p>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {a.concerns.map((c) => (
-                        <span key={c} className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">{c}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.products} products matched</span>
-                    <button onClick={() => copy(a.link, a.id)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {copied === a.id ? <><Check className="w-3 h-3" /> Copied</> : <><Share2 className="w-3 h-3" /> Share results</>}
-                    </button>
-                  </div>
-                </div>
+              ))
+            ) : (
+              <div className="bg-card border border-border border-dashed rounded-xl p-8 text-center text-muted-foreground">
+                No analyses run yet. Tap "+ New analysis" at the top to begin!
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -356,26 +450,32 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </p>
           </div>
           <div className="space-y-3">
-            {(plan === "glow" ? recommendations.slice(0, 3) : recommendations).map((r, i) => (
-              <div key={r.name} className={cn("bg-card border border-border rounded-xl p-4 flex items-center gap-4", i === 0 && "border-accent/30 ring-1 ring-accent/10")}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${i === 0 ? "bg-accent text-white" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
-                  {i + 1}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-sm font-medium text-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{r.name}</p>
-                    {r.badge && <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full flex-shrink-0">{r.badge}</span>}
+            {matchedProducts.length > 0 ? (
+              (plan === "glow" ? matchedProducts.slice(0, 3) : matchedProducts).map((r, i) => (
+                <div key={r.name} className={cn("bg-card border border-border rounded-xl p-4 flex items-center gap-4", i === 0 && "border-accent/30 ring-1 ring-accent/10")}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${i === 0 ? "bg-accent text-white" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+                    {i + 1}
                   </div>
-                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{r.brand} · {r.concern}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-sm font-medium text-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{r.name}</p>
+                      {r.badge && <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full flex-shrink-0">{r.badge}</span>}
+                    </div>
+                    <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{r.brand} · {r.concern}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{r.price}</p>
+                    <p className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{r.match} match</p>
+                  </div>
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{r.price}</p>
-                  <p className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{r.match} match</p>
-                </div>
+              ))
+            ) : (
+              <div className="bg-card border border-border border-dashed rounded-xl p-8 text-center text-muted-foreground">
+                No product recommendations available. Run a skin test to get matches!
               </div>
-            ))}
+            )}
           </div>
-          {plan === "glow" && (
+          {plan === "glow" && matchedProducts.length > 0 && (
             <div className="bg-muted/50 border border-dashed border-border rounded-xl p-5 text-center">
               <Lock className="w-5 h-5 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm font-medium text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>See your full recommendation list</p>

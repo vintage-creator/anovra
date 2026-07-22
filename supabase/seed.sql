@@ -104,9 +104,29 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 
--- 6. Setup Public Storage Buckets if missing (Insert entries)
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
   ('vendor-documents', 'vendor-documents', true),
   ('product-images', 'product-images', true)
 ON CONFLICT (id) DO NOTHING;
+
+-- Enable RLS for storage objects
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+-- Storage Policies
+CREATE POLICY "Allow public read access to storage objects" ON storage.objects
+  FOR SELECT USING (true);
+
+CREATE POLICY "Allow authenticated uploads to storage objects" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (bucket_id = 'product-images' OR bucket_id = 'vendor-documents');
+
+CREATE POLICY "Allow authenticated updates to storage objects" ON storage.objects
+  FOR UPDATE TO authenticated USING (bucket_id = 'product-images' OR bucket_id = 'vendor-documents');
+
+CREATE POLICY "Allow authenticated deletions of storage objects" ON storage.objects
+  FOR DELETE TO authenticated USING (bucket_id = 'product-images' OR bucket_id = 'vendor-documents');
+
+-- Add settings fields to profiles table
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS custom_domain TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS white_label BOOLEAN DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS webhook_url TEXT;

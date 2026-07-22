@@ -11,22 +11,7 @@ import { toast } from "sonner";
 
 // ---- CATALOG DATA ----
 
-const catalogProducts = [
-  {
-    id: 1,
-    name: "Sample Niacinamide 10% Serum",
-    brand: "My Brand",
-    concerns: ["Acne/Blemishes", "Oil Control", "Brightening"],
-    skinTypes: ["Oily", "Combination"],
-    price: "₦4,500",
-    ingredients: ["Niacinamide", "Zinc PCA", "Hyaluronic Acid", "Panthenol"],
-    status: "active",
-    photo: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=200&h=200&fit=crop&auto=format",
-    safetyFlag: null,
-    views: 0,
-    clicks: 0,
-  },
-];
+const catalogProducts: any[] = [];
 
 // ---- CATALOG FORM OPTIONS ----
 
@@ -65,6 +50,7 @@ const SKIN_CONCERN_OPTIONS = [
 const SKIN_TYPE_OPTIONS = ["Oily", "Dry", "Combination", "Sensitive", "All skin types"];
 
 type ProductForm = {
+  id?: string;
   name: string;
   brand: string;
   price: string;
@@ -79,6 +65,7 @@ type ProductForm = {
   keyIngredients: string[];
   activeIngredients: string[];
   photoFile?: File | null;
+  image?: string | null;
 };
 
 const EMPTY_PRODUCT_FORM: ProductForm = {
@@ -123,9 +110,31 @@ function TagInput({
   );
 }
 
-function AddProductDrawer({ onClose, onSave }: { onClose: () => void; onSave: (f: ProductForm) => void }) {
-  const [form, setForm] = useState<ProductForm>(EMPTY_PRODUCT_FORM);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => void; onSave: (f: ProductForm) => void; initialData?: any }) {
+  const [form, setForm] = useState<ProductForm>(() => {
+    if (initialData) {
+      return {
+        id: initialData.id,
+        name: initialData.name || "",
+        brand: initialData.brand || "",
+        price: initialData.priceVal ? String(initialData.priceVal) : (initialData.price ? String(initialData.price).replace(/[^\d.]/g, "") : ""),
+        stock: initialData.stock ? String(initialData.stock) : "",
+        description: initialData.description || "",
+        benefits: initialData.benefits || "",
+        precautions: initialData.precautions || "",
+        usageInstructions: initialData.usageInstructions || "",
+        category: initialData.category || "",
+        concerns: initialData.concerns || [],
+        skinTypes: initialData.skinTypes || [],
+        keyIngredients: initialData.ingredients || [],
+        activeIngredients: initialData.activeIngredients || [],
+        photoFile: null,
+        image: initialData.image || null,
+      };
+    }
+    return EMPTY_PRODUCT_FORM;
+  });
+  const [imagePreview, setImagePreview] = useState<string | null>(initialData?.image || null);
   const [ingMode, setIngMode] = useState<"type" | "scan">("type");
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -218,10 +227,10 @@ function AddProductDrawer({ onClose, onSave }: { onClose: () => void; onSave: (f
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <div>
             <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-              Add New Product
+              {initialData ? "Edit Product" : "Add New Product"}
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              All fields help the AI match your product to the right customers
+              {initialData ? "Make adjustments to your product information" : "All fields help the AI match your product to the right customers"}
             </p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1">
@@ -768,6 +777,7 @@ function AddProductDrawer({ onClose, onSave }: { onClose: () => void; onSave: (f
 export function CatalogView({ setView }: { setView?: (v: View) => void }) {
   const [expandedFlag, setExpandedFlag] = useState<number | null>(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "blocked">("all");
 
@@ -803,7 +813,7 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
           }));
           setProductsList(formatted);
         } else {
-          setProductsList(catalogProducts);
+          setProductsList([]);
         }
       } catch (err) {
         console.error("Failed to load catalog products:", err);
@@ -817,7 +827,7 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
   const handleSaveProduct = async (newProd: any) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Authentication required to add products.");
+      if (!user) throw new Error("Authentication required to save products.");
 
       // Upload product image to Supabase Storage if file was provided
       let finalImageUrl = newProd.image || null;
@@ -862,35 +872,76 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
         category: newProd.category || "Skincare",
       };
 
-      const { data, error } = await supabase
-        .from("products")
-        .insert([dbPayload])
-        .select()
-        .single();
+      let savedData;
+      if (newProd.id) {
+        // Edit mode (Update)
+        const { data, error } = await supabase
+          .from("products")
+          .update(dbPayload)
+          .eq("id", newProd.id)
+          .select()
+          .single();
 
-      if (error) throw error;
+        if (error) throw error;
+        savedData = data;
+      } else {
+        // Create mode (Insert)
+        const { data, error } = await supabase
+          .from("products")
+          .insert([dbPayload])
+          .select()
+          .single();
 
-      const formattedNew = {
-        id: data.id,
-        name: data.name,
-        brand: data.brand || "Own Brand",
-        price: `₦${Number(data.price).toLocaleString()}`,
-        priceVal: data.price,
-        status: "active",
-        nafdac: "Approved",
-        description: data.description || "",
-        image: data.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
+        if (error) throw error;
+        savedData = data;
+      }
+
+      const formattedProduct = {
+        id: savedData.id,
+        name: savedData.name,
+        brand: savedData.brand || "Own Brand",
+        price: `₦${Number(savedData.price).toLocaleString()}`,
+        priceVal: savedData.price,
+        status: savedData.nafdac_status === "approved" ? "active" : savedData.nafdac_status === "flagged" ? "blocked" : "pending",
+        nafdac: savedData.nafdac_status === "approved" ? "Approved" : savedData.nafdac_status === "flagged" ? "Flagged" : "Pending",
+        description: savedData.description || "",
+        image: savedData.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
         ingredients: newProd.keyIngredients || [],
         concerns: newProd.concerns || [],
         safety: { rating: "A+", label: "Verified Safe" }
       };
 
-      setProductsList((prev) => [formattedNew, ...prev]);
-      toast.success("Product successfully added to catalog & live store!");
+      if (newProd.id) {
+        setProductsList((prev) => prev.map((p) => p.id === newProd.id ? formattedProduct : p));
+        toast.success("Product successfully updated!");
+      } else {
+        setProductsList((prev) => [formattedProduct, ...prev]);
+        toast.success("Product successfully added to catalog & live store!");
+      }
     } catch (err: any) {
-      toast.error(err.message || "Failed to add product.");
+      toast.error(err.message || "Failed to save product.");
     }
     setShowAddProduct(false);
+    setEditingProduct(null);
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    const ok = window.confirm("Are you sure you want to remove this product from your catalogue?");
+    if (!ok) return;
+
+    try {
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setProductsList((prev) => prev.filter((p) => p.id !== id));
+      toast.success("Product successfully removed from catalogue!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete product.");
+    }
   };
 
   const filteredProducts = productsList.filter((p) => {
@@ -917,6 +968,13 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
         {showAddProduct && (
           <AddProductDrawer
             onClose={() => setShowAddProduct(false)}
+            onSave={handleSaveProduct}
+          />
+        )}
+        {editingProduct && (
+          <AddProductDrawer
+            initialData={editingProduct}
+            onClose={() => setEditingProduct(null)}
             onSave={handleSaveProduct}
           />
         )}
@@ -1023,9 +1081,26 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
                       {p.brand} · {p.price}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0" style={{ fontFamily: "'DM Mono', monospace" }}>
-                    <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.views || 0}</span>
-                    <span className="flex items-center gap-1"><ExternalLink className="w-3 h-3" />{p.clicks || 0}</span>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    <div className="flex items-center gap-2 font-mono" style={{ fontFamily: "'DM Mono', monospace" }}>
+                      <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.views || 0}</span>
+                      <span className="flex items-center gap-1"><ExternalLink className="w-3 h-3" />{p.clicks || 0}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setEditingProduct(p)}
+                        className="text-xs text-accent hover:underline font-semibold cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                      <span className="text-border">|</span>
+                      <button
+                        onClick={() => handleDeleteProduct(p.id)}
+                        className="text-xs text-red-600 hover:underline font-semibold cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
 

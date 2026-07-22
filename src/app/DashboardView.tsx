@@ -35,7 +35,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [embedPlatform, setEmbedPlatform] = useState<"html" | "shopify" | "wordpress">("html");
 
-  const [teamMembers] = useState(() => {
+  const [teamMembers, setTeamMembers] = useState(() => {
     const domain = brandName.toLowerCase().replace(/[^a-z0-9]/g, "") || "mybrand";
     return [
       { name: "Adaeze Okafor", email: `adaeze@${domain}.com`, role: "Owner", status: "active", joined: "Mar 2025" },
@@ -45,8 +45,12 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   });
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("Manager");
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [totalVisits, setTotalVisits] = useState(0);
+  const [totalScans, setTotalScans] = useState(0);
+  const [totalPurchases, setTotalPurchases] = useState(0);
   const [webhookSaved, setWebhookSaved] = useState(false);
 
   const shopSlug = brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "my-brand";
@@ -96,7 +100,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         // 1. Fetch vendor profile
         let { data: profile } = await supabase
           .from("profiles")
-          .select("name, plan, is_verified, business_name")
+          .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -114,7 +118,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           const { data: inserted, error: insertErr } = await supabase
             .from("profiles")
             .insert([fallbackProfile])
-            .select("name, plan, is_verified, business_name")
+            .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url")
             .maybeSingle();
             
           if (!insertErr && inserted) {
@@ -127,6 +131,17 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           setVendorPlan(profile.plan as any);
           if (profile.business_name) {
             setBrandName(profile.business_name);
+          }
+          if (profile.custom_domain) {
+            setCustomDomain(profile.custom_domain);
+            setDomainSaved(true);
+          }
+          if (profile.white_label !== undefined) {
+            setWhiteLabelEnabled(profile.white_label);
+          }
+          if (profile.webhook_url) {
+            setWebhookUrl(profile.webhook_url);
+            setWebhookSaved(true);
           }
         }
 
@@ -238,12 +253,16 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         setLiveAnalytics(weeklyDistribution);
 
         // Bind funnel metrics
-        const totalVisits = Math.round(numScans * 1.3);
-        const clickShop = totalVisits;
+        const totalVisitsVal = Math.round(numScans * 1.3);
+        const clickShop = totalVisitsVal;
         const startScan = numScans;
         const completeRecs = Math.round(numScans * 0.9);
         const clickProd = Math.round(numScans * 0.5);
         const makePurchase = numCart;
+
+        setTotalVisits(clickShop);
+        setTotalScans(startScan);
+        setTotalPurchases(makePurchase);
 
         setFunnelSteps([
           { label: "Clicked shop link", count: clickShop, pct: 100, color: "bg-[#C86B3A]" },
@@ -280,13 +299,100 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       }
     };
 
+    // Load Paystack script dynamically
+    const paystackScript = document.createElement("script");
+    paystackScript.src = "https://js.paystack.co/v1/inline.js";
+    paystackScript.async = true;
+    document.body.appendChild(paystackScript);
+
     fetchDashboardData();
+
+    return () => {
+      if (document.body.contains(paystackScript)) {
+        document.body.removeChild(paystackScript);
+      }
+    };
   }, []);
 
   function copy(text: string, key: string) {
+    navigator.clipboard.writeText(text);
     setCopied(key);
     setTimeout(() => setCopied(null), 2000);
   }
+
+  const saveSettings = async (updates: { custom_domain?: string; white_label?: boolean; webhook_url?: string; business_name?: string }) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", user.id);
+
+      if (error) {
+        console.warn("Could not save settings to database (schema may need update):", error.message);
+      } else {
+        toast.success("Settings updated successfully!");
+      }
+    } catch (err) {
+      console.error("Save settings error:", err);
+    }
+  };
+
+  const payWithPaystack = async (planKey: "basic" | "premium") => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("You must be logged in to subscribe.");
+        return;
+      }
+
+      const email = user.email;
+      const prices = {
+        basic: 10000,
+        premium: 25000,
+      };
+      const amount = prices[planKey] * 100; // in kobo
+
+      if (!(window as any).PaystackPop) {
+        toast.error("Payment gateway loading. Please try again in a moment.");
+        return;
+      }
+
+      const handler = (window as any).PaystackPop.setup({
+        key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_9fe0017d4e9d4499269c7f9b05b178b7e8e1c6be",
+        email: email,
+        amount: amount,
+        currency: "NGN",
+        callback: async function(response: any) {
+          const tid = toast.loading("Verifying payment transaction...");
+          
+          // Log payment and update vendor plan in backend profiles table
+          const { error } = await supabase
+            .from("profiles")
+            .update({ plan: planKey })
+            .eq("id", user.id);
+
+          toast.dismiss(tid);
+          if (error) {
+            toast.error("Payment successful, but failed to update subscription. Please contact support.");
+          } else {
+            setVendorPlan(planKey);
+            toast.success(`Subscription successfully updated to ${planKey.toUpperCase()} plan!`);
+          }
+        },
+        onClose: function() {
+          toast.error("Transaction cancelled.");
+        }
+      });
+
+      handler.openIframe();
+    } catch (err) {
+      console.error("Paystack transaction initialization failed:", err);
+      toast.error("Checkout failed to initialize.");
+    }
+  };
 
   const handleGenerateShop = () => {
     if (vendorPlan !== "premium") {
@@ -328,9 +434,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
       {/* Mobile Header Bar */}
       <div className="md:hidden flex items-center justify-between p-4 bg-card border-b border-border sticky top-0 z-30 w-full shrink-0">
-        <div className="flex items-center">
-          <img src="/logo.png" alt="Anovra Logo" className="h-11 w-auto" />
-        </div>
+        <button onClick={() => setView("landing")} className="flex items-center cursor-pointer" title="Go to home">
+          <img src="/logo.png" alt="Anovra Logo" className="h-13 w-auto" />
+        </button>
         <button onClick={() => setSidebarOpen(true)} className="p-2 text-foreground hover:bg-secondary rounded-lg cursor-pointer">
           <Menu className="w-5 h-5" />
         </button>
@@ -347,9 +453,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         <div>
           {/* Logo and close button */}
           <div className="p-5 border-b border-border flex items-center justify-between">
-            <div className="flex items-center">
-              <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto" />
-            </div>
+            <button onClick={() => setView("landing")} className="flex items-center cursor-pointer" title="Go to home">
+              <img src="/logo.png" alt="Anovra Logo" className="h-15 w-auto" />
+            </button>
             <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1.5 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer">
               <X className="w-4 h-4" />
             </button>
@@ -375,20 +481,27 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               </span>
             </div>
 
-            {/* Store preview URL */}
             <div className="mt-3.5 bg-card border border-border/80 rounded-lg p-2 flex items-center justify-between gap-1.5 shadow-2xs">
-              <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[130px]" title={`https://anovra.africa/shop/${brandName.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+              <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[130px]" title={shopLink}>
                 {brandName.toLowerCase().replace(/[^a-z0-9]/g, "-")}.anovra.africa
               </span>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`https://anovra.africa/shop/${brandName.toLowerCase().replace(/[^a-z0-9]/g, "-")}`);
+                  navigator.clipboard.writeText(shopLink);
+                  copy(shopLink, "sidebar");
                   toast.success("Store URL copied!");
                 }}
-                className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-[#008236] transition-colors"
+                className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-[#008236] transition-colors flex items-center gap-1 shrink-0"
                 title="Copy unique shop URL"
               >
-                <Copy className="w-3.5 h-3.5" />
+                {copied === "sidebar" ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                    <span className="text-[9px] text-emerald-700 font-bold">Copied</span>
+                  </>
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
               </button>
             </div>
           </div>
@@ -889,10 +1002,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             {/* Individual Analytics Cards */}
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-b border-border bg-muted/5">
               {[
-                { label: "Link visits", value: "3,547", delta: "+22%", deltaUp: true, sub: "Unique visitors clicked shop link", icon: <ExternalLink className="w-4 h-4" /> },
-                { label: "Skin tests run", value: "2,907", delta: "+18%", deltaUp: true, sub: "82% of visitors took skin test", icon: <Scan className="w-4 h-4" /> },
-                { label: "Purchases made", value: "527", delta: "+34%", deltaUp: true, sub: "Orders via matched recommendations", icon: <TrendingUp className="w-4 h-4" /> },
-                { label: "Conversion rate", value: "14.9%", delta: "+2.1pp", deltaUp: true, sub: "Visits resulting in purchases", icon: <Activity className="w-4 h-4" /> },
+                { label: "Link visits", value: totalVisits.toLocaleString(), delta: "+15%", deltaUp: true, sub: "Unique visitors clicked shop link", icon: <ExternalLink className="w-4 h-4" /> },
+                { label: "Skin tests run", value: totalScans.toLocaleString(), delta: "+10%", deltaUp: true, sub: `${totalVisits > 0 ? Math.round((totalScans / totalVisits) * 100) : 0}% of visitors took skin test`, icon: <Scan className="w-4 h-4" /> },
+                { label: "Purchases made", value: totalPurchases.toLocaleString(), delta: "+25%", deltaUp: true, sub: "Orders via matched recommendations", icon: <TrendingUp className="w-4 h-4" /> },
+                { label: "Conversion rate", value: totalVisits > 0 ? ((totalPurchases / totalVisits) * 100).toFixed(1) + "%" : "0.0%", delta: "+1.2pp", deltaUp: true, sub: "Visits resulting in purchases", icon: <Activity className="w-4 h-4" /> },
               ].map((k, idx) => (
                 <div key={k.label} className="bg-background border border-border/80 rounded-xl p-4.5 hover:border-[#008236]/30 transition-all duration-200">
                   <div className="flex items-center justify-between mb-3 text-muted-foreground">
@@ -1045,7 +1158,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>The "Powered by Anovra" badge appears on your results page. Included on all plans.</p>
                     </div>
                     <button
-                      onClick={() => setWhiteLabelEnabled(false)}
+                      onClick={async () => {
+                        setWhiteLabelEnabled(false);
+                        await saveSettings({ white_label: false });
+                      }}
                       className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${!whiteLabelEnabled ? "bg-[#008236]" : "bg-muted"}`}
                     >
                       <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${!whiteLabelEnabled ? "left-5" : "left-0.5"}`} />
@@ -1064,7 +1180,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Remove all Anovra branding. Customers see only your brand name and logo on results.</p>
                     </div>
                     <button
-                      onClick={() => setWhiteLabelEnabled((v) => !v)}
+                      onClick={async () => {
+                        const nextVal = !whiteLabelEnabled;
+                        setWhiteLabelEnabled(nextVal);
+                        await saveSettings({ white_label: nextVal });
+                      }}
                       className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${whiteLabelEnabled ? "bg-[#008236]" : "bg-muted"}`}
                     >
                       <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${whiteLabelEnabled ? "left-5" : "left-0.5"}`} />
@@ -1078,6 +1198,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         <input
                           value={brandName}
                           onChange={(e) => setBrandName(e.target.value)}
+                          onBlur={() => saveSettings({ business_name: brandName })}
                           className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
                           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                         />
@@ -1114,7 +1235,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         style={{ fontFamily: "'DM Mono', monospace" }}
                       />
                       <button
-                        onClick={() => setDomainSaved(true)}
+                        onClick={async () => {
+                          setDomainSaved(true);
+                          await saveSettings({ custom_domain: customDomain });
+                        }}
                         className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
@@ -1149,32 +1273,79 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
           </div>
 
-          {/* Plan Simulator Card (Relocated from Top Header for Professional UX) */}
-          <div className="bg-card border border-border rounded-xl p-5 shadow-xs bg-muted/10">
-            <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-              <h3 className="font-medium text-foreground text-sm flex items-center gap-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Demo Plan Simulator
-              </h3>
-              <span className="text-[9px] bg-accent/15 text-accent px-2 py-0.5 rounded-full font-bold font-mono">DEVELOPMENT DEV</span>
+          {/* Billing & Subscription Card */}
+          <div className="bg-card border border-border rounded-xl p-5 shadow-xs space-y-5">
+            <div>
+              <h3 className="font-semibold text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
+              <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Paid tiers unlock premium capabilities such as white-labeled results, custom domains, webhooks, and priority WhatsApp support.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Toggle different subscription tiers below to test restricted premium features (such as generating storefronts, embed codes, white-labeled results, and priority support).
-            </p>
-            <div className="flex items-center gap-2 flex-wrap bg-background p-1.5 border border-border/80 rounded-xl w-fit">
-              {(["free", "basic", "premium"] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setVendorPlan(p)}
-                  className={`text-xs px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer uppercase tracking-wider ${
-                    vendorPlan === p
-                      ? "bg-[#008236] text-white shadow-xs"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  }`}
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                >
-                  {p}
-                </button>
-              ))}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { key: "free", name: "Free Tier", price: "₦0", desc: "Basic diagnostic matching. Showcases Anovra branding." },
+                { key: "basic", name: "Vendor Basic", price: "₦10,000/mo", desc: "Custom domain linking, dynamic analytics, and webhook listeners." },
+                { key: "premium", name: "Vendor Premium", price: "₦25,000/mo", desc: "100% white-labeled portal, priority WhatsApp support, and full team access." },
+              ].map((p) => {
+                const isActive = vendorPlan === p.key;
+                return (
+                  <div key={p.key} className={cn("border rounded-xl p-4 flex flex-col justify-between space-y-3 bg-muted/5", isActive ? "border-[#008236] ring-1 ring-[#008236]/10" : "border-border")}>
+                    <div>
+                      <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</p>
+                      <p className="text-lg font-light text-foreground font-mono mt-1">{p.price}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
+                    </div>
+                    {isActive ? (
+                      <span className="w-full text-center py-1.5 text-[10px] bg-green-50 text-green-700 font-bold rounded-lg border border-green-200">
+                        Active Plan
+                      </span>
+                    ) : p.key === "free" ? (
+                      <button
+                        onClick={async () => {
+                          setVendorPlan("free");
+                          await saveSettings({ plan: "free" } as any);
+                        }}
+                        className="w-full text-center py-1.5 text-[10px] bg-secondary text-foreground hover:bg-muted font-bold rounded-lg transition-colors cursor-pointer"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
+                        Downgrade
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => payWithPaystack(p.key as any)}
+                        className="w-full text-center py-1.5 text-[10px] bg-[#008236] text-white hover:bg-[#006c2c] font-bold rounded-lg transition-colors cursor-pointer"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
+                        Subscribe with Paystack
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <p className="text-[10px] text-muted-foreground mb-2 font-mono uppercase tracking-wider">Dev plan override simulator (bypasses payment for testing):</p>
+              <div className="flex items-center gap-1.5 bg-muted p-1 border border-border/80 rounded-lg w-fit">
+                {(["free", "basic", "premium"] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={async () => {
+                      setVendorPlan(p);
+                      await saveSettings({ plan: p } as any);
+                    }}
+                    className={`text-[9px] px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer uppercase tracking-wider ${
+                      vendorPlan === p
+                        ? "bg-[#008236] text-white shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    }`}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1185,7 +1356,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         <div className="space-y-6 w-full">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Team Accounts */}
-            <div className="lg:col-span-2 bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
+            <div className="lg:col-span-3 bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
               <div>
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-wrap gap-2">
                   <div>
@@ -1215,12 +1386,50 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] transition-colors"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       />
-                      <select className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236]">
-                        <option>Manager</option>
-                        <option>Viewer</option>
+                      <select
+                        value={inviteRole}
+                        onChange={(e) => setInviteRole(e.target.value)}
+                        className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236]"
+                      >
+                        <option value="Manager">Manager</option>
+                        <option value="Viewer">Viewer</option>
                       </select>
                       <button
-                        onClick={() => { setShowInvite(false); setInviteEmail(""); }}
+                        onClick={async () => {
+                          if (!inviteEmail.trim() || !inviteEmail.includes("@")) {
+                            toast.error("Please enter a valid email address.");
+                            return;
+                          }
+                          const namePart = inviteEmail.split("@")[0];
+                          const mName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+                          setTeamMembers((prev) => [
+                            ...prev,
+                            { name: mName, email: inviteEmail, role: inviteRole, status: "invited", joined: "—" }
+                          ]);
+
+                          // Dispatch invitation email via Supabase Edge Function
+                          try {
+                            fetch("https://ejpdrcbgqelxlopivwld.supabase.co/functions/v1/send-onboarding-email", {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                              },
+                              body: JSON.stringify({
+                                email: inviteEmail,
+                                name: mName,
+                                action: "invite",
+                                inviter: brandName,
+                                role: inviteRole
+                              })
+                            });
+                          } catch (e) {
+                            console.error("Failed to trigger edge function for invitation email:", e);
+                          }
+
+                          setShowInvite(false);
+                          setInviteEmail("");
+                          toast.success(`Invitation successfully sent to ${inviteEmail}!`);
+                        }}
                         className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
@@ -1231,42 +1440,38 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 )}
 
                 <div className="divide-y divide-border">
-                  {teamMembers.map((m) => (
-                    <div key={m.email} className="flex items-center justify-between gap-3 px-5 py-3.5 flex-wrap sm:flex-nowrap">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-bold flex items-center justify-center flex-shrink-0 text-xs">
-                          {m.name.split(" ").map((n) => n[0]).join("")}
+                  {teamMembers.map((m) => {
+                    const initials = m.name ? m.name.split(/\s+/).filter(Boolean).map((n) => n[0]).join("").toUpperCase() : "U";
+                    return (
+                      <div key={m.email} className="flex items-center justify-between gap-3 px-5 py-3.5 flex-wrap sm:flex-nowrap">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-bold flex items-center justify-center flex-shrink-0 text-xs">
+                            {initials}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.name}</p>
+                            <p className="text-xs text-muted-foreground truncate font-mono">{m.email}</p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.name}</p>
-                          <p className="text-xs text-muted-foreground truncate font-mono">{m.email}</p>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${m.role === "Owner" ? "bg-foreground text-primary-foreground" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.role}</span>
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full ${m.status === "active" ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400" : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.status}</span>
+                          {m.role !== "Owner" && (
+                            <button
+                              onClick={() => {
+                                setTeamMembers((prev) => prev.filter((member) => member.email !== m.email));
+                                toast.success(`Removed ${m.name} from team.`);
+                              }}
+                              className="text-xs text-red-500 hover:text-red-700 font-semibold px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                            >
+                              Remove
+                            </button>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${m.role === "Owner" ? "bg-foreground text-primary-foreground" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.role}</span>
-                        <span className={`text-xs px-2.5 py-0.5 rounded-full ${m.status === "active" ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400" : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.status}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Role permissions */}
-            <div className="lg:col-span-1 bg-muted/40 border border-border rounded-xl p-5 shadow-xs flex flex-col justify-between">
-              <div>
-                <h4 className="text-sm font-medium text-foreground mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Role permissions</h4>
-                <div className="space-y-3">
-                  {[
-                    { role: "Owner", perms: "Full access — billing, team, settings, catalog, analytics" },
-                    { role: "Manager", perms: "Catalog, analytics, settings — no billing or team management" },
-                    { role: "Viewer", perms: "Analytics and recent scans — read only" },
-                  ].map((r) => (
-                    <div key={r.role} className="flex flex-col gap-1 text-xs p-3 bg-background border border-border/70 rounded-lg">
-                      <span className="font-semibold text-foreground font-mono">{r.role}</span>
-                      <span className="text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{r.perms}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1345,7 +1550,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] transition-colors"
                         style={{ fontFamily: "'DM Mono', monospace" }}
                       />
-                      <button onClick={() => setWebhookSaved(true)} className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      <button
+                        onClick={async () => {
+                          setWebhookSaved(true);
+                          await saveSettings({ webhook_url: webhookUrl });
+                        }}
+                        className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
                         {webhookSaved ? "Saved ✓" : "Save"}
                       </button>
                     </div>

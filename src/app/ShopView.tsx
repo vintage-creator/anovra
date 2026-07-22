@@ -9,22 +9,7 @@ import { toast } from "sonner";
 
 // ---- CATALOG PRODUCTS (shared data) ----
 
-const catalogProducts = [
-  {
-    id: 1,
-    name: "Sample Niacinamide 10% Serum",
-    brand: "My Brand",
-    concerns: ["Acne/Blemishes", "Oil Control", "Brightening"],
-    skinTypes: ["Oily", "Combination"],
-    price: "₦4,500",
-    ingredients: ["Niacinamide", "Zinc PCA", "Hyaluronic Acid", "Panthenol"],
-    status: "active",
-    photo: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=200&h=200&fit=crop&auto=format",
-    safetyFlag: null,
-    views: 0,
-    clicks: 0,
-  },
-];
+const catalogProducts: any[] = [];
 
 // ---- SHOP VIEW ----
 
@@ -74,11 +59,11 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           }));
           setProductsList(formatted);
         } else {
-          setProductsList(catalogProducts);
+          setProductsList([]);
         }
       } catch (err) {
         console.error("Failed to query live shop items:", err);
-        setProductsList(catalogProducts);
+        setProductsList([]);
       } finally {
         setGenerating(false);
       }
