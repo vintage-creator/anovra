@@ -136,7 +136,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             </button>
             <button
               onClick={handleGenerateShop}
-              className="w-full sm:w-auto flex items-center justify-center gap-1.5 text-xs bg-emerald-500 text-amber-950 px-4 py-2 rounded-lg hover:bg-emerald-600 transition-colors font-bold shadow-xs"
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 text-xs bg-[#008236] text-white px-4 py-2 rounded-lg hover:bg-[#006c2c] transition-colors font-bold shadow-xs cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               <Store className="w-3.5 h-3.5" /> Generate My Shop
@@ -155,7 +155,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               onClick={() => setVendorPlan(p)}
               className={`px-3 py-1 rounded-md uppercase tracking-wider font-bold transition-all ${
                 vendorPlan === p
-                  ? "bg-emerald-500 text-amber-950 shadow-xs"
+                  ? "bg-[#008236] text-white shadow-xs"
                   : "bg-background text-muted-foreground hover:text-foreground border border-border"
               }`}
             >
@@ -276,7 +276,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </p>
                   <button
                     onClick={() => setVendorPlan("premium")}
-                    className="mt-2 text-xs bg-emerald-500 text-amber-950 font-bold px-4 py-2 rounded-lg hover:bg-emerald-600 transition-colors shadow-xs"
+                    className="mt-2 text-xs bg-[#008236] text-white font-bold px-4 py-2 rounded-lg hover:bg-[#006c2c] transition-colors shadow-xs cursor-pointer"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     Upgrade to Premium
@@ -320,7 +320,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   setShowPremiumModal(false);
                   setView("shop");
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-amber-950 font-bold text-sm hover:bg-emerald-600 transition-colors shadow-md"
+                className="flex-1 py-2.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 Upgrade to Premium

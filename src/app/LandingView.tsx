@@ -133,7 +133,7 @@ function SkinConditionsSlider() {
                 <div className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white/40" />
               )}
               <div className="absolute bottom-2.5 left-2.5 right-2.5">
-                <span className="text-[10px] bg-emerald-600/90 text-amber-950 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                <span className="text-[10px] bg-[#008236] text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
                   View Card
                 </span>
               </div>
@@ -670,7 +670,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               key={i}
               className="group p-6 bg-card border border-border rounded-xl hover:border-emerald-500/40 hover:shadow-lg transition-all duration-200"
             >
-              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 mb-4 group-hover:bg-emerald-500 group-hover:text-amber-950 transition-colors duration-200">
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 mb-4 group-hover:bg-[#008236] group-hover:text-white transition-colors duration-200">
                 {f.icon}
               </div>
               <h3
