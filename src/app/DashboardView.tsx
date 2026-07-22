@@ -81,11 +81,33 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         }
 
         // 1. Fetch vendor profile
-        const { data: profile } = await supabase
+        let { data: profile } = await supabase
           .from("profiles")
           .select("name, plan, is_verified, business_name")
           .eq("id", user.id)
-          .single();
+          .maybeSingle();
+
+        if (!profile) {
+          // Fallback: If backend triggers haven't executed yet, insert profile directly since client is now authenticated
+          const fallbackProfile = {
+            id: user.id,
+            name: user.user_metadata?.full_name || "New Partner",
+            business_name: user.user_metadata?.business_name || "My Skincare Brand",
+            phone: user.user_metadata?.phone || null,
+            nafdac_number: user.user_metadata?.nafdac_number || null,
+            plan: "free",
+            is_verified: false,
+          };
+          const { data: inserted, error: insertErr } = await supabase
+            .from("profiles")
+            .insert([fallbackProfile])
+            .select("name, plan, is_verified, business_name")
+            .maybeSingle();
+            
+          if (!insertErr && inserted) {
+            profile = inserted;
+          }
+        }
 
         if (profile) {
           setIsVerified(profile.is_verified);

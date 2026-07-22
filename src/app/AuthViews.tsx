@@ -194,29 +194,15 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
             role: selectedRole,
             cac_number: selectedRole === "vendor" ? form.cac : null,
             cac_document_url: selectedRole === "vendor" ? documentUrl : null,
+            business_name: selectedRole === "vendor" ? form.businessName : null,
+            phone: selectedRole === "vendor" ? "+234" + form.whatsapp : null,
+            nafdac_number: selectedRole === "vendor" ? form.referralCode : null,
           },
         },
       });
 
       if (error) throw error;
       if (!data.user) throw new Error("Registration failed: User details could not be generated.");
-
-      // 3. Insert details into public profiles table
-      const profileData = {
-        id: data.user.id,
-        name: form.fullName,
-        business_name: selectedRole === "vendor" ? form.businessName : null,
-        phone: selectedRole === "vendor" ? "+234" + form.whatsapp : null,
-        nafdac_number: selectedRole === "vendor" ? form.referralCode : null,
-        plan: "free",
-        is_verified: false,
-      };
-
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert([profileData]);
-
-      if (profileError) throw profileError;
 
       // 3. Trigger onboarding email Edge Function for vendors
       if (selectedRole === "vendor") {
