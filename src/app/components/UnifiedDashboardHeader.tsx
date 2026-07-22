@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Package, Eye, Store, User, Shield, Check, Copy,
   CheckCircle, AlertTriangle, Home
 } from "lucide-react";
 import type { View } from "../types";
+import { supabase } from "../utils/supabase";
 
 export type HeaderRole = "vendor" | "consumer" | "admin";
 
@@ -31,7 +32,27 @@ export function UnifiedDashboardHeader({
   onToggleVerify,
 }: UnifiedDashboardHeaderProps) {
   const [copied, setCopied] = useState(false);
-  const shopLink = "https://anovra.africa/shop/veraski-ng";
+  const [brandSlug, setBrandSlug] = useState("my-brand");
+
+  useEffect(() => {
+    const fetchUserSlug = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && user.user_metadata?.business_name) {
+          const slug = user.user_metadata.business_name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)/g, "");
+          setBrandSlug(slug);
+        }
+      } catch (err) {
+        console.warn("Failed to retrieve user meta in header:", err);
+      }
+    };
+    fetchUserSlug();
+  }, []);
+
+  const shopLink = `https://anovra.africa/shop/${brandSlug}`;
 
   function copyLink() {
     navigator.clipboard.writeText(shopLink);

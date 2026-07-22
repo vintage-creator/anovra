@@ -24,7 +24,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [analyticsRange, setAnalyticsRange] = useState<"7d" | "30d" | "90d">("7d");
   const [copied, setCopied] = useState<string | null>(null);
   const [whiteLabelEnabled, setWhiteLabelEnabled] = useState(false);
-  const [brandName, setBrandName] = useState("Veraski");
+  const [brandName, setBrandName] = useState("My Brand");
   const [customDomain, setCustomDomain] = useState("");
   const [domainSaved, setDomainSaved] = useState(false);
 
@@ -35,19 +35,23 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [embedPlatform, setEmbedPlatform] = useState<"html" | "shopify" | "wordpress">("html");
 
-  const [teamMembers] = useState([
-    { name: "Adaeze Okafor", email: "adaeze@veraski.com", role: "Owner", status: "active", joined: "Mar 2025" },
-    { name: "Chidi Nwosu", email: "chidi@veraski.com", role: "Manager", status: "active", joined: "Apr 2025" },
-    { name: "Ngozi Eze", email: "ngozi@veraski.com", role: "Viewer", status: "invited", joined: "—" },
-  ]);
+  const [teamMembers] = useState(() => {
+    const domain = brandName.toLowerCase().replace(/[^a-z0-9]/g, "") || "mybrand";
+    return [
+      { name: "Adaeze Okafor", email: `adaeze@${domain}.com`, role: "Owner", status: "active", joined: "Mar 2025" },
+      { name: "Chidi Nwosu", email: `chidi@${domain}.com`, role: "Manager", status: "active", joined: "Apr 2025" },
+      { name: "Ngozi Eze", email: `ngozi@${domain}.com`, role: "Viewer", status: "invited", joined: "—" },
+    ];
+  });
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookSaved, setWebhookSaved] = useState(false);
 
-  const shopLink = "https://anovra.africa/shop/veraski-ng";
-  const testLink = "https://anovra.africa/scan/veraski-ng";
+  const shopSlug = brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "my-brand";
+  const shopLink = `https://anovra.africa/shop/${shopSlug}`;
+  const testLink = `https://anovra.africa/scan/${shopSlug}`;
   const apiKey = "sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c";
 
   const [liveScans, setLiveScans] = useState<any[]>([]);
@@ -84,6 +88,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         if (!user) {
           setView("signin");
           return;
+        }
+        if (user.user_metadata?.business_name) {
+          setBrandName(user.user_metadata.business_name);
         }
 
         // 1. Fetch vendor profile
@@ -653,7 +660,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <pre className="text-gray-300">
                         <span className="text-cyan-400">&lt;script</span><br />
                         {"  "}<span className="text-amber-400">src</span>=<span className="text-emerald-400">"https://cdn.anovra.africa/skin-widget.js"</span><br />
-                        {"  "}<span className="text-amber-400">data-vendor</span>=<span className="text-emerald-400">"veraski-ng"</span><br />
+                        {"  "}<span className="text-amber-400">data-vendor</span>=<span className="text-emerald-400">"{shopSlug}"</span><br />
                         {"  "}<span className="text-amber-400">async</span><span className="text-cyan-400">&gt;</span><br />
                         <span className="text-cyan-400">&lt;/script&gt;</span>
                       </pre>
@@ -663,7 +670,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         <span className="text-slate-500 font-medium font-sans">{`{% comment %} Paste inside layout/theme.liquid before </body> {% endcomment %}`}</span><br />
                         <span className="text-cyan-400">&lt;script</span><br />
                         {"  "}<span className="text-amber-400">src</span>=<span className="text-emerald-400">"https://cdn.anovra.africa/skin-widget.js"</span><br />
-                        {"  "}<span className="text-amber-400">data-vendor</span>=<span className="text-emerald-400">"veraski-ng"</span><br />
+                        {"  "}<span className="text-amber-400">data-vendor</span>=<span className="text-emerald-400">"{shopSlug}"</span><br />
                         {"  "}<span className="text-amber-400">async</span><span className="text-cyan-400">&gt;</span><br />
                         <span className="text-cyan-400">&lt;/script&gt;</span>
                       </pre>
@@ -672,7 +679,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <pre className="text-gray-300">
                         <span className="text-slate-500 font-medium font-sans">{`// Add at the bottom of active theme's functions.php`}</span><br />
                         <span className="text-purple-400">add_action</span>(<span className="text-emerald-400">'wp_footer'</span>, <span className="text-blue-400">function</span>() &#123;<br />
-                        {"    "}<span className="text-blue-400">echo</span> <span className="text-emerald-400">'&lt;script src="https://cdn.anovra.africa/skin-widget.js" data-vendor="veraski-ng" async&gt;&lt;/script&gt;'</span>;<br />
+                        {"    "}<span className="text-blue-400">echo</span> <span className="text-emerald-400">{`'<script src="https://cdn.anovra.africa/skin-widget.js" data-vendor="${shopSlug}" async></script>'`}</span>;<br />
                         &#125;);
                       </pre>
                     )}
@@ -682,10 +689,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 <button
                   onClick={() => {
                     const code = embedPlatform === "html"
-                      ? `<script\n  src="https://cdn.anovra.africa/skin-widget.js"\n  data-vendor="veraski-ng"\n  async>\n</script>`
+                      ? `<script\n  src="https://cdn.anovra.africa/skin-widget.js"\n  data-vendor="${shopSlug}"\n  async>\n</script>`
                       : embedPlatform === "shopify"
-                      ? `{% comment %} Paste inside layout/theme.liquid before </body> {% endcomment %}\n<script\n  src="https://cdn.anovra.africa/skin-widget.js"\n  data-vendor="veraski-ng"\n  async>\n</script>`
-                      : `// Add at the bottom of active theme's functions.php\nadd_action('wp_footer', function() {\n    echo '<script src="https://cdn.anovra.africa/skin-widget.js" data-vendor="veraski-ng" async></script>';\n});`;
+                      ? `{% comment %} Paste inside layout/theme.liquid before </body> {% endcomment %}\n<script\n  src="https://cdn.anovra.africa/skin-widget.js"\n  data-vendor="${shopSlug}"\n  async>\n</script>`
+                      : `// Add at the bottom of active theme's functions.php\nadd_action('wp_footer', function() {\n    echo '<script src="https://cdn.anovra.africa/skin-widget.js" data-vendor="${shopSlug}" async></script>';\n});`;
                     copy(code, "embed");
                   }}
                   className="flex items-center gap-1.5 text-xs px-4 py-2 bg-background border border-border rounded-lg hover:bg-secondary hover:border-accent/40 transition-colors cursor-pointer"
@@ -860,7 +867,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               <div>
                 <h2 className="font-semibold text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Shop Link Analytics</h2>
                 <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  anovra.africa/shop/<strong className="text-[#008236] font-semibold">veraski-ng</strong>
+                  anovra.africa/shop/<strong className="text-[#008236] font-semibold">{shopSlug}</strong>
                 </p>
               </div>
               <div className="flex items-center gap-1.5 p-1 bg-muted rounded-xl border border-border/40">
@@ -1095,7 +1102,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Custom domain for test link</h3>
                     <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Brand</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Use your own domain (e.g. <code className="font-mono">skin.veraski.com</code>) instead of the default Anovra link.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Use your own domain (e.g. <code className="font-mono">skin.yourbrand.com</code>) instead of the default Anovra link.</p>
                 </div>
                 <div className="p-5 space-y-4">
                   <div>
