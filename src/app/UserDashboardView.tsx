@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  Scan, Star, FlaskConical, Share2, TrendingUp, Clock, Check,
+  Scan, Star, FlaskConical, Share2, TrendingUp, Clock, Check, CheckCircle,
   ChevronRight, Copy, MessageCircle, Users, Sparkles, Bell,
   Calendar, BarChart2, ShoppingBag, BookOpen, Flame, Lock,
   ExternalLink, Plus, X, ChevronDown,
@@ -135,7 +135,14 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [chatHistory, setChatHistory] = useState<{ from: "user" | "advisor"; text: string }[]>([
     { from: "advisor", text: "Hi Adaeze! I'm your certified skin advisor. I can review your latest analysis results and help you build a skincare plan. What would you like to know?" },
   ]);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
   useEffect(() => {
+    if (sessionStorage.getItem("show_welcome") === "true") {
+      setShowWelcomeModal(true);
+      sessionStorage.removeItem("show_welcome");
+    }
+
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -666,6 +673,33 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           >
             <MessageCircle className="w-5 h-5 text-white" />
           </button>
+        </div>
+      )}
+
+      {/* Welcome Verified Email Modal */}
+      {showWelcomeModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 sm:p-8 text-center shadow-2xl relative">
+            <div className="w-16 h-16 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-accent" />
+            </div>
+            <h3 className="text-2xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+              Welcome to Anovra!
+            </h3>
+            <p className="text-xs text-green-700 uppercase font-bold tracking-wider mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Email Confirmed Successfully
+            </p>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Welcome to Anovra! Your email has been verified. You can now start scanning your skin, tracking ingredients, and creating routines.
+            </p>
+            <button
+              onClick={() => setShowWelcomeModal(false)}
+              className="w-full py-3.5 rounded-xl bg-accent text-white font-bold text-sm hover:bg-accent/90 transition-colors shadow-md cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              Enter Skin Portal
+            </button>
+          </div>
         </div>
       )}
     </div>

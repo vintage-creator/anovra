@@ -799,45 +799,22 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
               <CheckCircle className="w-8 h-8 text-[#008236]" />
             </div>
             
-            {selectedRole === "customer" ? (
-              <>
-                <h3 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Account Created Successfully!
-                </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Welcome to Anovra! You can now start scanning your skin, tracking ingredients, and creating routines.
-                </p>
-                <button
-                  onClick={() => {
-                    setShowPopupModal(false);
-                    setView("userdashboard");
-                  }}
-                  className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                >
-                  Enter Portal
-                </button>
-              </>
-            ) : (
-              <>
-                <h3 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Vendor Application Submitted!
-                </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Our team will verify your business CAC certificate details within 3-5 working days. You can explore your dashboard workspace right away.
-                </p>
-                <button
-                  onClick={() => {
-                    setShowPopupModal(false);
-                    setView("dashboard");
-                  }}
-                  className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                >
-                  Enter Workspace
-                </button>
-              </>
-            )}
+            <h3 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
+              Verify Your Email Address
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              We have dispatched a verification code to <strong>{form.email}</strong>. Please open your inbox and click the confirmation link (or copy the OTP code) to activate your account.
+            </p>
+            <button
+              onClick={() => {
+                setShowPopupModal(false);
+                setView("signin");
+              }}
+              className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              Proceed to Sign In
+            </button>
           </div>
         </div>
       )}

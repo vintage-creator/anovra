@@ -24,6 +24,7 @@ import { CatalogView } from "./CatalogView";
 import { SkinTestView } from "./SkinTestView";
 import { SignUpView, SignInView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
 import { TeamLoginView, TeamDashboardView } from "./TeamViews";
+import { supabase } from "./utils/supabase";
 import { AboutView, ContactView } from "./ContentViews";
 import { AdminView } from "./AdminView";
 import { UserDashboardView } from "./UserDashboardView";
@@ -284,6 +285,29 @@ export default function App() {
       setViewState(getViewFromHash());
     };
     window.addEventListener("hashchange", handleHashChange);
+
+    // Parse email verification redirect params
+    const handleEmailConfirmation = async () => {
+      const urlStr = window.location.href;
+      if (urlStr.includes("type=signup") || urlStr.includes("code=")) {
+        // Wait briefly for Supabase client to process authentication tokens
+        await new Promise((r) => setTimeout(r, 600));
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          sessionStorage.setItem("show_welcome", "true");
+          const role = user.user_metadata?.role || "customer";
+          if (role === "vendor") {
+            setView("dashboard");
+          } else {
+            setView("userdashboard");
+          }
+          // Clean the URL by stripping signup query parameters
+          window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+        }
+      }
+    };
+    handleEmailConfirmation();
+
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 

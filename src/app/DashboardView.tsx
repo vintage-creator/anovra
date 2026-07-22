@@ -32,6 +32,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [isVerified, setIsVerified] = useState(false);
   const [vendorPlan, setVendorPlan] = useState<"free" | "basic" | "premium">("free");
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [embedPlatform, setEmbedPlatform] = useState<"html" | "shopify" | "wordpress">("html");
 
   const [teamMembers] = useState([
@@ -71,6 +72,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   ]);
 
   useEffect(() => {
+    if (sessionStorage.getItem("show_welcome") === "true") {
+      setShowWelcomeModal(true);
+      sessionStorage.removeItem("show_welcome");
+    }
+
     const fetchDashboardData = async () => {
       setDashboardLoading(true);
       try {
@@ -814,6 +820,33 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 Upgrade to Premium
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Welcome Verified Email Modal */}
+      {showWelcomeModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 sm:p-8 text-center shadow-2xl relative">
+            <div className="w-16 h-16 rounded-full bg-[#008236]/15 border border-[#008236]/30 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-[#008236]" />
+            </div>
+            <h3 className="text-2xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+              Welcome to Anovra!
+            </h3>
+            <p className="text-xs text-green-700 uppercase font-bold tracking-wider mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Email Confirmed Successfully
+            </p>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Our compliance team is verifying your business CAC certificate details within 3-5 working days. You can explore your workspace, manage your products catalog, and preview your storefront right away.
+            </p>
+            <button
+              onClick={() => setShowWelcomeModal(false)}
+              className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              Explore Workspace
+            </button>
           </div>
         </div>
       )}
