@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, AlertCircle, ChevronRight, Scan } from "lucide-react";
+import { Eye, AlertCircle, ChevronRight } from "lucide-react";
 import type { View } from "./types";
 
 export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
@@ -28,29 +28,35 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
   };
 
   return (
-    <div className="min-h-screen bg-foreground flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center py-12 px-4">
+      <div className="w-full max-w-md">
 
         {/* Wordmark */}
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="Anovra Logo" className="h-14 w-auto mx-auto mb-4 object-contain drop-shadow-md" />
-          <h1 className="text-3xl font-light text-primary-foreground mb-1" style={{ fontFamily: "'Fraunces', serif" }}>
+          <button
+            onClick={() => setView("landing")}
+            className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-xl transition-transform hover:scale-105 active:scale-95 shrink-0 inline-block mb-4 cursor-pointer"
+            aria-label="Anovra Home"
+          >
+            <img src="/logo.png" alt="Anovra Logo" className="h-12 sm:h-14 md:h-16 w-auto object-contain" />
+          </button>
+          <h1 className="text-3xl font-light text-foreground mb-1.5" style={{ fontFamily: "'Fraunces', serif" }}>
             Anovra Admin
           </h1>
-          <p className="text-sm text-white/50" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Restricted access — authorised personnel only
           </p>
         </div>
 
         {/* Card */}
-        <div className="bg-card rounded-2xl p-6 shadow-2xl border border-white/5">
+        <div className="bg-card border-2 border-border/80 p-6 sm:p-10 rounded-3xl shadow-xl space-y-5">
           <div className="space-y-4">
 
             {/* Email */}
             <div>
               <label
-                className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide"
-                style={{ fontFamily: "'DM Mono', monospace" }}
+                className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-wider"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 Admin email
               </label>
@@ -61,7 +67,7 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                className="w-full px-3 py-2.5 bg-input-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-accent/50 transition-all"
+                className="w-full px-3.5 py-2.5 bg-[#FAF7F2] border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               />
             </div>
@@ -69,8 +75,8 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
             {/* Password */}
             <div>
               <label
-                className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide"
-                style={{ fontFamily: "'DM Mono', monospace" }}
+                className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-wider"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 Password
               </label>
@@ -82,13 +88,13 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(""); }}
                   onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                  className="w-full px-3 py-2.5 pr-10 bg-input-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-accent/50 transition-all"
+                  className="w-full px-3.5 py-2.5 pr-10 bg-[#FAF7F2] border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 >
                   <Eye className="w-4 h-4" />
                 </button>
@@ -97,9 +103,9 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
 
             {/* Error */}
             {error && (
-              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-red-600 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <div className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl">
+                <AlertCircle className="w-4.5 h-4.5 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-red-600 leading-relaxed font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {error}
                 </p>
               </div>
@@ -109,7 +115,7 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
             <button
               onClick={handleLogin}
               disabled={loading}
-              className="w-full py-3 rounded-xl bg-accent text-white font-medium text-sm hover:bg-accent/90 transition-all disabled:opacity-70 flex items-center justify-center gap-2 mt-1"
+              className="w-full py-3.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2 mt-2 cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               {loading ? (
@@ -119,7 +125,7 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
                 </>
               ) : (
                 <>
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-4 h-4 text-white" />
                   Access admin panel
                 </>
               )}
@@ -127,8 +133,8 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
           </div>
 
           {/* Demo hint */}
-          <div className="mt-5 p-3 bg-secondary rounded-lg">
-            <p className="text-xs text-muted-foreground text-center leading-relaxed" style={{ fontFamily: "'DM Mono', monospace" }}>
+          <div className="mt-5 p-3 bg-muted rounded-xl">
+            <p className="text-[11px] text-muted-foreground text-center leading-relaxed" style={{ fontFamily: "'DM Mono', monospace" }}>
               demo · admin@anovra.africa / Admin@2025!
             </p>
           </div>
@@ -138,7 +144,7 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
         <div className="text-center mt-6">
           <button
             onClick={() => setView("landing")}
-            className="text-xs text-white/40 hover:text-white/60 transition-colors"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer font-medium"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             ← Back to platform

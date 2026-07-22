@@ -13,17 +13,18 @@ import {
   Info,
   Mail,
   ArrowRight,
+  Scan,
 } from "lucide-react";
 import { type View, cn } from "./types";
+import { Toaster } from "./components/ui/sonner";
 import { LandingView } from "./LandingView";
 import { ShopView } from "./ShopView";
 import { DashboardView } from "./DashboardView";
 import { CatalogView } from "./CatalogView";
 import { SkinTestView } from "./SkinTestView";
-import { SignUpView, SignInView } from "./AuthViews";
+import { SignUpView, SignInView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
 import { TeamLoginView, TeamDashboardView } from "./TeamViews";
 import { AboutView, ContactView } from "./ContentViews";
-import { AdminLoginView } from "./AdminLoginView";
 import { AdminView } from "./AdminView";
 import { UserDashboardView } from "./UserDashboardView";
 import { Footer } from "./Footer";
@@ -51,9 +52,6 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
     { id: "landing", label: "Home", icon: Home },
     { id: "about", label: "About", icon: Info },
     { id: "contact", label: "Contact", icon: Mail },
-    { id: "userdashboard", label: "My Skin", icon: User },
-    { id: "catalog", label: "Product Catalog", icon: ShoppingBag },
-    { id: "skintest", label: "Skin Test", icon: TestTube },
   ];
 
   const handleNavClick = (v: View) => {
@@ -64,7 +62,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
   return (
     <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-md border-b border-border/80 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-20">
-        {/* Brand Logo Only */}
+        {/* Left: Brand Logo */}
         <button
           onClick={() => setView("landing")}
           className="flex items-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg p-1 transition-transform active:scale-95"
@@ -77,16 +75,16 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
           />
         </button>
 
-        {/* Desktop Primary Nav Links */}
-        <nav className="hidden md:flex items-center gap-1">
+        {/* Center: Desktop Primary Nav Links */}
+        <nav className="hidden md:flex items-center gap-6">
           {primaryNavLinks.map((l) => (
             <button
               key={l.id}
               onClick={() => setView(l.id)}
               className={cn(
-                "px-3 py-2 rounded-md text-sm font-medium transition-all duration-200",
+                "px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 cursor-pointer",
                 view === l.id
-                  ? "bg-emerald-500 text-amber-950 font-bold shadow-xs"
+                  ? "bg-emerald-500 text-white font-bold shadow-xs"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary/70"
               )}
             >
@@ -95,59 +93,70 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
           ))}
         </nav>
 
-        {/* Desktop Actions */}
-        <div className="hidden md:flex items-center gap-3">
-          {/* Sign In Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger className="text-sm px-3.5 py-2 rounded-md font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center gap-1 focus:outline-none">
-              <span>Sign in</span>
-              <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52 p-2">
-              <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
-                Account Sign In
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setView("userdashboard")}
-                className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700"
-              >
-                <User className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="text-sm font-medium">Sign in as a User</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setView("signin")}
-                className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700"
-              >
-                <Store className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="text-sm font-medium">Sign in as a Vendor</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        {/* Right: Desktop Actions & Mobile Burger */}
+        <div className="flex items-center justify-end gap-3">
+          {/* Desktop Actions */}
+          <div className="hidden md:flex items-center gap-3">
+            {/* Sign In Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger className="text-sm px-3.5 py-2 rounded-md font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center gap-1 focus:outline-none">
+                <span>Sign in</span>
+                <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52 p-2">
+                <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
+                  Account Sign In
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setView("userdashboard")}
+                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700"
+                >
+                  <User className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-sm font-medium">Sign in as a User</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setView("signin")}
+                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700"
+                >
+                  <Store className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-sm font-medium">Sign in as a Vendor</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          {/* Join as Vendor Button (Green with Dark Text) */}
-          <button
-            onClick={() => setView("signup")}
-            className="text-sm px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-amber-950 font-bold shadow-sm hover:shadow transition-all flex items-center gap-1.5"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
-            <span>Join as a Vendor</span>
-            <ArrowRight className="w-3.5 h-3.5 text-amber-950" />
-          </button>
-        </div>
+            {/* Analyze Skin Button (Secondary Outline Button) */}
+            <button
+              onClick={() => setView("skintest")}
+              className="text-sm px-4 py-2 rounded-lg border-2 border-[#008236] text-[#008236] hover:bg-[#008236]/10 font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              <span>Analyze Skin</span>
+              <Scan className="w-3.5 h-3.5" />
+            </button>
 
-        {/* Mobile Hamburger Drawer Trigger */}
-        <div className="flex md:hidden items-center gap-2">
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <button
-                className="p-2 rounded-lg text-foreground hover:bg-secondary border border-border/60 transition-colors focus:outline-none"
-                aria-label="Open Navigation Menu"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[85vw] sm:max-w-md p-0 flex flex-col">
+            {/* Join as Vendor Button (Green with White Text) */}
+            <button
+              onClick={() => setView("signup")}
+              className="text-sm px-4 py-2 rounded-lg bg-[#008236] hover:bg-[#006c2c] text-white font-bold shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              <span>Join as a Vendor</span>
+              <ArrowRight className="w-3.5 h-3.5 text-white" />
+            </button>
+          </div>
+          {/* Mobile Hamburger Drawer Trigger */}
+          <div className="flex md:hidden items-center">
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger asChild>
+                <button
+                  className="p-2 rounded-lg text-foreground hover:bg-secondary border border-border/60 transition-colors focus:outline-none"
+                  aria-label="Open Navigation Menu"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-[85vw] sm:max-w-md p-0 flex flex-col">
               {/* Drawer Header */}
               <SheetHeader className="p-4 border-b border-border/80 bg-secondary/30">
                 <div className="flex items-center gap-3">
@@ -181,14 +190,14 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
                           view === l.id
-                            ? "bg-emerald-500 text-amber-950 font-bold shadow-xs"
+                            ? "bg-emerald-500 text-white font-bold shadow-xs"
                             : "text-foreground hover:bg-secondary"
                         )}
                       >
                         <Icon
                           className={cn(
                             "w-4 h-4 shrink-0",
-                            view === l.id ? "text-amber-950" : "text-muted-foreground"
+                            view === l.id ? "text-white" : "text-muted-foreground"
                           )}
                         />
                         <span>{l.label}</span>
@@ -218,19 +227,27 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                   </button>
                 </div>
 
-                {/* CTA Button */}
-                <div className="pt-2">
+                {/* CTA Buttons */}
+                <div className="pt-2 space-y-2">
+                  <button
+                    onClick={() => handleNavClick("skintest")}
+                    className="w-full py-3 rounded-xl border-2 border-[#008236] text-[#008236] font-bold hover:bg-[#008236]/10 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Analyze Skin</span>
+                    <Scan className="w-4 h-4" />
+                  </button>
                   <button
                     onClick={() => handleNavClick("signup")}
-                    className="w-full py-3 rounded-xl bg-emerald-500 text-amber-950 font-bold hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
+                    className="w-full py-3 rounded-xl bg-[#008236] text-white font-bold hover:bg-[#006c2c] transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>Join as a Vendor</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4 text-white" />
                   </button>
                 </div>
               </div>
             </SheetContent>
-          </Sheet>
+            </Sheet>
+          </div>
         </div>
       </div>
     </header>
@@ -242,8 +259,9 @@ export default function App() {
     const hash = window.location.hash.replace("#", "").replace(/^\//, "");
     const validViews: View[] = [
       "landing", "dashboard", "catalog", "skintest", "admin",
-      "adminlogin", "shop", "signin", "signup", "teamlogin",
-      "teamdashboard", "about", "contact", "userdashboard"
+      "adminlogin", "shop", "signin", "signup", "forgotpassword",
+      "resetpassword", "teamlogin", "teamdashboard", "about", "contact",
+      "userdashboard"
     ];
     return validViews.includes(hash as View) ? (hash as View) : "landing";
   };
@@ -278,6 +296,8 @@ export default function App() {
     "shop",
     "signin",
     "signup",
+    "forgotpassword",
+    "resetpassword",
     "adminlogin",
     "teamlogin",
     "teamdashboard",
@@ -288,6 +308,7 @@ export default function App() {
       className="min-h-screen bg-background flex flex-col"
       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
     >
+      <Toaster position="top-right" closeButton richColors />
       {!hideNav && <Nav view={view} setView={setView} />}
       <div className="flex-1">
         {view === "landing" && <LandingView setView={setView} />}
@@ -296,16 +317,18 @@ export default function App() {
         {view === "dashboard" && <DashboardView setView={setView} />}
         {view === "catalog" && <CatalogView setView={setView} />}
         {view === "skintest" && <SkinTestView setView={setView} />}
-        {view === "adminlogin" && <AdminLoginView setView={setView} />}
+        {view === "adminlogin" && <SignInView setView={setView} />}
         {view === "admin" && <AdminView setView={setView} />}
         {view === "shop" && <ShopView setView={setView} />}
         {view === "signin" && <SignInView setView={setView} />}
         {view === "signup" && <SignUpView setView={setView} />}
+        {view === "forgotpassword" && <ForgotPasswordView setView={setView} />}
+        {view === "resetpassword" && <ResetPasswordView setView={setView} />}
         {view === "teamlogin" && <TeamLoginView setView={setView} />}
         {view === "teamdashboard" && <TeamDashboardView setView={setView} />}
         {view === "userdashboard" && <UserDashboardView setView={setView} />}
       </div>
-      <Footer setView={setView} />
+      {!hideNav && <Footer setView={setView} />}
     </div>
   );
 }

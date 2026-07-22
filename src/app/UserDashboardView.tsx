@@ -55,7 +55,7 @@ const recommendations = [
 ];
 
 const ingredientGlossary = [
-  { name: "Niacinamide", safe: true, benefit: "Brightens skin tone, minimises pores, reduces hyperpigmentation" },
+  { name: "Niacinamide", safe: true, benefit: "Brightens skin tone, minimizes pores, reduces hyperpigmentation" },
   { name: "Kojic Acid", safe: true, benefit: "Inhibits melanin production — effective for dark spots on melanin-rich skin" },
   { name: "Azelaic Acid", safe: true, benefit: "Anti-inflammatory; targets post-acne marks and redness" },
   { name: "Retinol", safe: true, benefit: "Speeds cell turnover — start with low concentrations, use at night" },
@@ -168,40 +168,41 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         currentView="userdashboard"
         setView={setView}
         title="My Skin Portal"
-        subtitle="Skin score: 72 / 100 · Personalised routines & scan history"
+        subtitle="Skin score: 72 / 100 · Personalized routines & scan history"
         badgeText="CONSUMER PROFILE"
         role="consumer"
         showShopLink={false}
       />
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative">
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          <span className="text-xs bg-accent/15 text-accent border border-accent/20 px-3 py-1.5 rounded-full font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Premium Glow
-          </span>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-8 space-y-7 relative">
+        <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap border-b border-border pb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs bg-accent/15 text-accent border border-accent/20 px-3 py-1.5 rounded-full font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Premium Glow
+            </span>
+          </div>
           <button
             onClick={() => setView("skintest")}
-            className="flex items-center gap-1.5 text-xs sm:text-sm bg-accent text-white px-3.5 py-2 rounded-lg hover:bg-accent/90 transition-colors font-medium shadow-xs"
+            className="flex items-center gap-1.5 text-xs sm:text-sm bg-[#008236] hover:bg-[#006c2c] text-white px-3.5 py-2 rounded-lg transition-colors font-medium shadow-xs cursor-pointer"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
-            <Scan className="w-3.5 h-3.5" /> New skin analysis
+            <Scan className="w-3.5 h-3.5 text-white" /> New skin analysis
           </button>
         </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-muted rounded-xl p-1 mb-7 w-full sm:w-fit overflow-x-auto scrollbar-none">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-all ${tab === t.id ? "bg-card shadow-sm text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        {/* Tabs */}
+        <div className="flex gap-1 bg-muted rounded-xl p-1 w-full sm:w-fit overflow-x-auto scrollbar-none">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-all cursor-pointer ${tab === t.id ? "bg-card shadow-sm text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
 
       {/* ── OVERVIEW ── */}
       {tab === "overview" && (
@@ -263,7 +264,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             {[
               { icon: <BarChart2 className="w-4 h-4 text-accent" />, title: "Skin progress report", desc: "See how your skin score has changed over time", tab: "progress" as UserTab },
               { icon: <BookOpen className="w-4 h-4 text-blue-500" />, title: "Ingredient glossary", desc: "Safe vs flagged ingredients for your skin type", tab: "ingredients" as UserTab },
-              { icon: <Calendar className="w-4 h-4 text-green-600" />, title: "My skincare routine", desc: "Your personalised AM & PM routine steps", tab: "routine" as UserTab },
+              { icon: <Calendar className="w-4 h-4 text-green-600" />, title: "My skincare routine", desc: "Your personalized AM & PM routine steps", tab: "routine" as UserTab },
             ].map((q) => (
               <button key={q.title} onClick={() => setTab(q.tab)} className="text-left bg-card border border-border rounded-xl p-4 hover:border-accent/30 transition-colors group">
                 <div className="mb-3">{q.icon}</div>
@@ -373,7 +374,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             <div>
               <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Ingredient safety check & glossary</h2>
               <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Personalised for your skin type (Combination · Hyperpigmentation). <PlanBadge required="glowplus" current={plan} />
+                Personalized for your skin type (Combination · Hyperpigmentation). <PlanBadge required="glowplus" current={plan} />
               </p>
             </div>
           </div>
@@ -457,7 +458,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         <div className="space-y-5">
           <div>
             <div className="flex items-center gap-2 mb-0.5">
-              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Personalised skincare routine</h2>
+              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Personalized skincare routine</h2>
               <PlanBadge required="premium" current={plan} />
             </div>
             <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Built for Combination skin · Hyperpigmentation · Lagos climate.</p>
@@ -611,6 +612,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
         </div>
       )}
+    </div>
 
       {/* ── Floating advisor chat (Premium) ── */}
       {plan === "premium" && (

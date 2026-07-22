@@ -29,7 +29,7 @@ const ANALYSIS_STEPS_LABELS = [
   "Measuring pore visibility and fine lines...",
   "Checking skin tone consistency...",
   "Detecting visible inflammation...",
-  "Generating personalised skin report...",
+  "Generating personalized skin report...",
   "Searching verified vendor products...",
   "Ranking recommendations by match score...",
   "Applying ingredient safety checks...",
@@ -193,142 +193,131 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Step progress bar */}
-      <div className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+      {/* Top Header Bar */}
+      <div className="border-b border-border bg-background/90 backdrop-blur-md sticky top-0 z-40 transition-all">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-20">
+          <div className="flex items-center gap-4">
             <button
               onClick={() => setView?.("landing")}
-              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg transition-transform hover:scale-105 active:scale-95 shrink-0"
+              className="flex items-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-lg p-1 transition-transform active:scale-95"
               aria-label="Anovra Home"
             >
-              <img src="/logo.png" alt="Anovra Logo" className="h-8 sm:h-10 w-auto object-contain" />
+              <img
+                src="/logo.png"
+                alt="Anovra Logo"
+                className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
+              />
             </button>
-            <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm font-semibold text-foreground tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>
-                Anovra Skin Test Engine
+            <div className="hidden sm:flex items-center gap-2 border-l border-border pl-4">
+              <span className="text-sm font-semibold text-foreground tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                Skin Test Engine
               </span>
-              <span className="text-[10px] font-mono bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> AI ACTIVE
+              <span className="text-[10px] font-mono bg-[#008236]/15 text-[#008236] border border-[#008236]/30 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#008236] animate-pulse" /> AI ACTIVE
               </span>
             </div>
-            <button onClick={() => setView?.("landing")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setView?.("landing")} 
+              className="text-xs sm:text-sm font-semibold text-muted-foreground hover:text-[#C86B3A] transition-colors cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
               Cancel
             </button>
           </div>
-          <div className="flex items-center gap-1">
-            {STEP_LABELS.map((label, i) => {
-              const s = i + 1;
-              return (
-                <div key={s} className="flex items-center flex-1 last:flex-none">
-                  <div className="flex flex-col items-center gap-1 min-w-0">
-                    <div
-                      className={cn(
-                        "w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-all",
-                        step > s ? "bg-accent text-white" : step === s ? "bg-foreground text-primary-foreground" : "bg-muted text-muted-foreground"
-                      )}
-                      style={{ fontFamily: "'DM Mono', monospace" }}
-                    >
-                      {step > s ? <Check className="w-3.5 h-3.5" /> : s}
+        </div>
+
+        {/* Step progress bar */}
+        <div className="border-t border-border bg-[#FAF7F2]/60 py-3">
+          <div className="max-w-xl mx-auto px-4">
+            <div className="flex items-center gap-1">
+              {STEP_LABELS.map((label, i) => {
+                const s = i + 1;
+                return (
+                  <div key={s} className="flex items-center flex-1 last:flex-none">
+                    <div className="flex flex-col items-center gap-1 min-w-0">
+                      <div
+                        className={cn(
+                          "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all",
+                          step > s ? "bg-[#008236] text-white" : step === s ? "bg-[#C86B3A] text-white" : "bg-muted text-muted-foreground"
+                        )}
+                        style={{ fontFamily: "'DM Mono', monospace" }}
+                      >
+                        {step > s ? <Check className="w-3.5 h-3.5 text-white" /> : s}
+                      </div>
+                      <span
+                        className={cn("text-[9px] hidden sm:block whitespace-nowrap", step === s ? "text-foreground font-semibold" : "text-muted-foreground")}
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
+                        {label}
+                      </span>
                     </div>
-                    <span
-                      className={cn("text-[10px] hidden sm:block whitespace-nowrap", step === s ? "text-foreground font-medium" : "text-muted-foreground")}
-                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                    >
-                      {label}
-                    </span>
+                    {s < STEP_LABELS.length && (
+                      <div className={cn("flex-1 h-0.5 mx-1 transition-colors", step > s ? "bg-[#008236]" : "bg-border")} />
+                    )}
                   </div>
-                  {s < STEP_LABELS.length && (
-                    <div className={cn("flex-1 h-px mx-1 transition-colors", step > s ? "bg-accent" : "bg-border")} />
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
 
       {/* ---- STEP 1: Select Skin Area ---- */}
       {step === 1 && (
-        <div className="max-w-2xl mx-auto px-4 py-8">
-          <div className="mb-8">
-            <p className="text-xs tracking-widest text-accent uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 1 of 5</p>
-            <h2 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Which skin area would you like analysed?
+        <div className="max-w-3xl mx-auto px-4 py-8">
+          <div className="mb-8 text-center sm:text-left">
+            <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 1 of 5</p>
+            <h2 className="text-3xl sm:text-4xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+              Select skin area to analyse
             </h2>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Anovra can analyse any visible skin area — face, body, or limbs.
+              Anovra&apos;s AI engine can evaluate any visible area. Tap an option below to proceed.
             </p>
           </div>
 
-          {/* Dropdown selector */}
-          <div className="mb-5">
-            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>
-              Select skin area
-            </label>
-            <div className="relative">
-              <select
-                value={selectedArea}
-                onChange={(e) => setSelectedArea(e.target.value)}
-                className={cn(
-                  "w-full appearance-none px-4 py-3.5 pr-10 rounded-xl border-2 bg-card text-foreground text-sm font-medium cursor-pointer outline-none transition-all",
-                  selectedArea ? "border-accent" : "border-border",
-                  "focus:border-accent"
-                )}
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              >
-                <option value="" disabled>Choose an area to analyse…</option>
-                {SKIN_AREAS.map((area) => (
-                  <option key={area.name} value={area.name}>
-                    {area.name} — {area.desc}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            </div>
-          </div>
-
-          {/* Selected area preview card */}
-          {selectedArea && (() => {
-            const area = SKIN_AREAS.find((a) => a.name === selectedArea)!;
-            return (
-              <div className="mb-8 rounded-2xl border-2 border-emerald-500 overflow-hidden flex gap-0 shadow-xs">
-                <div className="relative w-28 flex-shrink-0">
-                  <img
-                    src={`https://images.unsplash.com/photo-${area.photo}?w=224&h=168&fit=crop&auto=format`}
-                    alt={area.name}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent to-card/20" />
-                </div>
-                <div className="flex-1 p-4 bg-card flex flex-col justify-center">
-                  <div className="flex items-center gap-2 mb-1.5">
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            {SKIN_AREAS.map((area) => {
+              const isSelected = selectedArea === area.name;
+              return (
+                <button
+                  key={area.name}
+                  onClick={() => setSelectedArea(area.name)}
+                  className={cn(
+                    "group flex items-start gap-4 p-4 rounded-2xl border-2 text-left bg-card transition-all duration-300 cursor-pointer hover:shadow-md",
+                    isSelected
+                      ? "border-[#008236] bg-[#008236]/5 ring-1 ring-[#008236]/20"
+                      : "border-border hover:border-[#008236]/40"
+                  )}
+                >
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors",
+                    isSelected ? "bg-[#008236] text-white" : "bg-[#FAF7F2] text-[#008236]"
+                  )}>
                     {area.icon}
-                    <p className="font-semibold text-foreground text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{area.name}</p>
-                    <span className="ml-auto w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-foreground text-sm leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{area.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{area.desc}</p>
+                  </div>
+                  {isSelected && (
+                    <span className="w-5 h-5 rounded-full bg-[#008236] flex items-center justify-center flex-shrink-0">
                       <Check className="w-3 h-3 text-white" />
                     </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    {area.desc}
-                  </p>
-                  {area.name === "Whole Body" && (
-                    <div className="mt-2.5 flex items-start gap-1.5 p-2 bg-accent/8 rounded-lg">
-                      <Info className="w-3.5 h-3.5 text-accent flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-accent leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Upload a short video for best results — the engine maps concerns across all visible skin zones simultaneously.
-                      </p>
-                    </div>
                   )}
-                </div>
-              </div>
-            );
-          })()}
+                </button>
+              );
+            })}
+          </div>
 
-          {!selectedArea && (
-            <div className="mb-8 rounded-2xl border-2 border-dashed border-border p-6 text-center">
-              <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Select a skin area above to see a preview and continue
+          {selectedArea === "Whole Body" && (
+            <div className="mb-8 flex items-start gap-2.5 p-3.5 bg-[#C86B3A]/10 border border-[#C86B3A]/20 rounded-2xl">
+              <Info className="w-4 h-4 text-[#C86B3A] flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-[#C86B3A] leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <strong>Tip:</strong> Uploading or capturing a short 5-10 second video works best for full body scans so the AI can evaluate multiple skin zones.
               </p>
             </div>
           )}
@@ -337,12 +326,12 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             onClick={() => setStep(2)}
             disabled={!selectedArea}
             className={cn(
-              "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-medium transition-all text-sm",
-              selectedArea ? "bg-accent text-white hover:bg-accent/90" : "bg-muted text-muted-foreground cursor-not-allowed"
+              "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold transition-all text-sm cursor-pointer",
+              selectedArea ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-sm hover:shadow" : "bg-muted text-muted-foreground cursor-not-allowed"
             )}
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
-            Continue with {selectedArea || "selected area"}
+            Continue to Upload
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -352,7 +341,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       {step === 2 && (
         <div className="max-w-xl mx-auto px-4 py-8">
           <div className="mb-6">
-            <p className="text-xs tracking-widest text-accent uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 2 of 5 · {selectedArea}</p>
+            <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 2 of 5 · {selectedArea}</p>
             <h2 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
               Upload your skin image or video
             </h2>
@@ -368,8 +357,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 key={mode}
                 onClick={() => setUploadMode(mode)}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-medium transition-colors",
-                  uploadMode === mode ? "border-accent bg-accent/10 text-accent" : "border-border bg-card text-foreground hover:border-accent/30"
+                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all cursor-pointer",
+                  uploadMode === mode ? "border-[#008236] bg-[#008236]/10 text-[#008236]" : "border-border bg-card text-foreground hover:border-[#008236]/30"
                 )}
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
@@ -379,13 +368,16 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             ))}
           </div>
 
-          {/* Viewfinder */}
-          <div className="relative bg-foreground rounded-2xl overflow-hidden mb-4" style={{ aspectRatio: "3/4", maxHeight: 340 }}>
+          {/* Viewfinder with scanner animation */}
+          <div className="relative bg-foreground rounded-2xl overflow-hidden mb-5 border-2 border-border/80 shadow-lg" style={{ aspectRatio: "3/4", maxHeight: 340 }}>
             <img
               src={`https://images.unsplash.com/photo-${SKIN_AREAS.find((a) => a.name === selectedArea)?.photo ?? "1531746020798-e6953c6e8e04"}?w=480&h=640&fit=crop&auto=format`}
               alt="Viewfinder"
-              className="w-full h-full object-cover opacity-65"
+              className="w-full h-full object-cover opacity-75"
             />
+            {/* Glowing Scan Line */}
+            <div className="animate-scan" />
+
             {/* Guide overlay */}
             <div className="absolute inset-0 flex items-center justify-center">
               {SKIN_AREAS.find((a) => a.name === selectedArea)?.guide === "oval" ? (
@@ -394,21 +386,21 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 <div className="border-2 border-white/60 rounded-xl" style={{ width: 180, height: 200 }} />
               )}
             </div>
-            <div className="absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-accent rounded-tl" />
-            <div className="absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-accent rounded-tr" />
-            <div className="absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-accent rounded-bl" />
-            <div className="absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-accent rounded-br" />
+            <div className="absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-[#008236] rounded-tl" />
+            <div className="absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-[#008236] rounded-tr" />
+            <div className="absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-[#008236] rounded-bl" />
+            <div className="absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-[#008236] rounded-br" />
             <div className="absolute bottom-4 inset-x-0 flex justify-center">
-              <span className="text-xs text-white/80 bg-black/50 px-3 py-1 rounded-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <span className="text-xs text-white/90 bg-black/60 px-3.5 py-1.5 rounded-full font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 {selectedArea === "Face" ? "Align face within oval guide" : `Position your ${selectedArea.toLowerCase()} within the frame`}
               </span>
             </div>
           </div>
 
           {/* Quality checklist */}
-          <div className="bg-secondary rounded-xl p-4 mb-5">
-            <p className="text-xs font-medium text-foreground mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Image quality checklist</p>
-            <div className="space-y-2">
+          <div className="bg-[#FAF7F2] border border-border/60 rounded-2xl p-4.5 mb-6">
+            <p className="text-xs font-bold text-foreground mb-3 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Image quality checklist</p>
+            <div className="space-y-2.5">
               {[
                 "Good natural or ring-light lighting — avoid harsh shadows",
                 "Camera 20–30 cm from skin — close enough for detail",
@@ -416,8 +408,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 "Bare skin — remove makeup if possible for best accuracy",
               ].map((tip) => (
                 <div key={tip} className="flex items-start gap-2">
-                  <CheckCircle className="w-3.5 h-3.5 text-accent flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{tip}</p>
+                  <CheckCircle className="w-4 h-4 text-[#008236] flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{tip}</p>
                 </div>
               ))}
             </div>
@@ -426,24 +418,24 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="grid grid-cols-2 gap-3 mb-4">
             <button
               onClick={() => setStep(3)}
-              className="flex items-center justify-center gap-2 bg-emerald-500 text-amber-950 font-bold py-3 rounded-xl hover:bg-emerald-600 transition-colors text-sm shadow-sm"
+              className="flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold py-3.5 rounded-xl transition-all text-sm shadow-sm cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              <Camera className="w-4 h-4" />
-              {uploadMode === "video" ? "Record video directly" : "Take photo directly"}
+              <Camera className="w-4 h-4 text-white" />
+              {uploadMode === "video" ? "Record video" : "Take photo"}
             </button>
             <button
               onClick={() => setStep(3)}
-              className="flex items-center justify-center gap-2 bg-secondary border border-border text-foreground font-semibold py-3 rounded-xl hover:bg-muted transition-colors text-sm"
+              className="flex items-center justify-center gap-2 bg-white border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/5 font-bold py-3.5 rounded-xl transition-colors text-sm cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               <Upload className="w-4 h-4" />
-              {uploadMode === "video" ? "Upload video file" : "Upload image file"}
+              Upload file
             </button>
           </div>
 
-          <div className="flex items-start gap-2 p-3 bg-secondary rounded-lg">
-            <Lock className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2 p-3.5 bg-secondary/50 rounded-xl">
+            <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Your image is analysed in real-time and never stored. We do not share your data with any third party.
             </p>
@@ -454,12 +446,12 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       {/* ---- STEP 3: AI Analysis ---- */}
       {step === 3 && (
         <div className="max-w-xl mx-auto px-4 py-16 text-center">
-          <div className="w-28 h-28 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-8 relative">
-            <Activity className="w-12 h-12 text-accent" />
+          <div className="w-28 h-28 rounded-full bg-[#008236]/10 flex items-center justify-center mx-auto mb-8 relative">
+            <Activity className="w-12 h-12 text-[#008236] animate-pulse" />
             <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 112 112">
               <circle cx="56" cy="56" r="52" fill="none" stroke="rgba(200,107,58,0.15)" strokeWidth="4" />
               <circle
-                cx="56" cy="56" r="52" fill="none" stroke="#C86B3A" strokeWidth="4"
+                cx="56" cy="56" r="52" fill="none" stroke="#008236" strokeWidth="4"
                 strokeDasharray={`${2 * Math.PI * 52}`}
                 strokeDashoffset={`${2 * Math.PI * 52 * (1 - progress / 100)}`}
                 strokeLinecap="round"
@@ -468,7 +460,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             </svg>
           </div>
 
-          <p className="text-xs tracking-widest text-accent uppercase mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>AI Engine Active</p>
+          <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>AI Engine Active</p>
           <h2 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
             Analysing your {selectedArea.toLowerCase()}...
           </h2>
@@ -487,8 +479,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 <div
                   key={attr}
                   className={cn(
-                    "text-xs py-1 px-2 rounded-full border transition-all duration-300",
-                    evaluated ? "border-accent/40 bg-accent/10 text-accent" : "border-border bg-secondary text-muted-foreground"
+                    "text-xs py-1.5 px-2 rounded-full border transition-all duration-300",
+                    evaluated ? "border-[#008236]/40 bg-[#008236]/10 text-[#008236] font-medium" : "border-border bg-secondary text-muted-foreground"
                   )}
                   style={{ fontFamily: "'DM Mono', monospace" }}
                 >
@@ -499,12 +491,12 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           </div>
 
           <div className="w-full bg-muted rounded-full h-1.5 max-w-xs mx-auto">
-            <div className="bg-accent h-1.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
+            <div className="bg-[#008236] h-1.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
           </div>
           <p className="text-xs text-muted-foreground mt-2" style={{ fontFamily: "'DM Mono', monospace" }}>{Math.round(progress)}%</p>
 
           <p className="text-xs text-muted-foreground mt-8 max-w-xs mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Results are AI-powered personalised recommendations — not a medical diagnosis.
+            Results are AI-powered personalized recommendations — not a medical diagnosis.
           </p>
         </div>
       )}
@@ -512,22 +504,22 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       {/* ---- STEP 4: Skin Report ---- */}
       {step === 4 && (
         <div className="max-w-2xl mx-auto px-4 py-8">
-          <p className="text-xs tracking-widest text-accent uppercase mb-4" style={{ fontFamily: "'DM Mono', monospace" }}>Step 4 of 5 · Skin Report</p>
+          <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-4" style={{ fontFamily: "'DM Mono', monospace" }}>Step 4 of 5 · Skin Report</p>
 
-          {/* Report header card */}
-          <div className="bg-foreground text-primary-foreground rounded-2xl p-6 mb-5">
+          {/* Report header card - Brand Green Gradient */}
+          <div className="bg-gradient-to-br from-[#008236] to-[#005a25] text-white rounded-3xl p-6 sm:p-8 mb-6 shadow-xl border border-[#008236]/20">
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <p className="text-xs text-white/40 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>ANALYSIS COMPLETE · Scan ID T-2848</p>
-                <h2 className="text-2xl font-light mb-1" style={{ fontFamily: "'Fraunces', serif" }}>Your skin report</h2>
-                <p className="text-sm text-white/60" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Area: <span className="text-white">{selectedArea}</span>
+                <p className="text-xs text-white/60 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>ANALYSIS COMPLETE · Scan ID T-2848</p>
+                <h2 className="text-3xl font-light mb-1" style={{ fontFamily: "'Fraunces', serif" }}>Your skin report</h2>
+                <p className="text-sm text-white/80" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Area: <span className="text-white font-bold">{selectedArea}</span>
                 </p>
               </div>
               {/* Health score gauge */}
               <div className="flex-shrink-0 relative w-20 h-20">
                 <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
-                  <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="6" />
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="6" />
                   <circle
                     cx="40" cy="40" r="34" fill="none" stroke="#C86B3A" strokeWidth="6"
                     strokeDasharray={`${2 * Math.PI * 34}`}
@@ -537,36 +529,36 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-xl font-bold text-white" style={{ fontFamily: "'DM Mono', monospace" }}>{healthScore}</span>
-                  <span className="text-[9px] text-white/50 uppercase" style={{ fontFamily: "'DM Mono', monospace" }}>score</span>
+                  <span className="text-[9px] text-white/60 uppercase" style={{ fontFamily: "'DM Mono', monospace" }}>score</span>
                 </div>
               </div>
             </div>
 
             {/* Skin type + condition */}
-            <div className="flex flex-wrap gap-3 mb-5">
+            <div className="flex flex-wrap gap-3 mb-6">
               {[
                 { label: "Skin Type", value: "Combination (oily T-zone, dry cheeks)" },
                 { label: "Skin Condition", value: "Mild inflammatory, post-acne pigmentation" },
               ].map((item) => (
-                <div key={item.label} className="bg-white/5 rounded-xl px-4 py-3 flex-1 min-w-[200px]">
-                  <p className="text-xs text-white/40 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>{item.label.toUpperCase()}</p>
-                  <p className="text-sm text-white font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
+                <div key={item.label} className="bg-white/10 border border-white/10 rounded-2xl px-4 py-3 flex-1 min-w-[200px]">
+                  <p className="text-[10px] text-white/50 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>{item.label.toUpperCase()}</p>
+                  <p className="text-sm text-white font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
                 </div>
               ))}
             </div>
 
             {/* Concerns with severity bars */}
             <div>
-              <p className="text-xs text-white/40 mb-3 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Detected skin concerns & severity</p>
-              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
+              <p className="text-xs text-white/60 mb-3.5 uppercase tracking-wider font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Detected skin concerns & severity</p>
+              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3.5">
                 {SKIN_REPORT_CONCERNS.map((c) => (
                   <div key={c.label}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-white/70" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{c.label}</span>
-                      <span className="text-xs font-medium" style={{ color: c.color, fontFamily: "'DM Mono', monospace" }}>{c.level}</span>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs text-white/90" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{c.label}</span>
+                      <span className="text-xs font-bold" style={{ color: c.level === "Good" || c.level === "Normal" || c.level === "Low" ? "#A7F3D0" : c.level === "Mild" || c.level === "Moderate" ? "#FDBA74" : "#FCA5A5", fontFamily: "'DM Mono', monospace" }}>{c.level}</span>
                     </div>
-                    <div className="h-1 rounded-full bg-white/10">
-                      <div className="h-1 rounded-full transition-all duration-700" style={{ width: `${c.severity}%`, backgroundColor: c.color }} />
+                    <div className="h-1.5 rounded-full bg-white/15">
+                      <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${c.severity}%`, backgroundColor: c.level === "Good" || c.level === "Normal" || c.level === "Low" ? "#10B981" : c.level === "Mild" || c.level === "Moderate" ? "#C86B3A" : "#EF4444" }} />
                     </div>
                   </div>
                 ))}
@@ -574,13 +566,13 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             </div>
           </div>
 
-          {/* Personalised recommendations summary */}
-          <div className="bg-accent/10 border border-accent/20 rounded-xl p-4 mb-5">
+          {/* Personalized recommendations summary */}
+          <div className="bg-[#008236]/10 border border-[#008236]/20 rounded-2xl p-4.5 mb-5">
             <div className="flex items-start gap-3">
-              <Zap className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+              <Zap className="w-5 h-5 text-[#008236] flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Personalised recommendations ready
+                <p className="text-sm font-bold text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Personalized recommendations ready
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   Based on your scan, Anovra&apos;s engine has identified products targeting hyperpigmentation, T-zone oil control, and barrier repair. 3 products from verified vendors matched your skin profile.
@@ -590,8 +582,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           </div>
 
           {/* Disclaimer */}
-          <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg mb-6">
-            <Info className="w-3.5 h-3.5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2.5 p-3.5 bg-blue-50 border border-blue-200 rounded-xl mb-6">
+            <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-blue-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               This is an AI-generated skin assessment — not a medical diagnosis. For persistent or severe conditions, consult a registered dermatologist.
             </p>
@@ -599,11 +591,11 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
           <button
             onClick={() => setStep(5)}
-            className="w-full flex items-center justify-center gap-2 bg-accent text-white py-3.5 rounded-xl hover:bg-accent/90 transition-colors font-medium text-sm"
+            className="w-full flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white py-3.5 rounded-xl transition-all font-bold text-sm shadow-md cursor-pointer"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             View matched products
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-4 h-4 text-white" />
           </button>
         </div>
       )}
@@ -611,25 +603,25 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       {/* ---- STEP 5: Recommendations + Filter + Purchase ---- */}
       {step === 5 && (
         <div className="max-w-2xl mx-auto px-4 py-8">
-          <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-start justify-between gap-4 mb-5">
             <div>
-              <p className="text-xs tracking-widest text-accent uppercase mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>Step 5 of 5 · Matched Products</p>
-              <h2 className="text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-                3 products for your skin
+              <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>Step 5 of 5 · Matched Products</p>
+              <h2 className="text-3xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                Products for your skin
               </h2>
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors flex-shrink-0",
-                showFilters || activeFilters > 0 ? "border-accent bg-accent/10 text-accent" : "border-border bg-card text-foreground hover:border-accent/40"
+                "flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 text-sm font-semibold transition-all flex-shrink-0 cursor-pointer",
+                showFilters || activeFilters > 0 ? "border-[#008236] bg-[#008236]/10 text-[#008236]" : "border-border bg-card text-foreground hover:border-[#008236]/40"
               )}
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               <Search className="w-3.5 h-3.5" />
               Filter
               {activeFilters > 0 && (
-                <span className="bg-accent text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-mono ml-0.5">
+                <span className="bg-[#008236] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-mono ml-0.5">
                   {activeFilters}
                 </span>
               )}
@@ -638,13 +630,13 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
           {/* Filter panel */}
           {showFilters && (
-            <div className="bg-card border border-border rounded-xl p-4 mb-5">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-medium text-foreground uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Filter recommendations</p>
+            <div className="bg-card border-2 border-border/80 rounded-2xl p-4 mb-6 shadow-sm">
+              <div className="flex items-center justify-between mb-3.5">
+                <p className="text-xs font-bold text-foreground uppercase tracking-wider" style={{ fontFamily: "'DM Mono', monospace" }}>Filter recommendations</p>
                 {activeFilters > 0 && (
                   <button
                     onClick={() => setFilters({ country: "", state: "", city: "", vendor: "", category: "" })}
-                    className="text-xs text-accent hover:underline"
+                    className="text-xs text-[#C86B3A] font-semibold hover:underline cursor-pointer"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     Clear all
@@ -660,11 +652,11 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   { key: "category", label: "Product Category", options: ["Serums", "Creams", "SPF / Sunscreen", "Cleansers", "Toners"] },
                 ] as const).map((f) => (
                   <div key={f.key}>
-                    <label className="text-xs text-muted-foreground mb-1 block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.label}</label>
+                    <label className="text-[11px] font-bold text-muted-foreground mb-1 block uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.label}</label>
                     <select
                       value={filters[f.key]}
                       onChange={(e) => setFilters({ ...filters, [f.key]: e.target.value })}
-                      className="w-full bg-input-background border border-border rounded-lg px-2.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="w-full bg-[#FAF7F2] border border-border rounded-xl px-2.5 py-2 text-sm text-foreground focus:outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 cursor-pointer"
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
                       <option value="">All</option>
@@ -674,8 +666,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 ))}
               </div>
               {activeFilters > 0 && (
-                <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  <Globe className="w-3.5 h-3.5" />
+                <p className="text-xs text-muted-foreground mt-3.5 flex items-center gap-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <Globe className="w-4 h-4 text-[#008236]" />
                   Showing vendors available in your selected location
                 </p>
               )}
@@ -683,119 +675,119 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           )}
 
           {/* Product recommendation cards */}
-          <div className="space-y-4 mb-6">
+          <div className="space-y-4.5 mb-6">
             {recommendations.map((rec, i) => (
-              <div key={rec.rank} className="bg-card border border-border rounded-xl overflow-hidden">
+              <div key={rec.rank} className="bg-card border-2 border-border rounded-2xl overflow-hidden hover:shadow-md transition-all duration-300">
                 {/* Card header */}
                 <button
-                  className="w-full p-4 flex items-start gap-3 text-left hover:bg-secondary/50 transition-colors"
+                  className="w-full p-4 flex items-start gap-4.5 text-left hover:bg-secondary/25 transition-colors cursor-pointer"
                   onClick={() => setExpandedCard(expandedCard === i ? null : i)}
                 >
-                  <img src={rec.photo} alt={rec.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0 bg-secondary" />
+                  <img src={rec.photo} alt={rec.name} className="w-16 h-16 rounded-2xl object-cover flex-shrink-0 bg-secondary border border-border" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-mono bg-accent/10 text-accent px-1.5 py-0.5 rounded">#{rec.rank} match</span>
-                      <span className="text-xs text-muted-foreground font-mono">{rec.score}% score</span>
+                      <span className="text-[10px] font-bold bg-[#C86B3A]/10 text-[#C86B3A] px-2 py-0.5 rounded-full font-mono uppercase tracking-wider">#{rec.rank} match</span>
+                      <span className="text-xs text-muted-foreground font-semibold font-mono">{rec.score}% score</span>
                     </div>
-                    <h4 className="font-medium text-foreground text-sm leading-snug mb-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.name}</h4>
-                    <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.brand} · {rec.price}</p>
+                    <h4 className="font-semibold text-foreground text-sm leading-snug mb-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.name}</h4>
+                    <p className="text-xs text-muted-foreground font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.brand} · <span className="text-[#008236] font-semibold">{rec.price}</span></p>
                   </div>
-                  {expandedCard === i ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" /> : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />}
+                  {expandedCard === i ? <ChevronUp className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-1" /> : <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-1" />}
                 </button>
 
                 {expandedCard === i && (
-                  <div className="border-t border-border">
+                  <div className="border-t-2 border-border/80">
                     {/* Why recommended */}
-                    <div className="p-4 border-b border-border">
-                      <p className="text-xs font-medium text-accent uppercase tracking-wide mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Why we recommended this</p>
+                    <div className="p-4.5 border-b border-border/60 bg-[#FAF7F2]/40">
+                      <p className="text-xs font-bold text-[#C86B3A] uppercase tracking-wider mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Why we recommended this</p>
                       <p className="text-sm text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.why}</p>
                     </div>
 
                     {/* Product details grid */}
-                    <div className="grid grid-cols-2 gap-0 border-b border-border">
+                    <div className="grid grid-cols-2 gap-0 border-b border-border/60">
                       {[
                         { label: "Suitable skin type", value: "Combination / Oily" },
                         { label: "Availability", value: "In stock · Ships Lagos" },
                         { label: "Expected results", value: "4–8 weeks with consistent use" },
                         { label: "Price", value: rec.price },
                       ].map((item) => (
-                        <div key={item.label} className="p-3 border-r border-b border-border last:border-r-0">
-                          <p className="text-xs text-muted-foreground mb-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.label}</p>
-                          <p className="text-xs font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
+                        <div key={item.label} className="p-3.5 border-r border-b border-border/60 last:border-r-0 last:border-b-0 odd:border-r">
+                          <p className="text-[11px] font-bold text-muted-foreground mb-0.5 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.label}</p>
+                          <p className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
                         </div>
                       ))}
                     </div>
 
                     {/* Expandable sections */}
                     {[
-                      { key: "benefits", label: "Benefits", icon: <CheckCircle className="w-3.5 h-3.5 text-green-600" />, content: (
-                        <ul className="space-y-1.5">
+                      { key: "benefits", label: "Benefits", icon: <CheckCircle className="w-4 h-4 text-[#008236]" />, content: (
+                        <ul className="space-y-2">
                           {rec.benefits.map((b) => (
-                            <li key={b} className="flex items-start gap-2 text-sm text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              <Check className="w-3.5 h-3.5 text-green-600 flex-shrink-0 mt-0.5" />{b}
+                            <li key={b} className="flex items-start gap-2 text-xs text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              <Check className="w-4 h-4 text-[#008236] flex-shrink-0 mt-0.5" />{b}
                             </li>
                           ))}
                         </ul>
                       )},
-                      { key: "howToUse", label: "How to use for real results", icon: <Star className="w-3.5 h-3.5 text-accent" />, content: (
-                        <p className="text-sm text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.howToUse}</p>
+                      { key: "howToUse", label: "How to use for real results", icon: <Star className="w-4 h-4 text-[#C86B3A]" />, content: (
+                        <p className="text-xs text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.howToUse}</p>
                       )},
-                      { key: "disadvantages", label: "Disadvantages", icon: <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />, content: (
-                        <ul className="space-y-1.5">
+                      { key: "disadvantages", label: "Disadvantages", icon: <X className="w-4 h-4 text-muted-foreground" />, content: (
+                        <ul className="space-y-2">
                           {rec.disadvantages.map((d) => (
-                            <li key={d} className="flex items-start gap-2 text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              <X className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />{d}
+                            <li key={d} className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              <X className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />{d}
                             </li>
                           ))}
                         </ul>
                       )},
-                      { key: "warnings", label: "Warnings", icon: <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />, content: (
-                        <ul className="space-y-1.5">
+                      { key: "warnings", label: "Warnings", icon: <AlertTriangle className="w-4 h-4 text-amber-600" />, content: (
+                        <ul className="space-y-2">
                           {rec.warnings.map((w) => (
-                            <li key={w} className="flex items-start gap-2 text-sm text-amber-700" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />{w}
+                            <li key={w} className="flex items-start gap-2 text-xs text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />{w}
                             </li>
                           ))}
                         </ul>
                       )},
                     ].map((section) => (
-                      <div key={section.key} className="border-b border-border last:border-b-0">
+                      <div key={section.key} className="border-b border-border/60 last:border-b-0">
                         <button
-                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-secondary/50 transition-colors"
+                          className="w-full px-4.5 py-3 flex items-center justify-between hover:bg-secondary/40 transition-colors cursor-pointer"
                           onClick={() => toggleSection(rec.rank, section.key)}
                         >
-                          <span className="flex items-center gap-2 text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          <span className="flex items-center gap-2 text-xs font-bold text-foreground uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                             {section.icon}{section.label}
                           </span>
                           {expandedSection?.card === rec.rank && expandedSection.section === section.key
-                            ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-                            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                            ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                            : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                         </button>
                         {expandedSection?.card === rec.rank && expandedSection.section === section.key && (
-                          <div className="px-4 pb-4">{section.content}</div>
+                          <div className="px-4.5 pb-4.5">{section.content}</div>
                         )}
                       </div>
                     ))}
 
                     {/* Vendor info + Purchase CTA */}
-                    <div className="p-4 bg-secondary/40">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Store className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div className="p-4.5 bg-[#FAF7F2]">
+                      <div className="flex items-center gap-2 mb-3.5">
+                        <Store className="w-4 h-4 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           Sold by <strong className="text-foreground">{rec.brand}</strong> · Verified vendor
                         </span>
-                        <span className="ml-auto flex items-center gap-1 text-xs text-green-600" style={{ fontFamily: "'DM Mono', monospace" }}>
-                          <CheckCircle className="w-3 h-3" /> In stock
+                        <span className="ml-auto flex items-center gap-1 text-xs text-[#008236] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>
+                          <CheckCircle className="w-3.5 h-3.5" /> In stock
                         </span>
                       </div>
                       <a
                         href={rec.waLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full flex items-center justify-center gap-2 bg-[#25D366] text-white py-3 rounded-xl hover:bg-[#20BB5A] transition-colors font-medium text-sm"
+                        className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BB5A] text-white py-3.5 rounded-xl transition-all font-bold text-sm shadow-sm"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
-                        <MessageCircle className="w-4 h-4" />
+                        <MessageCircle className="w-4 h-4 text-white" />
                         Order via WhatsApp
                       </a>
                     </div>
@@ -806,8 +798,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           </div>
 
           {/* Disclaimer */}
-          <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg mb-5">
-            <Info className="w-3.5 h-3.5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2.5 p-3.5 bg-blue-50 border border-blue-200 rounded-xl mb-6">
+            <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-blue-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               AI-generated recommendations only. Not a medical diagnosis. Consult a dermatologist for persistent or severe conditions.
             </p>
@@ -815,7 +807,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
           <button
             onClick={resetFlow}
-            className="w-full py-3 border border-border rounded-xl text-sm text-muted-foreground hover:bg-secondary transition-colors"
+            className="w-full py-3.5 border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/5 rounded-xl font-bold text-sm transition-all cursor-pointer"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             Start a new analysis

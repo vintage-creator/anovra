@@ -8,6 +8,7 @@ import {
 import { MapPin } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
+import { toast } from "sonner";
 
 // ---- SKIN CONDITIONS SLIDER ----
 
@@ -33,7 +34,7 @@ const SKIN_CONDITIONS = [
   { name: "Melasma", desc: "Hormonal pigmentation patches", image: "/concerns/melasma.jpg" },
   { name: "Sensitive Skin", desc: "Reactive, easily irritated skin", image: "/concerns/sensitive-skin.jpg" },
   { name: "Fine Lines & Wrinkles", desc: "Early signs of skin aging", image: "/concerns/fine-lines-wrinkles.jpg" },
-  { name: "Sun Damage", desc: "UV-induced discolouration & aging", image: "/concerns/sun-damage.jpg" },
+  { name: "Sun Damage", desc: "UV-induced discoloration & aging", image: "/concerns/sun-damage.jpg" },
   { name: "Enlarged Pores", desc: "Visibly open pores & rough texture", image: "/concerns/enlarged-pores.jpg" },
   { name: "Oily Skin", desc: "Excess sebum & shine", image: "/concerns/oily-skin.jpg" },
   { name: "Combination Skin", desc: "Mixed oily & dry skin zones", image: "/concerns/combination-skin.jpg" },
@@ -556,33 +557,31 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               Built for African skin. Regulated for African markets.
             </span>
             <h1
-              className="text-4xl sm:text-5xl md:text-6xl font-light leading-[1.08] text-foreground mb-6"
+              className="text-4xl sm:text-5xl md:text-6xl font-light leading-[1.12] text-foreground mb-6"
               style={{ fontFamily: "'Fraunces', serif" }}
             >
-              Your customers&apos;
+              Understand Your Skin.
               <br />
-              <em className="text-emerald-600 not-italic">skin story,</em>
-              <br />
-              in 90 seconds.
+              <em className="text-[#008236] not-italic font-normal">Make Smarter</em> Skincare Decisions
             </h1>
-            <p className="text-muted-foreground text-base sm:text-lg leading-relaxed mb-8 max-w-md" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Give every vendor a white-labeled AI skin test. Customers take a selfie, answer 5 questions, and get matched to the right products from that vendor's catalog — not generic advice.
+            <p className="text-muted-foreground text-base sm:text-lg leading-relaxed mb-8 max-w-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Looking for personalized skincare recommendations or a better way to serve your customers, Anovra empowers individuals and skincare businesses with intelligent tools that make every recommendation more personal.
             </p>
             <div className="flex flex-col sm:flex-row gap-3.5 w-full sm:w-auto">
               <button
-                onClick={() => setView("skintest")}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all text-center"
+                onClick={() => toast.info("Coming soon! The Anovra AI Engine is undergoing final NAFDAC review and safety integration.")}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all text-center cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                Try the skin test
+                Analyze Your Skin
                 <ArrowRight className="w-4 h-4 text-white" />
               </button>
               <button
-                onClick={() => setView("signup")}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 border-2 border-[#008236] bg-transparent hover:bg-[#008236]/10 text-[#008236] dark:text-emerald-400 font-bold px-6 py-3.5 rounded-xl transition-all text-center"
+                onClick={() => toast.info("Coming soon! Vendor portals and embedded diagnostics are currently in private beta.")}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 border-2 border-[#008236] bg-transparent hover:bg-[#008236]/10 text-[#008236] dark:text-emerald-400 font-bold px-6 py-3.5 rounded-xl transition-all text-center cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                Join/Register as a Vendor
+                Explore for Vendors
               </button>
             </div>
           </div>
@@ -710,7 +709,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               {[
                 { step: "01", title: "Vendor sets up their catalog", desc: "Add products with ingredients and concerns. Our AI attaches ingredient benefits, side effects, and safety checks automatically." },
                 { step: "02", title: "Share one link with customers", desc: "Your unique link — anovra.africa/shop/your-brand — is ready immediately. Paste it in your Instagram bio, WhatsApp, or embed on your site." },
-                { step: "03", title: "Customers get matched products", desc: "A 90-second selfie + questionnaire. AI analysis. Personalised recommendations from your catalog with full ingredient transparency." },
+                { step: "03", title: "Customers get matched products", desc: "A 90-second selfie + questionnaire. AI analysis. Personalized recommendations from your catalog with full ingredient transparency." },
               ].map((s) => (
                 <div key={s.step} className="relative bg-card p-6 rounded-2xl border border-border/80 shadow-xs">
                   <p
@@ -765,16 +764,16 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
       {/* AI Recommendation Engine */}
       <RecommendationEngineSection />
 
-      {/* Pricing Section with Rich Product Color Background */}
+      {/* Pricing Section with Brand Color Background */}
       <section className="py-20 max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="bg-[#28170D] text-amber-50 rounded-3xl p-6 sm:p-12 shadow-2xl border border-amber-900/40">
+        <div className="bg-[#FAF7F2] text-foreground rounded-3xl p-6 sm:p-12 shadow-sm border border-border/80">
           <h2
-            className="text-3xl sm:text-4xl font-light text-amber-50 mb-3 text-center"
+            className="text-3xl sm:text-4xl font-light text-foreground mb-3 text-center"
             style={{ fontFamily: "'Fraunces', serif" }}
           >
             Transparent pricing in naira.
           </h2>
-          <p className="text-center text-sm text-amber-200/70 mb-12" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <p className="text-center text-sm text-muted-foreground mb-12" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Plans for every stage — whether you're selling or just starting your skin journey.
           </p>
 
@@ -782,11 +781,11 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
           <div className="mb-14">
             <div className="flex items-center gap-4 mb-7 max-w-4xl mx-auto">
               <div>
-                <p className="text-xs uppercase tracking-widest text-emerald-400 mb-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>For skincare vendors</p>
-                <h3 className="text-xl font-light text-amber-50" style={{ fontFamily: "'Fraunces', serif" }}>Vendor Plans</h3>
+                <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skincare Vendors</h3>
+                <p className="text-xs uppercase tracking-widest text-[#008236] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Vendor Plans</p>
               </div>
-              <div className="flex-1 h-px bg-amber-900/40" />
-              <span className="text-xs text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <div className="flex-1 h-px bg-border/60" />
+              <span className="text-xs text-[#008236] bg-[#008236]/10 border border-[#008236]/30 px-3 py-1 rounded-full font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 Sell smarter with AI
               </span>
             </div>
@@ -797,25 +796,27 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   className={cn(
                     "rounded-2xl border p-6 flex flex-col transition-all duration-300",
                     t.highlight
-                      ? "bg-[#1B382B] text-amber-50 border-emerald-500/50 shadow-2xl sm:scale-105"
-                      : "bg-[#351F13] text-amber-50 border-amber-900/40"
+                      ? "bg-[#008236] text-white border-2 border-[#008236] shadow-2xl sm:scale-105"
+                      : t.name === "Basic"
+                        ? "bg-white text-foreground border-2 border-[#008236]/50 hover:border-[#008236]"
+                        : "bg-white text-foreground border-2 border-[#C86B3A]/50 hover:border-[#C86B3A]"
                   )}
                 >
                   <p
-                    className={cn("text-sm font-bold mb-3 uppercase tracking-wider", t.highlight ? "text-emerald-400" : "text-amber-200/80")}
+                    className={cn("text-xs font-bold mb-3 uppercase tracking-wider", t.highlight ? "text-emerald-300" : "text-muted-foreground")}
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     {t.name}
                   </p>
-                  <p className="text-3xl font-light mb-0.5 text-amber-50" style={{ fontFamily: "'Fraunces', serif" }}>
+                  <p className="text-3xl font-light mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>
                     {t.price}
                   </p>
-                  <p className="text-xs mb-6 text-amber-200/60" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
+                  <p className={cn("text-xs mb-6", t.highlight ? "text-white/70" : "text-muted-foreground")} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
                   <ul className="space-y-2.5 flex-1 mb-6">
                     {t.features.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-emerald-400" />
-                        <span className="text-amber-100/90">{f}</span>
+                        <Check className={cn("w-3.5 h-3.5 mt-0.5 flex-shrink-0", t.highlight ? "text-white" : "text-[#008236]")} />
+                        <span className={t.highlight ? "text-white/90" : "text-muted-foreground"}>{f}</span>
                       </li>
                     ))}
                   </ul>
@@ -824,8 +825,10 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     className={cn(
                       "w-full py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm",
                       t.highlight
-                        ? "bg-emerald-500 text-amber-950 hover:bg-emerald-400"
-                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500 hover:text-amber-950"
+                        ? "bg-[#C86B3A] text-white hover:bg-[#b05a2e]"
+                        : t.name === "Basic"
+                          ? "bg-[#008236] text-white hover:bg-[#006c2c]"
+                          : "bg-[#C86B3A] text-white hover:bg-[#b05a2e]"
                     )}
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
@@ -836,110 +839,110 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
             </div>
           </div>
 
-        {/* User / Consumer Plans */}
-        <div>
-          <div className="flex items-center gap-4 mb-7 max-w-4xl mx-auto">
-            <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>For skin care customers</p>
-              <h3 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Consumer Plans</h3>
-            </div>
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground bg-muted border border-border px-2.5 py-1 rounded-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Know your skin
-            </span>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
-            {[
-              {
-                name: "Glow Pass",
-                price: "₦1,500",
-                sub: "per month",
-                highlight: false,
-                features: [
-                  "1 full skin analysis per month",
-                  "Top 3 product recommendations",
-                  "Basic skin type & concern report",
-                  "Ingredient safety check",
-                  "Results shared via link",
-                ],
-                cta: "Get Glow Pass",
-              },
-              {
-                name: "Glow Pass+",
-                price: "₦3,500",
-                sub: "per month",
-                highlight: true,
-                features: [
-                  "Unlimited skin analyses",
-                  "Full product recommendation list",
-                  "Detailed skin health report",
-                  "Save & track your skin history",
-                  "Personalised ingredient glossary",
-                  "Priority product matching",
-                ],
-                cta: "Get Glow Pass+",
-              },
-              {
-                name: "Premium Glow",
-                price: "₦7,000",
-                sub: "per month",
-                highlight: false,
-                features: [
-                  "Everything in Glow Pass+",
-                  "Monthly skin progress report & score",
-                  "Direct chat with certified skin advisors",
-                  "Exclusive discounts from Anovra vendors",
-                  "Family skin profiles (up to 5 members)",
-                  "Early access to new AI features",
-                  "Personalised skincare routine builder",
-                ],
-                cta: "Get Premium Glow",
-              },
-            ].map((t) => (
-              <div
-                key={t.name}
-                className={cn(
-                  "rounded-lg border p-6 flex flex-col",
-                  t.highlight
-                    ? "bg-foreground text-primary-foreground border-foreground shadow-xl scale-105"
-                    : "bg-card border-border"
-                )}
-              >
-                <p
-                  className={cn("text-sm font-medium mb-3", t.highlight ? "text-accent" : "text-muted-foreground")}
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                >
-                  {t.name}
-                </p>
-                <p className="text-3xl font-light mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>
-                  {t.price}
-                </p>
-                <p className={cn("text-xs mb-6", t.highlight ? "text-white/50" : "text-muted-foreground")} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
-                <ul className="space-y-2.5 flex-1 mb-6">
-                  {t.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-accent" />
-                      <span className={t.highlight ? "text-white/80" : "text-muted-foreground"}>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  className={cn(
-                    "w-full py-2 rounded text-sm font-medium transition-colors",
-                    t.highlight
-                      ? "bg-accent text-white hover:bg-accent/90"
-                      : "bg-secondary text-foreground hover:bg-muted"
-                  )}
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                >
-                  {t.cta}
-                </button>
+          {/* User / Consumer Plans */}
+          <div>
+            <div className="flex items-center gap-4 mb-7 max-w-4xl mx-auto">
+              <div>
+                <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skin Care Customers</h3>
+                <p className="text-xs uppercase tracking-widest text-[#C86B3A] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Consumer Plans</p>
               </div>
-            ))}
+              <div className="flex-1 h-px bg-border/60" />
+              <span className="text-xs text-amber-800 bg-[#C86B3A]/10 border border-[#C86B3A]/30 px-2.5 py-1 rounded-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Know your skin
+              </span>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
+              {[
+                {
+                  name: "Glow Pass",
+                  price: "₦1,500",
+                  sub: "per month",
+                  highlight: false,
+                  features: [
+                    "1 full skin analysis per month",
+                    "Top 3 product recommendations",
+                    "Basic skin type & concern report",
+                    "Ingredient safety check",
+                    "Results shared via link",
+                  ],
+                  cta: "Get Glow Pass",
+                },
+                {
+                  name: "Glow Pass+",
+                  price: "₦3,500",
+                  sub: "per month",
+                  highlight: true,
+                  features: [
+                    "Unlimited skin analyses",
+                    "Full product recommendation list",
+                    "Detailed skin health report",
+                    "Save & track your skin history",
+                    "Personalized ingredient glossary",
+                    "Priority product matching",
+                  ],
+                  cta: "Get Glow Pass+",
+                },
+                {
+                  name: "Premium Glow",
+                  price: "₦7,000",
+                  sub: "per month",
+                  highlight: false,
+                  features: [
+                    "Everything in Glow Pass+",
+                    "Monthly skin progress report & score",
+                    "Direct chat with certified skin advisors",
+                    "Exclusive discounts from Anovra vendors",
+                    "Family skin profiles (up to 5 members)",
+                    "Early access to new AI features",
+                    "Personalized skincare routine builder",
+                  ],
+                  cta: "Get Premium Glow",
+                },
+              ].map((t) => (
+                <div
+                  key={t.name}
+                  className={cn(
+                    "rounded-2xl border p-6 flex flex-col transition-all duration-300",
+                    t.highlight
+                      ? "bg-[#C86B3A] text-white border-2 border-[#C86B3A] shadow-2xl sm:scale-105"
+                      : "bg-[#008236] text-white border-2 border-[#008236] hover:shadow-lg"
+                  )}
+                >
+                  <p
+                    className="text-xs font-bold mb-3 uppercase tracking-wider text-white/80"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    {t.name}
+                  </p>
+                  <p className="text-3xl font-light mb-0.5 text-white" style={{ fontFamily: "'Fraunces', serif" }}>
+                    {t.price}
+                  </p>
+                  <p className="text-xs mb-6 text-white/70" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
+                  <ul className="space-y-2.5 flex-1 mb-6">
+                    {t.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-sm text-white/90" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-white" />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    className={cn(
+                      "w-full py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm cursor-pointer",
+                      t.highlight
+                        ? "bg-[#FAF7F2] text-[#C86B3A] hover:bg-white"
+                        : "bg-[#FAF7F2] text-[#008236] hover:bg-white"
+                    )}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    {t.cta}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
       {/* Footer */}
       <footer className="border-t border-border py-8">

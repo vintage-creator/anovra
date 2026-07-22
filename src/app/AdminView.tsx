@@ -244,7 +244,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         <UnifiedDashboardHeader
           currentView="admin"
           setView={setView}
-          title="Anovra Control Centre"
+          title="Anovra Control Center"
           subtitle="Platform Administration, NAFDAC Safety Queue & MRR Analytics"
           badgeText="PLATFORM ADMIN"
           role="admin"

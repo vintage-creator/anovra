@@ -1,6 +1,7 @@
-import { useState, useRef } from "react";
-import { Eye, Check, CheckCircle, AlertCircle, Globe, Upload, ChevronDown, Scan } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Eye, Check, CheckCircle, AlertCircle, Globe, Upload, ChevronDown, Scan, User, Store, ShieldCheck } from "lucide-react";
 import type { View } from "./types";
+import { toast } from "sonner";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -114,6 +115,10 @@ function isSocialUrl(url: string): boolean {
 }
 
 export function SignUpView({ setView }: { setView: (v: View) => void }) {
+  const [selectedRole, setSelectedRole] = useState<"customer" | "vendor">("customer");
+  
+  // Vendor state
+  const [currentStep, setCurrentStep] = useState(1);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -122,6 +127,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
     cacDoc: "",
     password: "",
     confirmPassword: "",
+    referralCode: "",
   });
 
   const [socialAccounts, setSocialAccounts] = useState<
@@ -162,303 +168,601 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
     (acc) => !acc.url || isSocialUrl(acc.url)
   );
 
-  const canSubmit =
-    form.fullName &&
-    form.email &&
-    form.whatsapp &&
-    form.cac &&
-    form.cacDoc &&
-    socialAccounts[0].url &&
-    validSocialUrls &&
-    passwordScore >= 4 &&
+  // Vendor Step Validations
+  const step1Valid = form.fullName.trim().length > 2 && form.email.includes("@") && form.whatsapp.length === 10;
+  const step2Valid = form.cac.trim().length > 4 && form.cacDoc && socialAccounts[0].url.trim().length > 8 && validSocialUrls;
+  const step3Valid = passwordScore >= 4 && passwordsMatch;
+  const canSubmitVendor = step1Valid && step2Valid && step3Valid;
+
+  // Customer Validations
+  const isCustomerValid = 
+    form.fullName.trim().length > 2 &&
+    form.email.includes("@") &&
+    passwordScore >= 3 &&
     passwordsMatch;
 
   const inputCls =
-    "w-full px-3.5 py-2.5 bg-input-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all";
+    "w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all";
   const labelCls =
-    "block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide";
+    "block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-wider";
 
   const handleFormSubmit = () => {
-    if (!canSubmit) return;
+    if (selectedRole === "customer" && !isCustomerValid) return;
+    if (selectedRole === "vendor" && !canSubmitVendor) return;
     setShowPopupModal(true);
   };
 
   return (
-    <div className="min-h-screen bg-background relative">
-      <div className="max-w-lg mx-auto px-4 py-12">
-        {/* Header */}
-        <div className="mb-8">
+    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      {/* Left side panel: Brand marketing (Hidden on mobile) */}
+      <div className="hidden md:flex w-[40%] bg-[#008236] text-white p-12 flex-col justify-between relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.06),transparent)] pointer-events-none" />
+        
+        {/* Logo */}
+        <div className="flex items-center gap-3">
           <button
             onClick={() => setView("landing")}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            className="transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            aria-label="Anovra Home"
           >
-            <ChevronDown className="w-4 h-4 rotate-90" /> Back
+            <img src="/logo.png" alt="Anovra Logo" className="h-16 w-auto object-contain brightness-0 invert" />
           </button>
-          <img src="/logo.png" alt="Anovra Logo" className="h-12 sm:h-16 w-auto mb-4 object-contain" />
-          <p className="text-xs tracking-[0.2em] uppercase text-emerald-600 font-semibold mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>
-            Vendor Registration
-          </p>
-          <h1 className="text-4xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-            Join Anovra
-          </h1>
-          <p className="text-muted-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Already have an account?{" "}
-            <button onClick={() => setView("signin")} className="text-emerald-600 font-medium underline underline-offset-2 hover:text-emerald-700">
-              Sign in
-            </button>
-          </p>
         </div>
 
-        <div className="space-y-5">
-          {/* Full name */}
-          <div>
-            <label className={labelCls}>Full Name *</label>
-            <input
-              className={inputCls}
-              placeholder="Your full legal name"
-              value={form.fullName}
-              onChange={(e) => set("fullName", e.target.value)}
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label className={labelCls}>Email Address *</label>
-            <input
-              className={inputCls}
-              type="email"
-              placeholder="you@example.com"
-              value={form.email}
-              onChange={(e) => set("email", e.target.value)}
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            />
-          </div>
-
-          {/* WhatsApp */}
-          <div>
-            <label className={labelCls}>WhatsApp Number *</label>
-            <div className="flex gap-2">
-              <div
-                className="flex items-center px-3 bg-input-background border border-border rounded-lg text-sm text-muted-foreground flex-shrink-0"
-                style={{ fontFamily: "'DM Mono', monospace" }}
-              >
-                🇳🇬 +234
+        {/* Dynamic Marketing Panel Text based on Selected Role */}
+        <div className="my-auto space-y-8 pr-4">
+          {selectedRole === "customer" ? (
+            <>
+              <h2 className="text-4xl font-light leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                Your personal skincare companion.
+              </h2>
+              <div className="space-y-6">
+                {[
+                  { title: "AI-Powered Skin Test", desc: "Scan your face to diagnose concerns, retrieve skin scores, and track changes." },
+                  { title: "Specialist Recommendations", desc: "Get curated suggestions mapped specifically to your profile by licensed professionals." },
+                  { title: "Routine Builder", desc: "Build healthy day and night skincare routines with helpful application tips." },
+                ].map((f) => (
+                  <div key={f.title} className="flex gap-4">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#C86B3A] mt-2 flex-shrink-0" />
+                    <div>
+                      <p className="font-bold text-sm text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.title}</p>
+                      <p className="text-xs text-white/70 mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.desc}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <input
-                className={inputCls}
-                placeholder="8012345678"
-                value={form.whatsapp}
-                onChange={(e) => set("whatsapp", e.target.value.replace(/\D/g, "").slice(0, 10))}
-                style={{ fontFamily: "'DM Mono', monospace" }}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              We will use this to send you important messages and for clients to connect with you via WhatsApp.
-            </p>
-          </div>
-
-          {/* CAC Registration Number & Certificate Upload (Compulsory) */}
-          <div className="space-y-3">
-            <div>
-              <label className={labelCls}>CAC Registration Number * (Compulsory)</label>
-              <CACVerifier value={form.cac} onChange={(v) => set("cac", v)} />
-            </div>
-
-            <div>
-              <label className={labelCls}>CAC Certificate Upload * (Compulsory)</label>
-              <label className="block cursor-pointer">
-                <div
-                  className={`flex items-center gap-3 px-3.5 py-3 border-2 border-dashed rounded-lg transition-colors ${
-                    form.cacDoc
-                      ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20"
-                      : "border-border hover:border-emerald-500/50 hover:bg-muted/30"
-                  }`}
-                >
-                  <Upload className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <span className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    {form.cacDoc ? (
-                      <span className="text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-1">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> {form.cacDoc}
-                      </span>
-                    ) : (
-                      "Upload CAC certificate (PDF or Image)"
-                    )}
-                  </span>
-                </div>
-                <input
-                  type="file"
-                  accept=".pdf,image/*"
-                  className="sr-only"
-                  onChange={(e) => set("cacDoc", e.target.files?.[0]?.name || "")}
-                />
-              </label>
-            </div>
-
-            <p className="text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg leading-relaxed">
-              🛡️ <strong>Verified Trust:</strong> Verifying your CAC business registration increases customer trust and reassures shoppers that your store is authentic and verified.
-            </p>
-          </div>
-
-          {/* Social Media Business Accounts Dropdown + Multi-Adder */}
-          <div className="space-y-3">
-            <label className={labelCls}>Social Media Business Accounts *</label>
-            {socialAccounts.map((acc, index) => (
-              <div key={index} className="flex gap-2 items-center">
-                <select
-                  value={acc.platform}
-                  onChange={(e) => updateSocialAccount(index, "platform", e.target.value)}
-                  className="px-3 py-2.5 bg-input-background border border-border rounded-lg text-xs font-semibold text-foreground outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all shrink-0 w-32"
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                >
-                  <option value="Instagram">Instagram</option>
-                  <option value="Facebook">Facebook</option>
-                  <option value="TikTok">TikTok</option>
-                  <option value="Twitter">Twitter / X</option>
-                  <option value="Website">Website Link</option>
-                </select>
-
-                <div className="relative flex-1">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    className={`${inputCls} pl-9`}
-                    placeholder={`https://${acc.platform.toLowerCase()}.com/yourbrand`}
-                    value={acc.url}
-                    onChange={(e) => updateSocialAccount(index, "url", e.target.value)}
-                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  />
-                </div>
-
-                {socialAccounts.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeSocialAccount(index)}
-                    className="p-2 text-muted-foreground hover:text-red-500 transition-colors"
-                  >
-                    ×
-                  </button>
-                )}
+            </>
+          ) : (
+            <>
+              <h2 className="text-4xl font-light leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                Empowering intelligent skincare businesses.
+              </h2>
+              <div className="space-y-6">
+                {[
+                  { title: "AI-Powered Skin Recommendations", desc: "Anovra's engine matches your catalog products to clients' skin profiles instantly." },
+                  { title: "Verified Customer Trust", desc: "CAC registration validation ensures a secure, authenticated, and professional storefront." },
+                  { title: "Direct WhatsApp Client Flow", desc: "Zero friction orders and questions landed directly in your sales channel inbox." },
+                ].map((f) => (
+                  <div key={f.title} className="flex gap-4">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#C86B3A] mt-2 flex-shrink-0" />
+                    <div>
+                      <p className="font-bold text-sm text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.title}</p>
+                      <p className="text-xs text-white/70 mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.desc}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </>
+          )}
+        </div>
 
-            <button
-              type="button"
-              onClick={addSocialAccount}
-              className="text-xs text-emerald-600 font-semibold hover:text-emerald-700 flex items-center gap-1 mt-1"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              + Add another social account
-            </button>
-          </div>
-
-          {/* Create Password */}
-          <div>
-            <label className={labelCls}>Create Password *</label>
-            <div className="relative">
-              <input
-                className={inputCls}
-                type={showPass ? "text" : "password"}
-                placeholder="Create a strong password"
-                value={form.password}
-                onChange={(e) => set("password", e.target.value)}
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPass((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Eye className="w-4 h-4" />
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Note: Password must contain numbers, letters, and special characters (!@#$...).
+        {/* Footer info */}
+        <div className="space-y-4">
+          <div className="border-t border-white/20 pt-6">
+            <p className="text-xs italic text-white/80 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              &ldquo;Anovra helps shoppers understand their skin and connects them with authentic skincare vendors who care.&rdquo;
             </p>
-            <PasswordStrength password={form.password} />
           </div>
-
-          {/* Confirm password */}
-          <div>
-            <label className={labelCls}>Confirm Password *</label>
-            <div className="relative">
-              <input
-                className={`${inputCls} ${
-                  form.confirmPassword && !passwordsMatch
-                    ? "border-red-400 focus:ring-red-400/50"
-                    : form.confirmPassword && passwordsMatch
-                    ? "border-emerald-500 focus:ring-emerald-500/50"
-                    : ""
-                }`}
-                type={showConfirm ? "text" : "password"}
-                placeholder="Repeat your password"
-                value={form.confirmPassword}
-                onChange={(e) => set("confirmPassword", e.target.value)}
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirm((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Eye className="w-4 h-4" />
-              </button>
-            </div>
-            {form.confirmPassword && !passwordsMatch && (
-              <p className="text-xs text-red-600 mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Passwords do not match
-              </p>
-            )}
-            {form.confirmPassword && passwordsMatch && (
-              <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 flex items-center gap-1 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                <Check className="w-3 h-3 text-emerald-500" /> Passwords match
-              </p>
-            )}
-          </div>
-
-          {/* Submit Button */}
-          <button
-            onClick={handleFormSubmit}
-            disabled={!canSubmit}
-            className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all mt-2 ${
-              canSubmit
-                ? "bg-emerald-500 text-amber-950 hover:bg-emerald-600 shadow-md"
-                : "bg-muted text-muted-foreground cursor-not-allowed"
-            }`}
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
-            Submit Application
-          </button>
-
-          <p className="text-xs text-center text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            By registering you agree to Anovra's Terms of Service and Privacy Policy. Your CAC details will be verified before full account verification.
+          <p className="text-[10px] text-white/40 tracking-wider uppercase" style={{ fontFamily: "'DM Mono', monospace" }}>
+            Anovra Africa © 2026
           </p>
         </div>
       </div>
 
-      {/* Confirmation Popup Modal */}
-      {showPopupModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-card rounded-2xl max-w-md w-full p-6 sm:p-8 text-center border border-border shadow-2xl relative">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-emerald-600" />
-            </div>
-            <h3 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-              Congratulations, you have successfully signed up to Anovra!
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              It will take us 3–5 working days to verify your account. In the meantime, you can explore your vendor control center and start building your product catalog!
-            </p>
+      {/* Right side panel: Form */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-[#FAF7F2]/40 overflow-y-auto">
+        <div className="max-w-md w-full py-8">
+          {/* Header */}
+          <div className="mb-8 text-center sm:text-left">
             <button
-              onClick={() => {
-                setShowPopupModal(false);
-                setView("dashboard");
-              }}
-              className="w-full py-3 rounded-xl bg-emerald-500 text-amber-950 font-bold text-sm hover:bg-emerald-600 transition-colors shadow-md"
+              onClick={() => setView("landing")}
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground mb-6 transition-colors cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              OK
+              <ChevronDown className="w-4 h-4 rotate-90" /> Back
             </button>
+            
+            <div className="md:hidden flex justify-center mb-4">
+              <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto object-contain" />
+            </div>
+
+            <p className="text-xs tracking-[0.2em] uppercase text-[#C86B3A] font-bold mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
+              Registration Portal
+            </p>
+            <h1 className="text-4xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+              Create Account
+            </h1>
+            <p className="text-muted-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Already have an account?{" "}
+              <button onClick={() => setView("signin")} className="text-[#008236] font-semibold underline underline-offset-2 hover:text-[#006c2c] cursor-pointer">
+                Sign in
+              </button>
+            </p>
+          </div>
+
+          {/* Form Card */}
+          <div className="bg-card border-2 border-border/80 p-6 sm:p-8 rounded-3xl shadow-xl space-y-6">
+            
+            {/* Role Switcher Tabs */}
+            <div className="bg-muted p-1 rounded-xl flex gap-1 mb-2">
+              {[
+                { id: "customer", label: "Customer", icon: User },
+                { id: "vendor", label: "Vendor", icon: Store },
+              ].map((role) => {
+                const Icon = role.icon;
+                const isSelected = selectedRole === role.id;
+                return (
+                  <button
+                    key={role.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedRole(role.id as any);
+                      setError("");
+                    }}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      isSelected
+                        ? "bg-[#008236] text-white shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{role.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* CUSTOMER REGISTER FLOW */}
+            {selectedRole === "customer" && (
+              <div className="space-y-5 animate-in fade-in duration-300">
+                <div>
+                  <label className={labelCls}>Full Name *</label>
+                  <input
+                    className={inputCls}
+                    placeholder="Your legal name"
+                    value={form.fullName}
+                    onChange={(e) => set("fullName", e.target.value)}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Email Address *</label>
+                  <input
+                    className={inputCls}
+                    type="email"
+                    placeholder="you@example.com"
+                    value={form.email}
+                    onChange={(e) => set("email", e.target.value)}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Create Password *</label>
+                  <div className="relative">
+                    <input
+                      className={inputCls}
+                      type={showPass ? "text" : "password"}
+                      placeholder="Enter password"
+                      value={form.password}
+                      onChange={(e) => set("password", e.target.value)}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPass((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <PasswordStrength password={form.password} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Confirm Password *</label>
+                  <div className="relative">
+                    <input
+                      className={`${inputCls} ${
+                        form.confirmPassword && !passwordsMatch ? "border-red-400" : ""
+                      }`}
+                      type={showConfirm ? "text" : "password"}
+                      placeholder="Confirm password"
+                      value={form.confirmPassword}
+                      onChange={(e) => set("confirmPassword", e.target.value)}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {form.confirmPassword && !passwordsMatch && (
+                    <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleFormSubmit}
+                  disabled={!isCustomerValid}
+                  className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all mt-4 cursor-pointer ${
+                    isCustomerValid
+                      ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg"
+                      : "bg-muted text-muted-foreground cursor-not-allowed"
+                  }`}
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Create Customer Account
+                </button>
+              </div>
+            )}
+
+            {/* VENDOR REGISTER FLOW (Multi-Step Wizard) */}
+            {selectedRole === "vendor" && (
+              <div className="space-y-6">
+                {/* Multi-step progress indicator */}
+                <div className="flex items-center gap-2 mb-2">
+                  {[
+                    { id: 1, label: "Profile" },
+                    { id: 2, label: "Business" },
+                    { id: 3, label: "Security" },
+                  ].map((s) => (
+                    <div key={s.id} className="flex-1 flex flex-col gap-1">
+                      <div className={`h-1 rounded-full transition-all duration-300 ${s.id <= currentStep ? "bg-[#008236]" : "bg-muted"}`} />
+                      <span className={`text-[9px] uppercase font-bold tracking-wider hidden sm:block ${s.id === currentStep ? "text-foreground font-semibold" : "text-muted-foreground"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {s.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {currentStep === 1 && (
+                  <div className="space-y-5 animate-in fade-in duration-300">
+                    <div>
+                      <label className={labelCls}>Full Name *</label>
+                      <input
+                        className={inputCls}
+                        placeholder="Your full legal name"
+                        value={form.fullName}
+                        onChange={(e) => set("fullName", e.target.value)}
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Email Address *</label>
+                      <input
+                        className={inputCls}
+                        type="email"
+                        placeholder="you@example.com"
+                        value={form.email}
+                        onChange={(e) => set("email", e.target.value)}
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>WhatsApp Number *</label>
+                      <div className="flex gap-2">
+                        <div
+                          className="flex items-center px-3.5 bg-[#FAF7F2] border border-border rounded-xl text-sm text-muted-foreground flex-shrink-0"
+                          style={{ fontFamily: "'DM Mono', monospace" }}
+                        >
+                          🇳🇬 +234
+                        </div>
+                        <input
+                          className={inputCls}
+                          placeholder="8012345678"
+                          value={form.whatsapp}
+                          onChange={(e) => set("whatsapp", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                          style={{ fontFamily: "'DM Mono', monospace" }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Used for customer inquiries and platform alerts.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {currentStep === 2 && (
+                  <div className="space-y-5 animate-in fade-in duration-300">
+                    <div>
+                      <label className={labelCls}>CAC Registration Number *</label>
+                      <CACVerifier value={form.cac} onChange={(v) => set("cac", v)} />
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>CAC Certificate Upload *</label>
+                      <label className="block cursor-pointer">
+                        <div
+                          className={`flex items-center gap-3 px-3.5 py-3 border-2 border-dashed rounded-xl transition-all ${
+                            form.cacDoc
+                              ? "border-[#008236] bg-[#008236]/5"
+                              : "border-border hover:border-[#008236]/40 hover:bg-[#FAF7F2]/50"
+                          }`}
+                        >
+                          <Upload className="w-4 h-4 text-[#008236] flex-shrink-0" />
+                          <span className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {form.cacDoc ? (
+                              <span className="text-[#008236] font-medium flex items-center gap-1">
+                                <CheckCircle className="w-4 h-4 text-[#008236]" /> {form.cacDoc}
+                              </span>
+                            ) : (
+                              "Upload certificate file"
+                            )}
+                          </span>
+                        </div>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          className="sr-only"
+                          onChange={(e) => set("cacDoc", e.target.files?.[0]?.name || "")}
+                        />
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Social Media Business Accounts *</label>
+                      <div className="space-y-3">
+                        {socialAccounts.map((acc, index) => (
+                          <div key={index} className="flex gap-2 items-center">
+                            <select
+                              value={acc.platform}
+                              onChange={(e) => updateSocialAccount(index, "platform", e.target.value)}
+                              className="px-2.5 py-2.5 bg-[#FAF7F2] border border-border rounded-xl text-xs font-bold text-foreground outline-none focus:border-[#008236] w-28 shrink-0 cursor-pointer"
+                              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                            >
+                              <option value="Instagram">Instagram</option>
+                              <option value="Facebook">Facebook</option>
+                              <option value="TikTok">TikTok</option>
+                              <option value="Twitter">Twitter / X</option>
+                              <option value="Website">Website</option>
+                            </select>
+
+                            <div className="relative flex-1">
+                              <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                              <input
+                                className={`${inputCls} pl-8`}
+                                placeholder="Link to profile"
+                                value={acc.url}
+                                onChange={(e) => updateSocialAccount(index, "url", e.target.value)}
+                              />
+                            </div>
+
+                            {socialAccounts.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeSocialAccount(index)}
+                                className="p-1 text-muted-foreground hover:text-red-500 transition-colors text-lg font-bold"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={addSocialAccount}
+                        className="text-xs text-[#008236] font-semibold hover:text-[#006c2c] flex items-center gap-1 mt-2 cursor-pointer"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
+                        + Add another channel
+                      </button>
+                    </div>
+
+                    <div className="pt-2 border-t border-border/60">
+                      <label className={labelCls}>Referral Code <span className="text-muted-foreground font-normal">(Optional)</span></label>
+                      <input
+                        className={inputCls}
+                        placeholder="e.g. SLG-1234"
+                        value={form.referralCode}
+                        onChange={(e) => set("referralCode", e.target.value)}
+                        style={{ fontFamily: "'DM Mono', monospace" }}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Enter the referral code of the sales partner who brought you in.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {currentStep === 3 && (
+                  <div className="space-y-5 animate-in fade-in duration-300">
+                    <div>
+                      <label className={labelCls}>Create Password *</label>
+                      <div className="relative">
+                        <input
+                          className={inputCls}
+                          type={showPass ? "text" : "password"}
+                          placeholder="Create strong password"
+                          value={form.password}
+                          onChange={(e) => set("password", e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPass((v) => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <PasswordStrength password={form.password} />
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Confirm Password *</label>
+                      <div className="relative">
+                        <input
+                          className={`${inputCls} ${form.confirmPassword && !passwordsMatch ? "border-red-400" : ""}`}
+                          type={showConfirm ? "text" : "password"}
+                          placeholder="Confirm password"
+                          value={form.confirmPassword}
+                          onChange={(e) => set("confirmPassword", e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirm((v) => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {form.confirmPassword && !passwordsMatch && (
+                        <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Wizard Controls */}
+                <div className="flex gap-3 pt-4 border-t border-border">
+                  {currentStep > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep((c) => c - 1)}
+                      className="flex-1 py-3 border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/5 rounded-xl font-bold text-sm transition-colors cursor-pointer text-center"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      Back
+                    </button>
+                  )}
+                  
+                  {currentStep < 3 ? (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep((c) => c + 1)}
+                      disabled={currentStep === 1 ? !step1Valid : !step2Valid}
+                      className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all cursor-pointer text-center ${
+                        (currentStep === 1 ? step1Valid : step2Valid)
+                          ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-sm hover:shadow"
+                          : "bg-muted text-muted-foreground cursor-not-allowed"
+                      }`}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      Continue
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleFormSubmit}
+                      disabled={!canSubmitVendor}
+                      className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all cursor-pointer text-center ${
+                        canSubmitVendor
+                          ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg animate-pulse"
+                          : "bg-muted text-muted-foreground cursor-not-allowed"
+                      }`}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      Submit Vendor Application
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[11px] text-center text-muted-foreground leading-relaxed mt-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              By registering, you agree to Anovra&apos;s{" "}
+              <a
+                href="#/terms"
+                onClick={(e) => {
+                  e.preventDefault();
+                  toast.info("Terms of Service: All accounts undergo CAC verification. Credentials must be kept secure, and product catalogs must meet platform purity rules.");
+                }}
+                className="underline text-foreground hover:text-[#008236] transition-colors"
+              >
+                terms
+              </a>{" "}
+              and{" "}
+              <a
+                href="#/privacy"
+                onClick={(e) => {
+                  e.preventDefault();
+                  toast.info("Privacy Policy: Skin scan data is encrypted and private-by-default. Photos are strictly used to run diagnostics and are never displayed publicly.");
+                }}
+                className="underline text-foreground hover:text-[#008236] transition-colors"
+              >
+                privacy policies
+              </a>
+              . Accounts are fully verified after detail check processes.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Success Popup Modal */}
+      {showPopupModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card rounded-3xl max-w-md w-full p-6 sm:p-8 text-center border-2 border-border shadow-2xl relative">
+            <div className="w-16 h-16 rounded-full bg-[#008236]/15 border border-[#008236]/30 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-[#008236]" />
+            </div>
+            
+            {selectedRole === "customer" ? (
+              <>
+                <h3 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Account Created Successfully!
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Welcome to Anovra! You can now start scanning your skin, tracking ingredients, and creating routines.
+                </p>
+                <button
+                  onClick={() => {
+                    setShowPopupModal(false);
+                    setView("userdashboard");
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Enter Portal
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Vendor Application Submitted!
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Our team will verify your business CAC certificate details within 3-5 working days. You can explore your dashboard workspace right away.
+                </p>
+                <button
+                  onClick={() => {
+                    setShowPopupModal(false);
+                    setView("dashboard");
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Enter Workspace
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -477,88 +781,540 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
     if (!email || !password) { setError("Please enter your email and password."); return; }
     setError("");
     setLoading(true);
+    
     setTimeout(() => {
       setLoading(false);
-      setView("dashboard");
+      const cleanEmail = email.trim().toLowerCase();
+      
+      if (cleanEmail === "admin@anovra.africa") {
+        if (password === "Admin@2025!") {
+          setView("admin");
+        } else {
+          setError("Invalid admin credentials. Access restricted.");
+        }
+      } else if (cleanEmail.includes("vendor") || cleanEmail.includes("store") || cleanEmail.includes("merchant")) {
+        setView("dashboard");
+      } else {
+        setView("userdashboard");
+      }
     }, 1400);
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-
+    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      {/* Left side panel: Brand marketing (Hidden on mobile) */}
+      <div className="hidden md:flex w-[40%] bg-[#008236] text-white p-12 flex-col justify-between relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.06),transparent)] pointer-events-none" />
+        
         {/* Logo */}
-        <div className="text-center mb-10">
-          <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto mx-auto mb-4 object-contain" />
-          <h1 className="text-3xl font-light text-foreground mb-1" style={{ fontFamily: "'Fraunces', serif" }}>Welcome back</h1>
-          <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign in to your vendor account</p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setView("landing")}
+            className="transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            aria-label="Anovra Home"
+          >
+            <img src="/logo.png" alt="Anovra Logo" className="h-16 w-auto object-contain brightness-0 invert" />
+          </button>
         </div>
 
-        <div className="space-y-4">
-          {/* Email */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Email address</label>
-            <input
-              className="w-full px-3 py-2.5 bg-input-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-accent/50 transition-all"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setError(""); }}
-              onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
+        {/* Feature List */}
+        <div className="my-auto space-y-8 pr-4">
+          <h2 className="text-4xl font-light leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+            Understand Your Skin. Make Smarter Decisions.
+          </h2>
+          
+          <div className="space-y-6">
+            {[
+              { title: "AI-Powered Skin Test", desc: "Diagnose skin concerns, calculate your score, and receive expert routine guides." },
+              { title: "Verified Skincare Ecosystem", desc: "Interact and shop securely from verified vendors with active CAC registration checkmarks." },
+              { title: "Personalized Recommendation Catalogs", desc: "Access products custom-tailored to your exact skin type by expert analysis engines." },
+            ].map((f) => (
+              <div key={f.title} className="flex gap-4">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#C86B3A] mt-2 flex-shrink-0" />
+                <div>
+                  <p className="font-bold text-sm text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.title}</p>
+                  <p className="text-xs text-white/70 mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer info */}
+        <div>
+          <p className="text-[10px] text-white/40 tracking-wider uppercase" style={{ fontFamily: "'DM Mono', monospace" }}>
+            Anovra Africa © 2026
+          </p>
+        </div>
+      </div>
+
+      {/* Right side panel: Sign In Form */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-[#FAF7F2]/40">
+        <div className="max-w-md w-full py-8">
+          {/* Header */}
+          <div className="text-center sm:text-left mb-8">
+            <button
+              onClick={() => setView("landing")}
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground mb-6 transition-colors cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            />
+            >
+              <ChevronDown className="w-4 h-4 rotate-90" /> Back
+            </button>
+
+            <div className="md:hidden flex justify-center mb-4">
+              <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto object-contain" />
+            </div>
+
+            <p className="text-xs tracking-[0.2em] uppercase text-[#C86B3A] font-bold mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
+              Secure Gateway
+            </p>
+            <h1 className="text-4xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+              Welcome back
+            </h1>
+            <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Sign in to access your Anovra account
+            </p>
           </div>
 
-          {/* Password */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Password</label>
-              <button className="text-xs text-accent hover:text-accent/80 underline underline-offset-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Forgot password?
-              </button>
-            </div>
-            <div className="relative">
+          {/* Form Card */}
+          <div className="bg-card border-2 border-border/80 p-6 sm:p-10 rounded-3xl shadow-xl space-y-5">
+            {/* Email */}
+            <div>
+              <label className="block text-xs font-bold text-[#008236] mb-1.5 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Email address
+              </label>
               <input
-                className="w-full px-3 py-2.5 pr-10 bg-input-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-accent/50 transition-all"
-                type={showPass ? "text" : "password"}
-                placeholder="Your password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                className="w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               />
-              <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                <Eye className="w-4 h-4" />
-              </button>
             </div>
+
+            {/* Password */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-[#008236] uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Password</label>
+                <button
+                  type="button"
+                  onClick={() => setView("forgotpassword")}
+                  className="text-xs text-[#008236] font-semibold hover:text-[#006c2c] underline underline-offset-2 cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  className="w-full px-3.5 py-2.5 pr-10 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+                  type={showPass ? "text" : "password"}
+                  placeholder="Enter password"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                  onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+                <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                  <Eye className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="flex items-center gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <p className="text-xs text-red-600 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{error}</p>
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              onClick={handleSignIn}
+              disabled={loading}
+              className="w-full py-3.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2 mt-2 cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              {loading ? (
+                <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Signing in…</>
+              ) : "Sign In"}
+            </button>
+
+            <p className="text-center text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Don&apos;t have an account?{" "}
+              <button onClick={() => setView("signup")} className="text-[#008236] underline underline-offset-2 hover:text-[#006c2c] font-semibold cursor-pointer">
+                Join now
+              </button>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ForgotPasswordView({ setView }: { setView: (v: View) => void }) {
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleForgot = () => {
+    if (!email) { setError("Please enter your email address."); return; }
+    setError("");
+    setLoading(true);
+
+    setTimeout(() => {
+      setLoading(false);
+      setSuccess(true);
+    }, 1500);
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      {/* Left side panel: Brand marketing (Hidden on mobile) */}
+      <div className="hidden md:flex w-[40%] bg-[#008236] text-white p-12 flex-col justify-between relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.06),transparent)] pointer-events-none" />
+        
+        {/* Logo */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setView("landing")}
+            className="transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            aria-label="Anovra Home"
+          >
+            <img src="/logo.png" alt="Anovra Logo" className="h-16 w-auto object-contain brightness-0 invert" />
+          </button>
+        </div>
+
+        {/* Feature List */}
+        <div className="my-auto space-y-8 pr-4">
+          <h2 className="text-4xl font-light leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+            Secure Skincare Accounts.
+          </h2>
+          
+          <div className="space-y-6">
+            {[
+              { title: "Security Verification", desc: "Safety checks on your password resets protect your personal data logs." },
+              { title: "Access Recoveries", desc: "Fast recovery systems restore your routines, logs, and scanned recommendations." },
+            ].map((f) => (
+              <div key={f.title} className="flex gap-4">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#C86B3A] mt-2 flex-shrink-0" />
+                <div>
+                  <p className="font-bold text-sm text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.title}</p>
+                  <p className="text-xs text-white/70 mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer info */}
+        <div>
+          <p className="text-[10px] text-white/40 tracking-wider uppercase" style={{ fontFamily: "'DM Mono', monospace" }}>
+            Anovra Africa © 2026
+          </p>
+        </div>
+      </div>
+
+      {/* Right side panel */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-[#FAF7F2]/40">
+        <div className="max-w-md w-full py-8">
+          {/* Header */}
+          <div className="text-center sm:text-left mb-8">
+            <button
+              onClick={() => setView("signin")}
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground mb-6 transition-colors cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              <ChevronDown className="w-4 h-4 rotate-90" /> Back to Sign In
+            </button>
+
+            <div className="md:hidden flex justify-center mb-4">
+              <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto object-contain" />
+            </div>
+
+            <p className="text-xs tracking-[0.2em] uppercase text-[#C86B3A] font-bold mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
+              Password Recovery
+            </p>
+            <h1 className="text-4xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+              Forgot password?
+            </h1>
+            <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              No worries, enter your email and we will send a reset link
+            </p>
           </div>
 
-          {/* Error */}
-          {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-              <p className="text-xs text-red-600" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{error}</p>
-            </div>
-          )}
+          {/* Form Card */}
+          <div className="bg-card border-2 border-border/80 p-6 sm:p-10 rounded-3xl shadow-xl space-y-5">
+            {success ? (
+              <div className="space-y-5 text-center py-4">
+                <div className="w-12 h-12 rounded-full bg-[#008236]/15 flex items-center justify-center mx-auto mb-2">
+                  <Check className="w-6 h-6 text-[#008236]" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Reset link sent!
+                </h3>
+                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  We have sent a verification email to <span className="font-semibold text-foreground">{email}</span>. Click on the link to reset your password.
+                </p>
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    onClick={() => setView("resetpassword")}
+                    className="w-full py-3.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white font-bold text-sm shadow-md hover:shadow-lg transition-colors cursor-pointer"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    Go to Reset Password screen (Demo)
+                  </button>
+                  <button
+                    onClick={() => setView("signin")}
+                    className="w-full py-3 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Email */}
+                <div>
+                  <label className="block text-xs font-bold text-[#008236] mb-1.5 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Email address
+                  </label>
+                  <input
+                    className="w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); setError(""); }}
+                    onKeyDown={(e) => e.key === "Enter" && handleForgot()}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  />
+                </div>
 
-          {/* Submit */}
+                {/* Error */}
+                {error && (
+                  <div className="flex items-center gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl">
+                    <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                    <p className="text-xs text-red-600 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{error}</p>
+                  </div>
+                )}
+
+                {/* Submit */}
+                <button
+                  onClick={handleForgot}
+                  disabled={loading}
+                  className="w-full py-3.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2 mt-2 cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {loading ? (
+                    <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending Link…</>
+                  ) : "Send Reset Link"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ResetPasswordView({ setView }: { setView: (v: View) => void }) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const passwordsMatch = password === confirmPassword;
+  const isStrengthValid = password.length >= 8;
+
+  const handleReset = () => {
+    if (!password || !confirmPassword) { setError("Please fill in both fields."); return; }
+    if (!isStrengthValid) { setError("Password must be at least 8 characters."); return; }
+    if (!passwordsMatch) { setError("Passwords do not match."); return; }
+    setError("");
+    setLoading(true);
+
+    setTimeout(() => {
+      setLoading(false);
+      setSuccess(true);
+    }, 1500);
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      {/* Left side panel: Brand marketing (Hidden on mobile) */}
+      <div className="hidden md:flex w-[40%] bg-[#008236] text-white p-12 flex-col justify-between relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.06),transparent)] pointer-events-none" />
+        
+        {/* Logo */}
+        <div className="flex items-center gap-3">
           <button
-            onClick={handleSignIn}
-            disabled={loading}
-            className="w-full py-3 rounded-xl bg-accent text-white font-medium text-sm hover:bg-accent/90 transition-all disabled:opacity-70 flex items-center justify-center gap-2 mt-2"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            onClick={() => setView("landing")}
+            className="transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            aria-label="Anovra Home"
           >
-            {loading ? (
-              <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Signing in…</>
-            ) : "Sign in to dashboard"}
+            <img src="/logo.png" alt="Anovra Logo" className="h-16 w-auto object-contain brightness-0 invert" />
           </button>
+        </div>
 
-          <p className="text-center text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Don't have an account?{" "}
-            <button onClick={() => setView("signup")} className="text-accent underline underline-offset-2 hover:text-accent/80 font-medium">
-              Join as a vendor
-            </button>
+        {/* Feature List */}
+        <div className="my-auto space-y-8 pr-4">
+          <h2 className="text-4xl font-light leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+            Set a Strong Password.
+          </h2>
+          
+          <div className="space-y-6">
+            {[
+              { title: "Avoid Simple Terms", desc: "Include uppercase letters, numbers, and symbols to ensure maximum safety." },
+              { title: "Unified Session Logout", desc: "Updating password logs out all other active device login sessions." },
+            ].map((f) => (
+              <div key={f.title} className="flex gap-4">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#C86B3A] mt-2 flex-shrink-0" />
+                <div>
+                  <p className="font-bold text-sm text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.title}</p>
+                  <p className="text-xs text-white/70 mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer info */}
+        <div>
+          <p className="text-[10px] text-white/40 tracking-wider uppercase" style={{ fontFamily: "'DM Mono', monospace" }}>
+            Anovra Africa © 2026
           </p>
+        </div>
+      </div>
+
+      {/* Right side panel */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-[#FAF7F2]/40">
+        <div className="max-w-md w-full py-8">
+          {/* Header */}
+          <div className="text-center sm:text-left mb-8">
+            <button
+              onClick={() => setView("signin")}
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground mb-6 transition-colors cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              <ChevronDown className="w-4 h-4 rotate-90" /> Back to Sign In
+            </button>
+
+            <div className="md:hidden flex justify-center mb-4">
+              <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto object-contain" />
+            </div>
+
+            <p className="text-xs tracking-[0.2em] uppercase text-[#C86B3A] font-bold mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
+              Secure Update
+            </p>
+            <h1 className="text-4xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+              Reset password
+            </h1>
+            <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Create a new secure password for your account
+            </p>
+          </div>
+
+          {/* Form Card */}
+          <div className="bg-card border-2 border-border/80 p-6 sm:p-10 rounded-3xl shadow-xl space-y-5">
+            {success ? (
+              <div className="space-y-5 text-center py-4">
+                <div className="w-12 h-12 rounded-full bg-[#008236]/15 flex items-center justify-center mx-auto mb-2">
+                  <Check className="w-6 h-6 text-[#008236]" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Password updated!
+                </h3>
+                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Your password has been successfully updated. You can now use your new password to sign in.
+                </p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => setView("signin")}
+                    className="w-full py-3.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white font-bold text-sm shadow-md hover:shadow-lg transition-colors cursor-pointer"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    Go to Sign In
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Password */}
+                <div>
+                  <label className="block text-xs font-bold text-[#008236] mb-1.5 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      className="w-full px-3.5 py-2.5 pr-10 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+                      type={showPass ? "text" : "password"}
+                      placeholder="At least 8 characters"
+                      value={password}
+                      onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    />
+                    <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <PasswordStrength password={password} />
+                </div>
+
+                {/* Confirm Password */}
+                <div>
+                  <label className="block text-xs font-bold text-[#008236] mb-1.5 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      className="w-full px-3.5 py-2.5 pr-10 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+                      type={showConfirm ? "text" : "password"}
+                      placeholder="Re-enter password"
+                      value={confirmPassword}
+                      onChange={(e) => { setConfirmPassword(e.target.value); setError(""); }}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    />
+                    <button type="button" onClick={() => setShowConfirm((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {confirmPassword && !passwordsMatch && (
+                    <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
+                  )}
+                </div>
+
+                {/* Error */}
+                {error && (
+                  <div className="flex items-center gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl">
+                    <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                    <p className="text-xs text-red-600 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{error}</p>
+                  </div>
+                )}
+
+                {/* Submit */}
+                <button
+                  onClick={handleReset}
+                  disabled={loading || !isStrengthValid || !passwordsMatch}
+                  className="w-full py-3.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2 mt-2 cursor-pointer disabled:cursor-not-allowed"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {loading ? (
+                    <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Resetting…</>
+                  ) : "Reset Password"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

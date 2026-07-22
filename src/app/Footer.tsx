@@ -2,7 +2,7 @@ import type { View } from "./types";
 
 export function Footer({ setView }: { setView: (v: View) => void }) {
   return (
-    <footer className="bg-foreground text-primary-foreground mt-auto">
+    <footer className="bg-[#008236] text-white mt-auto">
       {/* Main grid */}
       <div className="max-w-7xl mx-auto px-6 pt-16 pb-10 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-10">
         {/* Brand column */}
@@ -17,7 +17,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
             </button>
           </div>
           <p
-            className="text-sm text-white/50 leading-relaxed max-w-xs"
+            className="text-sm text-white/80 leading-relaxed max-w-xs"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             AI-powered skincare intelligence built for African skin. Connecting consumers to products that actually work, and giving vendors the engine to make it happen.
@@ -39,7 +39,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
         {/* Platform */}
         <div>
           <p
-            className="text-xs text-white/30 uppercase tracking-widest mb-4"
+            className="text-xs text-white/70 uppercase tracking-widest mb-4"
             style={{ fontFamily: "'DM Mono', monospace" }}
           >
             Platform
@@ -56,7 +56,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
               <li key={l.label}>
                 <button
                   onClick={() => setView(l.view)}
-                  className="text-sm text-white/50 hover:text-white/90 transition-colors text-left"
+                  className="text-sm text-white/85 hover:text-white transition-colors text-left"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   {l.label}
@@ -69,7 +69,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
         {/* For vendors */}
         <div>
           <p
-            className="text-xs text-white/30 uppercase tracking-widest mb-4"
+            className="text-xs text-white/70 uppercase tracking-widest mb-4"
             style={{ fontFamily: "'DM Mono', monospace" }}
           >
             Vendors
@@ -84,7 +84,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
               <li key={l.label}>
                 <button
                   onClick={() => setView(l.view)}
-                  className="text-sm text-white/50 hover:text-white/90 transition-colors text-left"
+                  className="text-sm text-white/85 hover:text-white transition-colors text-left"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   {l.label}
@@ -97,7 +97,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
         {/* Contact */}
         <div>
           <p
-            className="text-xs text-white/30 uppercase tracking-widest mb-4"
+            className="text-xs text-white/70 uppercase tracking-widest mb-4"
             style={{ fontFamily: "'DM Mono', monospace" }}
           >
             Contact
@@ -109,7 +109,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
               <li key={l.label}>
                 <button
                   onClick={() => setView(l.view)}
-                  className="text-sm text-white/50 hover:text-white/90 transition-colors text-left"
+                  className="text-sm text-white/85 hover:text-white transition-colors text-left"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   {l.label}
@@ -119,12 +119,12 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
             {[
               { label: "hello@anovra.africa" },
               { label: "vendors@anovra.africa" },
-              { label: "+234 800 ANOVRA" },
+              { label: "+2349167664619" },
               { label: "Lagos · Abuja" },
             ].map((c) => (
               <li key={c.label}>
                 <span
-                  className="text-sm text-white/35"
+                  className="text-sm text-white/80"
                   style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}
                 >
                   {c.label}
@@ -137,13 +137,13 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
 
       {/* Divider */}
       <div className="max-w-7xl mx-auto px-6">
-        <div className="border-t border-white/8" />
+        <div className="border-t border-white/20" />
       </div>
 
       {/* Bottom bar */}
       <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
         <p
-          className="text-xs text-white/25"
+          className="text-xs text-white/60"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
           © {new Date().getFullYear()} Anovra Africa Ltd. All rights reserved.
@@ -152,7 +152,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
           {["Privacy Policy", "Terms of Service", "Cookie Policy"].map((t) => (
             <button
               key={t}
-              className="text-xs text-white/25 hover:text-white/50 transition-colors"
+              className="text-xs text-white/60 hover:text-white/90 transition-colors"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               {t}
@@ -160,7 +160,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
           ))}
         </div>
         <p
-          className="text-xs text-white/15"
+          className="text-xs text-white/40"
           style={{ fontFamily: "'DM Mono', monospace" }}
         >
           v2.1.0 · Lagos, Nigeria 🇳🇬

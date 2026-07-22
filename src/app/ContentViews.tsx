@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle, ChevronDown, ChevronUp, MapPin, AlertCircle, ExternalLink } from "lucide-react";
+import { User, Store, Users, ShieldCheck, Mail, MessageSquare, CheckCircle, ChevronDown, ChevronUp, MapPin, AlertCircle, ExternalLink } from "lucide-react";
 import type { View } from "./types";
 
 // ---- ABOUT ----
@@ -7,16 +7,16 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
   const users = [
     {
       role: "Skin Care Customers",
-      emoji: "🧴",
+      icon: User,
       tagline: "Know your skin. Find what actually works.",
       color: "bg-amber-50 border-amber-200",
       accentClass: "text-amber-700",
       dotColor: "bg-amber-500",
-      photo: "https://images.unsplash.com/photo-1614707267537-b85aaf00c4b7?w=600&h=400&fit=crop&auto=format",
-      desc: "Millions of people in Africa spend money on skincare products that don't match their skin type, tone, or concern — often because there's no accessible, personalised guidance. Anovra changes that.",
+      photo: "/skin-analysis-feature.jpg",
+      desc: "Millions of people in Africa spend money on skincare products that don't match their skin type, tone, or concern — often because there's no accessible, personalized guidance. Anovra changes that.",
       benefits: [
-        "AI-powered skin test that analyses your unique skin type, tone, and concerns",
-        "Personalised product recommendations matched to your skin profile",
+        "AI-powered skin test that analyzes your unique skin type, tone, and concerns",
+        "Personalized product recommendations matched to your skin profile",
         "Results from vendors near you, in your budget",
         "Understand what each ingredient does and why it's recommended for you",
         "Scan product labels to check ingredient safety before you buy",
@@ -26,12 +26,12 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
     },
     {
       role: "Skincare Vendors",
-      emoji: "🏪",
+      icon: Store,
       tagline: "Sell smarter. Reach the right customer every time.",
       color: "bg-orange-50 border-orange-200",
       accentClass: "text-orange-700",
       dotColor: "bg-accent",
-      photo: "https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=600&h=400&fit=crop&auto=format",
+      photo: "/vendor-dashboard-feature.jpg",
       desc: "Whether you run a single shop or a growing brand, Anovra gives you a complete digital storefront, AI-powered product matching, and real data on what your customers need — so every recommendation feels personal.",
       benefits: [
         "Your own branded skin test page — share your link and let Anovra do the selling",
@@ -46,12 +46,12 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
     },
     {
       role: "Sales & Marketing Team",
-      emoji: "📣",
+      icon: Users,
       tagline: "Grow the network. Earn on every vendor you bring in.",
       color: "bg-rose-50 border-rose-200",
       accentClass: "text-rose-700",
       dotColor: "bg-rose-500",
-      photo: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&h=400&fit=crop&auto=format",
+      photo: "/network-referrals-feature.jpg",
       desc: "Anovra's growth runs on the people who bring vendors onto the platform. The team portal gives every sales and marketing staff member their own referral link, live performance data, and everything they need to close.",
       benefits: [
         "Unique referral link — every vendor or customer who signs up is tracked to you",
@@ -66,12 +66,12 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
     },
     {
       role: "Platform Admins",
-      emoji: "🛡️",
+      icon: ShieldCheck,
       tagline: "Full visibility. Full control.",
       color: "bg-slate-50 border-slate-200",
       accentClass: "text-slate-700",
       dotColor: "bg-slate-500",
-      photo: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&h=400&fit=crop&auto=format",
+      photo: "/admin-control-feature.jpg",
       desc: "Anovra admins keep the platform safe, fair, and growing. From approving vendors and reviewing flagged ingredients to managing team accounts and monitoring platform revenue — everything is in one place.",
       benefits: [
         "Approve or reject vendor applications with a full profile review",
@@ -94,9 +94,9 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
   ];
 
   const timeline = [
-    { year: "2024", title: "Idea born", body: "Founded by a team frustrated by how hard it was for African consumers to find skincare that actually worked for their skin tone and type." },
-    { year: "Q1 2025", title: "Beta launch", body: "First 20 vendors onboarded across Lagos and Abuja. Skin test engine goes live with 16 African skin concerns." },
-    { year: "Q2 2025", title: "AI engine upgrade", body: "Recommendation engine expanded to 8 real-time signals. Ingredient safety layer launched to protect consumers from harmful formulations." },
+    { year: "2025", title: "Idea born", body: "Founded by Shulammite Omosanya, out of frustration by how hard it was for African consumers to find skincare that actually worked for their skin tone and type." },
+    { year: "Q4 2025", title: "Beta launch", body: "First 20 vendors onboarded across Abuja and Ibadan. Skin test engine goes live with 16 African skin concerns." },
+    { year: "Q1 2026", title: "AI engine upgrade", body: "Recommendation engine expanded to 8 real-time signals. Ingredient safety layer launched to protect consumers from harmful formulations." },
     { year: "Now", title: "Scaling across Nigeria", body: "184 vendors. 48,000+ scans. Growing into a platform every African skincare brand needs to be on." },
   ];
 
@@ -154,7 +154,7 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
       <section className="max-w-4xl mx-auto px-6 py-20 text-center">
         <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4" style={{ fontFamily: "'DM Mono', monospace" }}>Our mission</p>
         <h2 className="text-3xl sm:text-4xl font-light text-foreground leading-snug" style={{ fontFamily: "'Fraunces', serif" }}>
-          Every person in Africa deserves skincare advice as personalised as their skin.
+          Every person in Africa deserves skincare advice as personalized as their skin.
         </h2>
         <p className="text-muted-foreground mt-5 max-w-2xl mx-auto leading-relaxed">
           African skin is diverse — melanin-rich, climate-exposed, and deeply varied across regions. Yet most skincare advice is designed for skin types that look nothing like ours. Anovra was built to fix that, using AI trained on African skin data and a network of African vendors who know their customers.
@@ -172,26 +172,28 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
           </div>
 
           <div className="space-y-16">
-            {users.map((u, i) => (
-              <div
-                key={u.role}
-                className={`grid lg:grid-cols-2 gap-10 items-center ${i % 2 === 1 ? "lg:grid-flow-col-dense" : ""}`}
-              >
-                {/* Image */}
-                <div className={`rounded-2xl overflow-hidden ${i % 2 === 1 ? "lg:col-start-2" : ""}`}>
-                  <img
-                    src={u.photo}
-                    alt={u.role}
-                    className="w-full h-64 object-cover"
-                  />
-                </div>
-
-                {/* Content */}
-                <div className={i % 2 === 1 ? "lg:col-start-1 lg:row-start-1" : ""}>
-                  <div className={`inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border mb-4 ${u.color} ${u.accentClass}`}>
-                    <span>{u.emoji}</span>
-                    <span>{u.role}</span>
+            {users.map((u, i) => {
+              const Icon = u.icon;
+              return (
+                <div
+                  key={u.role}
+                  className={`grid lg:grid-cols-2 gap-10 items-center ${i % 2 === 1 ? "lg:grid-flow-col-dense" : ""}`}
+                >
+                  {/* Image */}
+                  <div className={`rounded-2xl overflow-hidden ${i % 2 === 1 ? "lg:col-start-2" : ""}`}>
+                    <img
+                      src={u.photo}
+                      alt={u.role}
+                      className="w-full h-64 object-cover"
+                    />
                   </div>
+
+                  {/* Content */}
+                  <div className={i % 2 === 1 ? "lg:col-start-1 lg:row-start-1" : ""}>
+                    <div className={`inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border mb-4 ${u.color} ${u.accentClass}`}>
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{u.role}</span>
+                    </div>
                   <h3 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
                     {u.tagline}
                   </h3>
@@ -224,10 +226,11 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      </section>
+      </div>
+    </section>
 
       {/* Timeline */}
       <section className="bg-foreground/[0.03] border-y border-border mt-20 py-20 px-6">
@@ -252,31 +255,31 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
       </section>
 
       {/* Final CTA */}
-      <section className="py-24 px-6 text-center bg-foreground">
+      <section className="py-24 px-6 text-center bg-[#FAF7F2] border-t border-border/60">
         <div className="max-w-2xl mx-auto">
-          <p className="text-xs uppercase tracking-widest text-accent mb-4" style={{ fontFamily: "'DM Mono', monospace" }}>Ready to start?</p>
-          <h2 className="text-3xl sm:text-4xl font-light text-primary-foreground mb-5" style={{ fontFamily: "'Fraunces', serif" }}>
+          <p className="text-xs uppercase tracking-widest text-[#C86B3A] mb-4 font-bold" style={{ fontFamily: "'DM Mono', monospace" }}>Ready to start?</p>
+          <h2 className="text-3xl sm:text-4xl font-light text-foreground mb-5" style={{ fontFamily: "'Fraunces', serif" }}>
             Find your place in the Anovra ecosystem
           </h2>
-          <p className="text-white/50 text-sm mb-10 leading-relaxed">
+          <p className="text-muted-foreground text-sm mb-10 leading-relaxed">
             Whether you have skin to care for, products to sell, or a network to grow — Anovra has a place for you.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={() => setView("skintest")}
-              className="px-6 py-3 bg-accent text-white rounded-xl text-sm font-medium hover:bg-accent/90 transition-colors"
+              className="px-6 py-3 bg-[#008236] hover:bg-[#006c2c] text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer shadow-sm"
             >
               Take the skin test
             </button>
             <button
               onClick={() => setView("signup")}
-              className="px-6 py-3 bg-white/10 text-white rounded-xl text-sm font-medium hover:bg-white/15 transition-colors border border-white/15"
+              className="px-6 py-3 border-2 border-[#008236] text-[#008236] bg-transparent rounded-xl text-sm font-semibold hover:bg-[#008236]/5 transition-colors cursor-pointer"
             >
               Become a vendor
             </button>
             <button
               onClick={() => setView("teamlogin")}
-              className="px-6 py-3 bg-white/10 text-white rounded-xl text-sm font-medium hover:bg-white/15 transition-colors border border-white/15"
+              className="px-6 py-3 border-2 border-[#008236] text-[#008236] bg-transparent rounded-xl text-sm font-semibold hover:bg-[#008236]/5 transition-colors cursor-pointer"
             >
               Join the sales team
             </button>
@@ -292,6 +295,17 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
   const [form, setForm] = useState({ name: "", email: "", role: "", subject: "", message: "" });
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("all");
+
+  const categories = [
+    { id: "all", label: "All Questions" },
+    { id: "general", label: "General" },
+    { id: "skin", label: "Skin Analysis" },
+    { id: "products", label: "Recommendations" },
+    { id: "vendors", label: "For Vendors" },
+    { id: "privacy", label: "Privacy & Security" },
+    { id: "support", label: "Account & Support" },
+  ];
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -301,52 +315,188 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
 
   const channels = [
     {
-      icon: "📧",
+      icon: Mail,
       label: "General enquiries",
       value: "hello@anovra.africa",
       sub: "We reply within 24 hours",
     },
     {
-      icon: "🏪",
+      icon: Store,
       label: "Vendor support",
       value: "vendors@anovra.africa",
       sub: "Onboarding, catalog & billing help",
     },
     {
-      icon: "🛡️",
+      icon: ShieldCheck,
       label: "Admin & compliance",
       value: "admin@anovra.africa",
       sub: "Platform issues and safety reports",
     },
     {
-      icon: "💬",
+      icon: MessageSquare,
       label: "WhatsApp business",
-      value: "+234 800 ANOVRA",
+      value: "+2349167664619",
       sub: "Mon – Fri, 9am – 6pm WAT",
     },
   ];
 
   const offices = [
     {
-      city: "Lagos",
-      address: "14 Admiralty Way, Lekki Phase 1, Lagos, Nigeria",
-      tag: "HQ",
+      city: "Aba",
+      address: "No 2 Ajiwe street, off brass road, Aba, Nigeria",
+      tag: "Branch Office",
       photo: "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=600&h=340&fit=crop&auto=format",
     },
     {
       city: "Abuja",
-      address: "Suite 4B, Wuse Zone 5, Abuja FCT, Nigeria",
-      tag: "Satellite",
+      address: "Former pack well, Lubge, FCT, Abuja, Nigeria.",
+      tag: "Satellite Office",
       photo: "https://images.unsplash.com/photo-1568515387631-8b650bbcdb90?w=600&h=340&fit=crop&auto=format",
     },
   ];
 
   const faqs = [
-    { q: "How do I sign up as a vendor?", a: "Click 'Join as a vendor' from the nav or the landing page. You'll need your CAC registration number and a social media handle to complete sign-up." },
-    { q: "Is the skin test free for customers?", a: "Yes — the skin test is completely free for anyone. No account required. Vendors' product recommendations are shown at the end." },
-    { q: "How does the AI recommendation work?", a: "Our engine analyses 8 signals from your scan — skin tone, type, concern, climate zone, age group, sensitivity, budget, and ingredient history — to rank the most suitable products in a vendor's catalog." },
-    { q: "What plans do you offer vendors?", a: "We have a Free tier, a Basic plan (₦12,500/mo), and a Premium plan (₦25,000/mo). Premium includes the embed widget, unlimited catalog, and priority support." },
-    { q: "How do I report a harmful ingredient or unsafe product?", a: "Email admin@anovra.africa or use the safety report form in the vendor dashboard. Our ingredient safety layer also automatically flags suspected harmful formulations." },
+    // General
+    {
+      cat: "general",
+      q: "What is Anovra?",
+      a: "Anovra is Africa's skincare intelligence platform that helps people understand their skin through advanced image analysis and connects them with trusted skincare vendors offering personalized product recommendations."
+    },
+    {
+      cat: "general",
+      q: "How does Anovra work?",
+      a: "Simply upload clear photos of your skin, and Anovra analyzes visible skin characteristics such as texture, pigmentation, dryness, oiliness, redness, pores, and blemishes. Based on the results, you'll receive a personalized skin report and product recommendations from trusted vendors."
+    },
+    {
+      cat: "general",
+      q: "Is Anovra a skincare brand?",
+      a: "No. Anovra does not manufacture or sell skincare products. We provide a technology platform that helps users understand their skin and discover products from verified skincare vendors."
+    },
+    {
+      cat: "general",
+      q: "Is Anovra available across Africa?",
+      a: "Anovra launches first in Nigeria, with plans to expand across other African countries."
+    },
+    // Skin Analysis
+    {
+      cat: "skin",
+      q: "What skin concerns can Anovra identify?",
+      a: "Anovra analyzes visible skin characteristics that may indicate concerns such as: Acne, Hyperpigmentation, Dark spots, Uneven skin tone, Melasma, Fine lines, Wrinkles, Dry skin, Oily skin, Combination skin, Sensitive skin, Enlarged pores, Redness, Dehydration, and Visible blemishes."
+    },
+    {
+      cat: "skin",
+      q: "Which parts of the body can I analyze?",
+      a: "You can analyze any visible skin area, including: Face, Neck, Hands, Arms, Legs, Back, and other visible skin areas."
+    },
+    {
+      cat: "skin",
+      q: "Do I need a professional camera?",
+      a: "No. A modern smartphone with a clear camera is enough. We also provide guidance to help you capture high-quality images for better analysis."
+    },
+    {
+      cat: "skin",
+      q: "Does Anovra diagnose skin diseases?",
+      a: "No. Anovra provides an analysis of visible skin characteristics and personalized skincare recommendations. It is not a medical diagnostic tool and does not replace professional medical advice from a dermatologist."
+    },
+    // Product Recommendations
+    {
+      cat: "products",
+      q: "How are products recommended?",
+      a: "Recommendations are based on your visible skin characteristics and matched with products from trusted vendors on the platform. Anovra considers factors such as: Skin type, Skin concerns, Severity, Ingredients, Product compatibility, and Vendor availability."
+    },
+    {
+      cat: "products",
+      q: "Can I choose where I buy my products?",
+      a: "Yes. You can browse products from multiple verified vendors and choose the one that best fits your preferences."
+    },
+    {
+      cat: "products",
+      q: "Can I share my skin report with a skincare vendor?",
+      a: "Yes. You can send your skin analysis to a vendor for additional review before making a purchase, allowing you to receive even more personalized guidance."
+    },
+    // For Vendors
+    {
+      cat: "vendors",
+      q: "Who can become a vendor?",
+      a: "Anovra welcomes: Beauty stores, Cosmetic retailers, Organic skincare brands, Online skincare businesses, Beauty entrepreneurs, and Dermatology clinics."
+    },
+    {
+      cat: "vendors",
+      q: "How does Anovra help my business?",
+      a: "Anovra helps vendors: Reduce consultation time, Personalize recommendations, Build customer trust, Increase conversions, Manage products digitally, Reach more customers, and Gain business insights through analytics."
+    },
+    {
+      cat: "vendors",
+      q: "Can I use Anovra with my existing website?",
+      a: "Yes. Anovra provides an embeddable skin analysis widget that integrates directly into your website, allowing customers to complete their analysis without leaving your site."
+    },
+    {
+      cat: "vendors",
+      q: "Can customers receive recommendations only from my products?",
+      a: "Yes. When customers use your unique Anovra link, recommendations are generated exclusively from products available in your Anovra Mini Shop."
+    },
+    {
+      cat: "vendors",
+      q: "What is an Anovra Mini Shop?",
+      a: "Your Mini Shop is your personalized digital storefront inside Anovra, where you can showcase your products, manage inventory, update pricing, and receive customer orders."
+    },
+    // Privacy & Security
+    {
+      cat: "privacy",
+      q: "Are my photos safe?",
+      a: "Yes. Your uploaded images are securely processed and protected using industry-standard security practices. Your information is handled in accordance with our Privacy Policy."
+    },
+    {
+      cat: "privacy",
+      q: "Will my images be shared publicly?",
+      a: "No. Your skin images are never publicly displayed and are only used to generate your personalized analysis unless you choose to share your report with a vendor."
+    },
+    {
+      cat: "privacy",
+      q: "Can I delete my account?",
+      a: "Yes. You can request account deletion at any time, and your personal data will be handled according to our data retention and privacy policies."
+    },
+    // Account & Support
+    {
+      cat: "support",
+      q: "Do I need to create an account?",
+      a: "You can explore parts of Anovra without an account, but creating one allows you to save your analysis history, track your skincare journey, and access personalized recommendations."
+    },
+    {
+      cat: "support",
+      q: "How can I contact Anovra?",
+      a: "You can reach our support team through the Contact Us page or email us directly at support@anovra.africa. We're here to help with any questions about the platform."
+    },
+    {
+      cat: "support",
+      q: "Is Anovra free to use?",
+      a: "No. Anovra is a subscription-based platform designed to provide ongoing personalized skincare insights and recommendations. We offer flexible plans for both skincare consumers and skincare vendors, so you can choose the option that best suits your needs."
+    },
+    {
+      cat: "support",
+      q: "Can I upgrade or downgrade my plan?",
+      a: "Yes. You can change your subscription at any time. Upgrades take effect immediately, while downgrades are applied at the start of your next billing cycle."
+    },
+    {
+      cat: "support",
+      q: "Can I cancel my subscription?",
+      a: "Yes. You can cancel your subscription whenever you choose. Your access will remain active until the end of your current billing period."
+    },
+    {
+      cat: "support",
+      q: "Which plan is best for me?",
+      a: "For users: Glow Pass is ideal for occasional skin check-ups. Glow Pass+ is perfect for users actively building a skincare routine and tracking progress. Premium Glow is designed for users who want expert guidance, family profiles, and premium benefits. For businesses: Basic is best for small skincare shops. Vendor Pro includes a 14-day free trial, allowing businesses to experience Anovra's advanced features before subscribing. Brand is built for established brands, clinics, and enterprises that require custom integrations and advanced team management."
+    },
+    {
+      cat: "support",
+      q: "What payment methods do you accept?",
+      a: "Anovra accepts secure online payments through supported payment providers. Depending on your location, you can pay using debit cards, credit cards, bank transfers, and other supported payment methods."
+    },
+    {
+      cat: "support",
+      q: "Does Anovra replace a dermatologist?",
+      a: "No. Anovra is a skincare intelligence platform that analyzes visible skin characteristics and provides personalized skincare recommendations. It is designed to support informed skincare decisions and does not replace professional medical diagnosis or treatment. If you have severe, persistent, or worsening skin conditions, you should consult a qualified healthcare professional."
+    }
   ];
 
   return (
@@ -374,14 +524,17 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
 
         {/* Contact channels */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {channels.map((c) => (
-            <div key={c.label} className="bg-card border border-border rounded-2xl p-5 hover:border-accent/40 transition-colors">
-              <span className="text-2xl mb-3 block">{c.icon}</span>
-              <p className="text-xs text-muted-foreground mb-1">{c.label}</p>
-              <p className="text-sm font-medium text-foreground mb-1">{c.value}</p>
-              <p className="text-xs text-muted-foreground">{c.sub}</p>
-            </div>
-          ))}
+          {channels.map((c) => {
+            const Icon = c.icon;
+            return (
+              <div key={c.label} className="bg-card border border-border rounded-2xl p-5 hover:border-accent/40 transition-colors">
+                <Icon className="w-5 h-5 text-[#008236] mb-3" />
+                <p className="text-xs text-muted-foreground mb-1">{c.label}</p>
+                <p className="text-sm font-medium text-foreground mb-1">{c.value}</p>
+                <p className="text-xs text-muted-foreground">{c.sub}</p>
+              </div>
+            );
+          })}
         </div>
 
         {/* Form + offices */}
@@ -531,18 +684,40 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
         <div>
           <div className="text-center mb-10">
             <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>FAQ</p>
-            <h2 className="text-3xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Common questions</h2>
+            <h2 className="text-3xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>Frequently Asked Questions</h2>
+            <p className="text-sm text-muted-foreground max-w-lg mx-auto">Find answers to common questions about Anovra's skin analysis, recommendations, and vendor plans.</p>
           </div>
-          <div className="max-w-3xl mx-auto divide-y divide-border border border-border rounded-2xl overflow-hidden">
-            {faqs.map((f, i) => (
-              <FAQItem key={i} question={f.q} answer={f.a} />
+
+          {/* Category tabs */}
+          <div className="flex flex-wrap justify-center gap-2 mb-8 max-w-4xl mx-auto px-4">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+                  activeCategory === cat.id
+                    ? "bg-[#008236] text-white border-[#008236] shadow-sm"
+                    : "bg-card text-muted-foreground border-border hover:bg-secondary hover:text-foreground"
+                }`}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {cat.label}
+              </button>
             ))}
           </div>
-          <p className="text-center text-sm text-muted-foreground mt-6">
+
+          <div className="max-w-3xl mx-auto divide-y divide-border border border-border rounded-2xl overflow-hidden shadow-xs">
+            {faqs
+              .filter((f) => activeCategory === "all" || f.cat === activeCategory)
+              .map((f, i) => (
+                <FAQItem key={i} question={f.q} answer={f.a} />
+              ))}
+          </div>
+          <p className="text-center text-sm text-muted-foreground mt-8">
             Still have questions?{" "}
-            <button onClick={() => {}} className="text-accent font-medium hover:underline">
-              hello@anovra.africa
-            </button>
+            <a href="mailto:support@anovra.africa" className="text-accent font-semibold hover:underline">
+              support@anovra.africa
+            </a>
           </p>
         </div>
 

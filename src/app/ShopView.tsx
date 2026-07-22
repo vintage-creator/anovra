@@ -345,7 +345,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           <div className="text-center py-16">
             <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-foreground font-medium mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No products for this concern yet</p>
-            <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try "All" or take the skin test to get personalised matches.</p>
+            <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try "All" or take the skin test to get personalized matches.</p>
           </div>
         )}
 

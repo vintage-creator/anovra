@@ -72,10 +72,10 @@ export function UnifiedDashboardHeader({
           <div className="flex items-center gap-3.5">
             <button
               onClick={() => setView("landing")}
-              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl transition-transform hover:scale-105 active:scale-95 shrink-0"
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-xl transition-transform hover:scale-105 active:scale-95 shrink-0"
               aria-label="Anovra Home"
             >
-              <img src="/logo.png" alt="Anovra Logo" className="h-10 sm:h-12 w-auto object-contain" />
+              <img src="/logo.png" alt="Anovra Logo" className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105" />
             </button>
             <div>
               <div className="flex items-center gap-2 flex-wrap">

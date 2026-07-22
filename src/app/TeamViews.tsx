@@ -188,10 +188,16 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Top bar */}
       <header className="border-b border-border bg-card sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Anovra" className="h-8 w-auto object-contain" />
-            <p className="text-base font-light text-foreground tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+            <button
+              onClick={() => setView("landing")}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-xl transition-transform hover:scale-105 active:scale-95 shrink-0"
+              aria-label="Anovra Home"
+            >
+              <img src="/logo.png" alt="Anovra Logo" className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105" />
+            </button>
+            <p className="text-lg font-light text-foreground tracking-tight ml-2" style={{ fontFamily: "'Fraunces', serif" }}>
               Anovra
             </p>
             <span className="text-border text-sm">·</span>

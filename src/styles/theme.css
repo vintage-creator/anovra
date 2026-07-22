@@ -219,3 +219,21 @@
   border-color: #008236 !important;
 }
 
+/* Scanner Animation for AI Skin Test Viewfinder */
+@keyframes scan {
+  0%, 100% { top: 5%; opacity: 0.3; }
+  50% { top: 95%; opacity: 1; }
+}
+.animate-scan {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: #008236;
+  box-shadow: 0 0 12px 3px rgba(0, 130, 54, 0.8);
+  animation: scan 3s ease-in-out infinite;
+  z-index: 10;
+  pointer-events: none;
+}
+
+
