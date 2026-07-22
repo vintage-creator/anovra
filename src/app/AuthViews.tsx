@@ -59,10 +59,17 @@ function CACVerifier({ value, onChange }: { value: string; onChange: (v: string)
 
 
 function isSocialUrl(url: string): boolean {
+  if (!url) return true;
+  let testUrl = url.trim();
+  if (!/^https?:\/\//i.test(testUrl)) {
+    testUrl = "https://" + testUrl;
+  }
   try {
-    const u = new URL(url);
-    return /^https?:$/.test(u.protocol) && u.hostname.length > 3;
-  } catch { return false; }
+    const u = new URL(testUrl);
+    return u.hostname.length > 3 && u.hostname.includes(".");
+  } catch {
+    return false;
+  }
 }
 
 export function SignUpView({ setView }: { setView: (v: View) => void }) {
@@ -124,8 +131,8 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
 
   // Vendor Step Validations
   const step1Valid = form.fullName.trim().length >= 3 && form.email.includes("@") && form.whatsapp.length === 10;
-  const isCacValid = form.cac.trim().length >= 8 && form.cac.trim().length <= 14;
-  const step2Valid = isCacValid && form.businessName.trim().length >= 3 && form.cacDoc && socialAccounts[0].url.trim().length > 8 && validSocialUrls;
+  const isCacValid = form.cac.trim().length >= 5 && form.cac.trim().length <= 14;
+  const step2Valid = isCacValid && form.businessName.trim().length >= 3 && form.cacDoc && socialAccounts[0].url.trim().length >= 3 && validSocialUrls;
   const step3Valid = passwordScore >= 4 && passwordsMatch;
   const canSubmitVendor = step1Valid && step2Valid && step3Valid;
 
@@ -541,7 +548,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                       <label className={labelCls}>CAC Registration Number *</label>
                       <CACVerifier value={form.cac} onChange={(v) => set("cac", v)} />
                       <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Must be between 8 and 14 characters.
+                        Must be between 5 and 14 characters.
                       </p>
                     </div>
 
