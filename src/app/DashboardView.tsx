@@ -328,9 +328,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
       {/* Mobile Header Bar */}
       <div className="md:hidden flex items-center justify-between p-4 bg-card border-b border-border sticky top-0 z-30 w-full shrink-0">
-        <div className="flex items-center gap-2">
-          <img src="/logo.png" alt="Anovra Logo" className="h-9 w-auto" />
-          <span className="font-semibold text-foreground text-sm tracking-wide" style={{ fontFamily: "'Fraunces', serif" }}>ANOVRA</span>
+        <div className="flex items-center">
+          <img src="/logo.png" alt="Anovra Logo" className="h-11 w-auto" />
         </div>
         <button onClick={() => setSidebarOpen(true)} className="p-2 text-foreground hover:bg-secondary rounded-lg cursor-pointer">
           <Menu className="w-5 h-5" />
@@ -348,9 +347,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         <div>
           {/* Logo and close button */}
           <div className="p-5 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <img src="/logo.png" alt="Anovra Logo" className="h-9 w-auto" />
-              <span className="font-bold text-[#008236] text-lg tracking-wide" style={{ fontFamily: "'Fraunces', serif" }}>ANOVRA</span>
+            <div className="flex items-center">
+              <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto" />
             </div>
             <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1.5 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer">
               <X className="w-4 h-4" />

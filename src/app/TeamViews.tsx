@@ -195,11 +195,8 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
               className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-xl transition-transform hover:scale-105 active:scale-95 shrink-0"
               aria-label="Anovra Home"
             >
-              <img src="/logo.png" alt="Anovra Logo" className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105" />
+              <img src="/logo.png" alt="Anovra Logo" className="h-14 sm:h-16 md:h-18 w-auto object-contain transition-transform group-hover:scale-105" />
             </button>
-            <p className="text-lg font-light text-foreground tracking-tight ml-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Anovra
-            </p>
             <span className="text-border text-sm">·</span>
             <span className="text-xs text-muted-foreground uppercase tracking-widest" style={{ fontFamily: "'DM Mono', monospace" }}>
               Team Portal

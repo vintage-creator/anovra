@@ -22,7 +22,7 @@ import { ShopView } from "./ShopView";
 import { DashboardView } from "./DashboardView";
 import { CatalogView } from "./CatalogView";
 import { SkinTestView } from "./SkinTestView";
-import { SignUpView, SignInView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
+import { SignUpView, CustomerSignUpView, SignInView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
 import { TeamLoginView, TeamDashboardView } from "./TeamViews";
 import { supabase } from "./utils/supabase";
 import { AboutView, ContactView } from "./ContentViews";
@@ -260,7 +260,7 @@ export default function App() {
     const hash = window.location.hash.replace("#", "").replace(/^\//, "");
     const validViews: View[] = [
       "landing", "dashboard", "catalog", "skintest", "admin",
-      "adminlogin", "shop", "signin", "signup", "forgotpassword",
+      "adminlogin", "shop", "signin", "signup", "customersignup", "forgotpassword",
       "resetpassword", "teamlogin", "teamdashboard", "about", "contact",
       "userdashboard"
     ];
@@ -320,6 +320,7 @@ export default function App() {
     "shop",
     "signin",
     "signup",
+    "customersignup",
     "forgotpassword",
     "resetpassword",
     "adminlogin",
@@ -346,6 +347,7 @@ export default function App() {
         {view === "shop" && <ShopView setView={setView} />}
         {view === "signin" && <SignInView setView={setView} />}
         {view === "signup" && <SignUpView setView={setView} />}
+        {view === "customersignup" && <CustomerSignUpView setView={setView} />}
         {view === "forgotpassword" && <ForgotPasswordView setView={setView} />}
         {view === "resetpassword" && <ResetPasswordView setView={setView} />}
         {view === "teamlogin" && <TeamLoginView setView={setView} />}

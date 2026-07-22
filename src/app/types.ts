@@ -1,4 +1,4 @@
-export type View = "landing" | "dashboard" | "catalog" | "skintest" | "admin" | "adminlogin" | "shop" | "signin" | "signup" | "forgotpassword" | "resetpassword" | "teamlogin" | "teamdashboard" | "about" | "contact" | "userdashboard";
+export type View = "landing" | "dashboard" | "catalog" | "skintest" | "admin" | "adminlogin" | "shop" | "signin" | "signup" | "customersignup" | "forgotpassword" | "resetpassword" | "teamlogin" | "teamdashboard" | "about" | "contact" | "userdashboard";
 
 export function cn(...classes: (string | undefined | false | null)[]): string {
   return classes.filter(Boolean).join(" ");

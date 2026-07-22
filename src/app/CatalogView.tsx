@@ -798,6 +798,7 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
             description: p.description || "",
             image: p.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
             ingredients: [],
+            concerns: [],
             safety: { rating: "A+", label: "Verified Safe" }
           }));
           setProductsList(formatted);
@@ -879,7 +880,8 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
         nafdac: "Approved",
         description: data.description || "",
         image: data.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
-        ingredients: newProd.ingredients || [],
+        ingredients: newProd.keyIngredients || [],
+        concerns: newProd.concerns || [],
         safety: { rating: "A+", label: "Verified Safe" }
       };
 
@@ -994,7 +996,7 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
           >
             <div className="p-4 flex items-start gap-4">
               <img
-                src={p.photo}
+                src={p.photo || p.image}
                 alt={p.name}
                 className="w-16 h-16 rounded-lg object-cover flex-shrink-0 bg-secondary"
               />
@@ -1022,13 +1024,13 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0" style={{ fontFamily: "'DM Mono', monospace" }}>
-                    <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.views}</span>
-                    <span className="flex items-center gap-1"><ExternalLink className="w-3 h-3" />{p.clicks}</span>
+                    <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.views || 0}</span>
+                    <span className="flex items-center gap-1"><ExternalLink className="w-3 h-3" />{p.clicks || 0}</span>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {p.concerns.map((c) => (
+                  {(p.concerns || []).map((c) => (
                     <span key={c} className="text-xs bg-secondary text-foreground px-2 py-0.5 rounded" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                       {c}
                     </span>
@@ -1036,7 +1038,7 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {p.ingredients.map((ing) => (
+                  {(p.ingredients || []).map((ing) => (
                     <span
                       key={ing}
                       className={cn(
