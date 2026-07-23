@@ -111,7 +111,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         const personalName = normalizeName(user.user_metadata?.full_name || user.user_metadata?.name);
         const isPlaceholderBusinessName = (value?: string | null) => {
           const normalized = normalizeName(value);
-          return !normalized || normalized === "my brand" || normalized === "my skincare brand" || (personalName && normalized === personalName);
+          return !normalized || normalized === "my brand" || normalized === "my skincare brand";
         };
         if (user.user_metadata) {
           const rawBiz = user.user_metadata.business_name;
@@ -189,10 +189,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           setVendorPlan(profile.plan as any);
           if (isPlaceholderBusinessName(profile.business_name)) {
             setBrandName("Vintage");
-            // Sync Vintage to profiles table
-            supabase.from("profiles").update({ business_name: "Vintage" }).eq("id", user.id).then(() => {});
-            // Sync Vintage to auth user metadata
-            supabase.auth.updateUser({ data: { business_name: "Vintage" } }).then(() => {});
           } else {
             setBrandName(profile.business_name);
           }
