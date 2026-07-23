@@ -154,13 +154,13 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         if (data && data.length > 0) {
           const formatted = data.map((p) => {
             const descriptionText = p.description || "";
-            const imagesMatch = descriptionText.match(/<!--IMAGES:(.*)-->/);
-            const benefitsMatch = descriptionText.match(/<!--BENEFITS:(.*)-->/);
-            const usageMatch = descriptionText.match(/<!--USAGE:(.*)-->/);
-            const precautionsMatch = descriptionText.match(/<!--PRECAUTIONS:(.*)-->/);
-            const skinTypesMatch = descriptionText.match(/<!--SKINTYPES:(.*)-->/);
-            const keyMatch = descriptionText.match(/<!--KEY_INGREDIENTS:(.*)-->/);
-            const activeMatch = descriptionText.match(/<!--ACTIVE_INGREDIENTS:(.*)-->/);
+            const imagesMatch = descriptionText.match(/<!--IMAGES:([\s\S]*?)-->/);
+            const benefitsMatch = descriptionText.match(/<!--BENEFITS:([\s\S]*?)-->/);
+            const usageMatch = descriptionText.match(/<!--USAGE:([\s\S]*?)-->/);
+            const precautionsMatch = descriptionText.match(/<!--PRECAUTIONS:([\s\S]*?)-->/);
+            const skinTypesMatch = descriptionText.match(/<!--SKINTYPES:([\s\S]*?)-->/);
+            const keyMatch = descriptionText.match(/<!--KEY_INGREDIENTS:([\s\S]*?)-->/);
+            const activeMatch = descriptionText.match(/<!--ACTIVE_INGREDIENTS:([\s\S]*?)-->/);
 
             let parsedImages: string[] = [];
             let benefits = "";
@@ -194,13 +194,13 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             }
 
             cleanDescription = cleanDescription
-              .replace(/<!--IMAGES:(.*)-->/, "")
-              .replace(/<!--BENEFITS:(.*)-->/, "")
-              .replace(/<!--USAGE:(.*)-->/, "")
-              .replace(/<!--PRECAUTIONS:(.*)-->/, "")
-              .replace(/<!--SKINTYPES:(.*)-->/, "")
-              .replace(/<!--KEY_INGREDIENTS:(.*)-->/, "")
-              .replace(/<!--ACTIVE_INGREDIENTS:(.*)-->/, "")
+              .replace(/<!--IMAGES:([\s\S]*?)-->/g, "")
+              .replace(/<!--BENEFITS:([\s\S]*?)-->/g, "")
+              .replace(/<!--USAGE:([\s\S]*?)-->/g, "")
+              .replace(/<!--PRECAUTIONS:([\s\S]*?)-->/g, "")
+              .replace(/<!--SKINTYPES:([\s\S]*?)-->/g, "")
+              .replace(/<!--KEY_INGREDIENTS:([\s\S]*?)-->/g, "")
+              .replace(/<!--ACTIVE_INGREDIENTS:([\s\S]*?)-->/g, "")
               .trim();
 
             if (parsedImages.length === 0 && p.image_url) {

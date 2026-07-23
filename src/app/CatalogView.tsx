@@ -932,6 +932,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
 
   const [productsList, setProductsList] = useState<any[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -954,13 +955,13 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
         if (data && data.length > 0) {
           const formatted = data.map((p) => {
             const descriptionText = p.description || "";
-            const imagesMatch = descriptionText.match(/<!--IMAGES:(.*)-->/);
-            const benefitsMatch = descriptionText.match(/<!--BENEFITS:(.*)-->/);
-            const usageMatch = descriptionText.match(/<!--USAGE:(.*)-->/);
-            const precautionsMatch = descriptionText.match(/<!--PRECAUTIONS:(.*)-->/);
-            const skinTypesMatch = descriptionText.match(/<!--SKINTYPES:(.*)-->/);
-            const keyMatch = descriptionText.match(/<!--KEY_INGREDIENTS:(.*)-->/);
-            const activeMatch = descriptionText.match(/<!--ACTIVE_INGREDIENTS:(.*)-->/);
+            const imagesMatch = descriptionText.match(/<!--IMAGES:([\s\S]*?)-->/);
+            const benefitsMatch = descriptionText.match(/<!--BENEFITS:([\s\S]*?)-->/);
+            const usageMatch = descriptionText.match(/<!--USAGE:([\s\S]*?)-->/);
+            const precautionsMatch = descriptionText.match(/<!--PRECAUTIONS:([\s\S]*?)-->/);
+            const skinTypesMatch = descriptionText.match(/<!--SKINTYPES:([\s\S]*?)-->/);
+            const keyMatch = descriptionText.match(/<!--KEY_INGREDIENTS:([\s\S]*?)-->/);
+            const activeMatch = descriptionText.match(/<!--ACTIVE_INGREDIENTS:([\s\S]*?)-->/);
 
             let parsedImages: string[] = [];
             let benefits = "";
@@ -994,13 +995,13 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
             }
 
             cleanDescription = cleanDescription
-              .replace(/<!--IMAGES:(.*)-->/, "")
-              .replace(/<!--BENEFITS:(.*)-->/, "")
-              .replace(/<!--USAGE:(.*)-->/, "")
-              .replace(/<!--PRECAUTIONS:(.*)-->/, "")
-              .replace(/<!--SKINTYPES:(.*)-->/, "")
-              .replace(/<!--KEY_INGREDIENTS:(.*)-->/, "")
-              .replace(/<!--ACTIVE_INGREDIENTS:(.*)-->/, "")
+              .replace(/<!--IMAGES:([\s\S]*?)-->/g, "")
+              .replace(/<!--BENEFITS:([\s\S]*?)-->/g, "")
+              .replace(/<!--USAGE:([\s\S]*?)-->/g, "")
+              .replace(/<!--PRECAUTIONS:([\s\S]*?)-->/g, "")
+              .replace(/<!--SKINTYPES:([\s\S]*?)-->/g, "")
+              .replace(/<!--KEY_INGREDIENTS:([\s\S]*?)-->/g, "")
+              .replace(/<!--ACTIVE_INGREDIENTS:([\s\S]*?)-->/g, "")
               .trim();
 
             if (parsedImages.length === 0 && p.image_url) {
@@ -1050,6 +1051,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
       toast.error("Viewer role is read-only. You cannot add or edit products.");
       return;
     }
+    setIsSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Authentication required to save products.");
@@ -1144,13 +1146,13 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
       }
 
       const descriptionText = savedData.description || "";
-      const imagesMatch = descriptionText.match(/<!--IMAGES:(.*)-->/);
+      const imagesMatch = descriptionText.match(/<!--IMAGES:([\s\S]*?)-->/);
       let parsedImages: string[] = [];
       let cleanDescription = descriptionText;
       if (imagesMatch) {
         try {
           parsedImages = JSON.parse(imagesMatch[1]);
-          cleanDescription = descriptionText.replace(/<!--IMAGES:(.*)-->/, "").trim();
+          cleanDescription = descriptionText.replace(/<!--IMAGES:([\s\S]*?)-->/g, "").trim();
         } catch (e) {}
       }
       if (parsedImages.length === 0 && savedData.image_url) {
@@ -1185,9 +1187,11 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to save product.");
+    } finally {
+      setIsSaving(false);
+      setShowAddProduct(false);
+      setEditingProduct(null);
     }
-    setShowAddProduct(false);
-    setEditingProduct(null);
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -1475,6 +1479,26 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
         )}
       </div>
       </div>
+
+      {/* Modern glassmorphism saving progress overlay */}
+      {isSaving && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex flex-col items-center justify-center animate-fade-in">
+          <div className="bg-card border border-border p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full mx-4 text-center animate-scale-up">
+            <div className="relative w-16 h-16 mb-4">
+              <div className="absolute inset-0 border-4 border-muted rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-t-accent border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {editingProduct ? "Updating Product" : "Adding Product"}
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {editingProduct 
+                ? "Saving your product changes. Please wait..." 
+                : "Adding your products to your catalog. Please wait..."}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

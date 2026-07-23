@@ -102,7 +102,7 @@ type MatchedProduct = {
 };
 
 const parseJsonMeta = <T,>(text: string, key: string, fallback: T): T => {
-  const match = text.match(new RegExp(`<!--${key}:(.*)-->`));
+  const match = text.match(new RegExp(`<!--${key}:([\\s\\S]*?)-->`));
   if (!match) return fallback;
   try {
     return JSON.parse(match[1]);
@@ -113,13 +113,13 @@ const parseJsonMeta = <T,>(text: string, key: string, fallback: T): T => {
 
 const cleanProductDescription = (text: string) =>
   text
-    .replace(/<!--IMAGES:(.*)-->/, "")
-    .replace(/<!--BENEFITS:(.*)-->/, "")
-    .replace(/<!--USAGE:(.*)-->/, "")
-    .replace(/<!--PRECAUTIONS:(.*)-->/, "")
-    .replace(/<!--SKINTYPES:(.*)-->/, "")
-    .replace(/<!--KEY_INGREDIENTS:(.*)-->/, "")
-    .replace(/<!--ACTIVE_INGREDIENTS:(.*)-->/, "")
+    .replace(/<!--IMAGES:([\s\S]*?)-->/g, "")
+    .replace(/<!--BENEFITS:([\s\S]*?)-->/g, "")
+    .replace(/<!--USAGE:([\s\S]*?)-->/g, "")
+    .replace(/<!--PRECAUTIONS:([\s\S]*?)-->/g, "")
+    .replace(/<!--SKINTYPES:([\s\S]*?)-->/g, "")
+    .replace(/<!--KEY_INGREDIENTS:([\s\S]*?)-->/g, "")
+    .replace(/<!--ACTIVE_INGREDIENTS:([\s\S]*?)-->/g, "")
     .trim();
 
 const tokenize = (value: string) =>
