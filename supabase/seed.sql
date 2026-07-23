@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   business_name TEXT,
   phone TEXT,
   nafdac_number TEXT,
+  cac_number TEXT,
+  cac_document_url TEXT,
   plan TEXT DEFAULT 'free' CHECK (plan IN ('free', 'basic', 'premium')),
   is_verified BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -87,14 +89,34 @@ CREATE POLICY "Allow insert on cart items" ON public.cart_items
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, name, plan, is_verified)
+  INSERT INTO public.profiles (
+    id, 
+    name, 
+    business_name, 
+    phone, 
+    nafdac_number, 
+    cac_number, 
+    cac_document_url, 
+    plan, 
+    is_verified
+  )
   VALUES (
     new.id,
     COALESCE(new.raw_user_meta_data->>'full_name', 'New Partner'),
+    new.raw_user_meta_data->>'business_name',
+    new.raw_user_meta_data->>'phone',
+    new.raw_user_meta_data->>'nafdac_number',
+    new.raw_user_meta_data->>'cac_number',
+    new.raw_user_meta_data->>'cac_document_url',
     'free',
     false
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET
+    business_name = EXCLUDED.business_name,
+    phone = EXCLUDED.phone,
+    nafdac_number = EXCLUDED.nafdac_number,
+    cac_number = EXCLUDED.cac_number,
+    cac_document_url = EXCLUDED.cac_document_url;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -286,6 +286,37 @@ export default function App() {
     };
     window.addEventListener("hashchange", handleHashChange);
 
+    // Inactivity Session Timeout of 30 Minutes
+    let timeoutId: any;
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await supabase.auth.signOut();
+          setViewState("landing");
+          window.location.hash = "";
+          alert("Your session has expired due to 30 minutes of inactivity. Please sign in again.");
+        }
+      }, 30 * 60 * 1000); // 30 minutes
+    };
+
+    const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"];
+    const setupInactivityTracker = () => {
+      const currentHash = window.location.hash.replace("#", "").replace(/^\//, "");
+      const isDashboardView = ["dashboard", "userdashboard", "teamdashboard", "admin", "catalog"].includes(currentHash);
+      if (isDashboardView) {
+        events.forEach((event) => document.addEventListener(event, resetTimer));
+        resetTimer();
+      } else {
+        clearTimeout(timeoutId);
+        events.forEach((event) => document.removeEventListener(event, resetTimer));
+      }
+    };
+
+    setupInactivityTracker();
+    window.addEventListener("hashchange", setupInactivityTracker);
+
     // Parse email verification redirect params
     const handleEmailConfirmation = async () => {
       const urlStr = window.location.href;
@@ -308,7 +339,12 @@ export default function App() {
     };
     handleEmailConfirmation();
 
-    return () => window.removeEventListener("hashchange", handleHashChange);
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+      window.removeEventListener("hashchange", setupInactivityTracker);
+      clearTimeout(timeoutId);
+      events.forEach((event) => document.removeEventListener(event, resetTimer));
+    };
   }, []);
 
   const hideNav = [

@@ -850,10 +850,12 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
               .getPublicUrl(filePath);
             finalImageUrl = publicUrl;
           } else {
-            console.warn("Product image storage upload failed, using fallback:", uploadError);
+            console.warn("Product image storage upload failed:", uploadError);
+            toast.error(`Image upload failed: ${uploadError.message || "Unknown error"}. Check if 'product-images' bucket is created in Supabase.`);
           }
-        } catch (storageErr) {
-          console.warn("Product image storage upload exception, using fallback:", storageErr);
+        } catch (storageErr: any) {
+          console.warn("Product image storage upload exception:", storageErr);
+          toast.error(`Image upload error: ${storageErr.message || "Storage error"}`);
         }
       }
 
@@ -1031,17 +1033,19 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
         </div>
 
       {/* Safety alert */}
-      <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
-        <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-medium text-amber-800" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            1 product blocked — ingredient safety issue
-          </p>
-          <p className="text-xs text-amber-700 mt-0.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            "Ultra-White Intensive Lightening Lotion" contains ingredients that violate NAFDAC regulations. It is hidden from all customer recommendations until reviewed. See the product card below for details.
-          </p>
+      {productsList.some(p => p.status === "blocked") && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {productsList.filter(p => p.status === "blocked").length} product{productsList.filter(p => p.status === "blocked").length > 1 ? "s" : ""} blocked — ingredient safety issue
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {productsList.filter(p => p.status === "blocked").map(p => `"${p.name}"`).join(", ")} contains ingredients that violate NAFDAC regulations. It is hidden from all customer recommendations until reviewed. See the product card below for details.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="space-y-3">
         {filteredProducts.map((p) => (

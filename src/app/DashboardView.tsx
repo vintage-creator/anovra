@@ -35,14 +35,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [embedPlatform, setEmbedPlatform] = useState<"html" | "shopify" | "wordpress">("html");
 
-  const [teamMembers, setTeamMembers] = useState(() => {
-    const domain = brandName.toLowerCase().replace(/[^a-z0-9]/g, "") || "mybrand";
-    return [
-      { name: "Adaeze Okafor", email: `adaeze@${domain}.com`, role: "Owner", status: "active", joined: "Mar 2025" },
-      { name: "Chidi Nwosu", email: `chidi@${domain}.com`, role: "Manager", status: "active", joined: "Apr 2025" },
-      { name: "Ngozi Eze", email: `ngozi@${domain}.com`, role: "Viewer", status: "invited", joined: "—" },
-    ];
-  });
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("Manager");
@@ -143,6 +136,17 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             setWebhookUrl(profile.webhook_url);
             setWebhookSaved(true);
           }
+
+          // Populate team members list with the actual logged-in owner
+          setTeamMembers([
+            {
+              name: profile.name || user.user_metadata?.full_name || "Owner",
+              email: user.email || "",
+              role: "Owner",
+              status: "active",
+              joined: "Joined"
+            }
+          ]);
         }
 
         // 2. Fetch products list
@@ -890,7 +894,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
                   <div>
                     <button
-                      onClick={() => setVendorPlan("premium")}
+                      onClick={() => payWithPaystack("premium")}
                       className="w-full sm:w-auto text-xs bg-[#008236] text-white font-bold px-5 py-2.5 rounded-xl hover:bg-[#006c2c] transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
@@ -1181,6 +1185,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     </div>
                     <button
                       onClick={async () => {
+                        if (vendorPlan !== "premium") {
+                          toast.error("White-labeling is only available on the Vendor Premium plan.");
+                          document.getElementById("billing-section")?.scrollIntoView({ behavior: "smooth" });
+                          return;
+                        }
                         const nextVal = !whiteLabelEnabled;
                         setWhiteLabelEnabled(nextVal);
                         await saveSettings({ white_label: nextVal });
@@ -1236,6 +1245,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       />
                       <button
                         onClick={async () => {
+                          if (vendorPlan === "free") {
+                            toast.error("Custom domains are only available on the Basic or Premium plans.");
+                            document.getElementById("billing-section")?.scrollIntoView({ behavior: "smooth" });
+                            return;
+                          }
                           setDomainSaved(true);
                           await saveSettings({ custom_domain: customDomain });
                         }}
@@ -1323,29 +1337,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
                 );
               })}
-            </div>
-
-            <div className="border-t border-border pt-4">
-              <p className="text-[10px] text-muted-foreground mb-2 font-mono uppercase tracking-wider">Dev plan override simulator (bypasses payment for testing):</p>
-              <div className="flex items-center gap-1.5 bg-muted p-1 border border-border/80 rounded-lg w-fit">
-                {(["free", "basic", "premium"] as const).map((p) => (
-                  <button
-                    key={p}
-                    onClick={async () => {
-                      setVendorPlan(p);
-                      await saveSettings({ plan: p } as any);
-                    }}
-                    className={`text-[9px] px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer uppercase tracking-wider ${
-                      vendorPlan === p
-                        ? "bg-[#008236] text-white shadow-2xs"
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                    }`}
-                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
         </div>
@@ -1494,20 +1485,35 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Use the Anovra API to pull scan results, product matches, and analytics into your own systems.</p>
                 </div>
                 <div className="p-5 space-y-4">
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide font-mono">Live API key</label>
-                    <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2.5">
-                      <p className="flex-1 text-sm font-mono text-foreground truncate">
-                        {apiKeyVisible ? apiKey : apiKey.slice(0, 12) + "•".repeat(28)}
+                  {vendorPlan === "premium" ? (
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide font-mono">Live API key</label>
+                      <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2.5">
+                        <p className="flex-1 text-sm font-mono text-foreground truncate">
+                          {apiKeyVisible ? apiKey : apiKey.slice(0, 12) + "•".repeat(28)}
+                        </p>
+                        <button onClick={() => setApiKeyVisible((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {apiKeyVisible ? "Hide" : "Reveal"}
+                        </button>
+                        <button onClick={() => copy(apiKey, "api-key")} className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 transition-colors shrink-0 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {copied === "api-key" ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-muted/30 border border-dashed border-border rounded-lg p-4 text-center space-y-3">
+                      <p className="text-xs text-muted-foreground leading-normal font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        REST API key access is a Premium feature. Please upgrade to the Premium plan to access endpoint authentication keys.
                       </p>
-                      <button onClick={() => setApiKeyVisible((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {apiKeyVisible ? "Hide" : "Reveal"}
-                      </button>
-                      <button onClick={() => copy(apiKey, "api-key")} className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 transition-colors shrink-0 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {copied === "api-key" ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                      <button
+                        onClick={() => payWithPaystack("premium")}
+                        className="mx-auto text-xs bg-[#008236] text-white font-bold px-4 py-2 rounded-lg hover:bg-[#006c2c] transition-colors cursor-pointer"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
+                        Upgrade to Premium
                       </button>
                     </div>
-                  </div>
+                  )}
 
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Available REST Endpoints:</p>
@@ -1540,28 +1546,43 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Get notified in real time when a customer completes a scan or makes a purchase.</p>
                 </div>
                 <div className="p-5 space-y-4">
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide font-mono">Webhook endpoint URL</label>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        value={webhookUrl}
-                        onChange={(e) => { setWebhookUrl(e.target.value); setWebhookSaved(false); }}
-                        placeholder="https://yourapp.com/webhooks/anovra"
-                        className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] transition-colors"
-                        style={{ fontFamily: "'DM Mono', monospace" }}
-                      />
+                  {vendorPlan === "basic" || vendorPlan === "premium" ? (
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide font-mono">Webhook endpoint URL</label>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          value={webhookUrl}
+                          onChange={(e) => { setWebhookUrl(e.target.value); setWebhookSaved(false); }}
+                          placeholder="https://yourapp.com/webhooks/anovra"
+                          className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] transition-colors"
+                          style={{ fontFamily: "'DM Mono', monospace" }}
+                        />
+                        <button
+                          onClick={async () => {
+                            setWebhookSaved(true);
+                            await saveSettings({ webhook_url: webhookUrl });
+                          }}
+                          className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          {webhookSaved ? "Saved ✓" : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-muted/30 border border-dashed border-border rounded-lg p-4 text-center space-y-3">
+                      <p className="text-xs text-muted-foreground leading-normal font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Webhook endpoints are only available on the Vendor Basic or Premium plan.
+                      </p>
                       <button
-                        onClick={async () => {
-                          setWebhookSaved(true);
-                          await saveSettings({ webhook_url: webhookUrl });
-                        }}
-                        className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0"
+                        onClick={() => payWithPaystack("basic")}
+                        className="mx-auto text-xs bg-[#008236] text-white font-bold px-4 py-2 rounded-lg hover:bg-[#006c2c] transition-colors cursor-pointer"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
-                        {webhookSaved ? "Saved ✓" : "Save"}
+                        Upgrade to Basic
                       </button>
                     </div>
-                  </div>
+                  )}
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Events sent to your endpoint:</p>
                     {["scan.completed", "purchase.created", "product.flagged", "catalog.updated"].map((e) => (

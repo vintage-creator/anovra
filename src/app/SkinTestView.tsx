@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
+import { supabase } from "./utils/supabase";
 
 // ---- SKIN TEST DATA ----
 
@@ -145,8 +146,38 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const [expandedSection, setExpandedSection] = useState<{ card: number; section: string } | null>(null);
   const [filters, setFilters] = useState({ country: "", state: "", city: "", vendor: "", category: "" });
   const [showFilters, setShowFilters] = useState(false);
+  const [vendorProfile, setVendorProfile] = useState<any | null>(null);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    const match = hash.match(/[?&]vendor=([^&]+)/);
+    const slug = match ? match[1] : null;
+    if (slug) {
+      const fetchVendor = async () => {
+        const { data } = await supabase
+          .from("profiles")
+          .select("name, business_name, white_label, plan")
+          .ilike("business_name", slug.replace(/-/g, " "))
+          .maybeSingle();
+        if (data) {
+          setVendorProfile(data);
+        }
+      };
+      fetchVendor();
+    }
+  }, []);
 
   const healthScore = 68;
+
+  const activeRecommendations = recommendations.map((rec) => {
+    if (vendorProfile && vendorProfile.white_label && vendorProfile.plan === "premium") {
+      return {
+        ...rec,
+        brand: vendorProfile.business_name || vendorProfile.name,
+      };
+    }
+    return rec;
+  });
 
   useEffect(() => {
     if (step !== 3) return;
@@ -197,17 +228,23 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       <div className="border-b border-border bg-background/90 backdrop-blur-md sticky top-0 z-40 transition-all">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-20">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setView?.("landing")}
-              className="flex items-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-lg p-1 transition-transform active:scale-95"
-              aria-label="Anovra Home"
-            >
-              <img
-                src="/logo.png"
-                alt="Anovra Logo"
-                className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
-              />
-            </button>
+            {vendorProfile && vendorProfile.white_label && vendorProfile.plan === "premium" ? (
+              <span className="text-xl font-bold text-[#008236] tracking-wide animate-fade-in" style={{ fontFamily: "'Fraunces', serif" }}>
+                {vendorProfile.business_name || vendorProfile.name}
+              </span>
+            ) : (
+              <button
+                onClick={() => setView?.("landing")}
+                className="flex items-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-lg p-1 transition-transform active:scale-95"
+                aria-label="Anovra Home"
+              >
+                <img
+                  src="/logo.png"
+                  alt="Anovra Logo"
+                  className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
+                />
+              </button>
+            )}
             <div className="hidden sm:flex items-center gap-2 border-l border-border pl-4">
               <span className="text-sm font-semibold text-foreground tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>
                 Skin Test Engine
@@ -648,9 +685,15 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   { key: "country", label: "Country", options: ["Nigeria", "Ghana", "Kenya", "South Africa"] },
                   { key: "state", label: "State / Region", options: ["Lagos", "Abuja FCT", "Rivers", "Kano"] },
                   { key: "city", label: "City", options: ["Lagos Island", "Victoria Island", "Lekki", "Ikeja"] },
-                  { key: "vendor", label: "Vendor", options: ["Veraski", "GlowAfrique", "SunGuard NG", "SkinHQ"] },
+                  { 
+                    key: "vendor", 
+                    label: "Vendor", 
+                    options: vendorProfile && vendorProfile.white_label && vendorProfile.plan === "premium"
+                      ? [vendorProfile.business_name || vendorProfile.name]
+                      : ["Veraski", "GlowAfrique", "SunGuard NG", "SkinHQ"] 
+                  },
                   { key: "category", label: "Product Category", options: ["Serums", "Creams", "SPF / Sunscreen", "Cleansers", "Toners"] },
-                ] as const).map((f) => (
+                ]).map((f) => (
                   <div key={f.key}>
                     <label className="text-[11px] font-bold text-muted-foreground mb-1 block uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.label}</label>
                     <select
@@ -676,7 +719,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
           {/* Product recommendation cards */}
           <div className="space-y-4.5 mb-6">
-            {recommendations.map((rec, i) => (
+            {activeRecommendations.map((rec, i) => (
               <div key={rec.rank} className="bg-card border-2 border-border rounded-2xl overflow-hidden hover:shadow-md transition-all duration-300">
                 {/* Card header */}
                 <button
