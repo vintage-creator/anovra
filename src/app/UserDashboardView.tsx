@@ -11,7 +11,7 @@ import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 import { supabase } from "./utils/supabase";
 import { toast } from "sonner";
 
-type UserTab = "overview" | "history" | "recommendations" | "ingredients" | "progress" | "routine" | "family" | "perks";
+type UserTab = "overview" | "history" | "recommendations" | "ingredients" | "progress" | "routine" | "family" | "perks" | "settings";
 
 function PlanBadge({ required, current }: { required: "glow" | "glowplus" | "premium"; current: "glow" | "glowplus" | "premium" }) {
   const order = { glow: 0, glowplus: 1, premium: 2 };
@@ -27,14 +27,18 @@ function PlanBadge({ required, current }: { required: "glow" | "glowplus" | "pre
   return null;
 }
 
-function LockedOverlay({ label }: { label: string }) {
+function LockedOverlay({ label, onUpgrade }: { label: string; onUpgrade: () => void }) {
   return (
     <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-3 z-10">
       <div className="w-10 h-10 rounded-full bg-muted border border-border flex items-center justify-center">
         <Lock className="w-4 h-4 text-muted-foreground" />
       </div>
       <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Upgrade to {label}</p>
-      <button className="px-4 py-1.5 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent/90 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <button
+        onClick={onUpgrade}
+        className="px-4 py-1.5 bg-[#008236] hover:bg-[#006c2c] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+      >
         Upgrade plan →
       </button>
     </div>
@@ -67,6 +71,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [routineList, setRoutineList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [trialExpired, setTrialExpired] = useState(false);
 
   useEffect(() => {
     if (sessionStorage.getItem("show_welcome") === "true") {
@@ -90,6 +95,14 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           .select("name, plan")
           .eq("id", user.id)
           .maybeSingle();
+
+        // Enforce 14-day trial check
+        const createdDate = user.created_at ? new Date(user.created_at) : new Date();
+        const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
+        const rawPlan = profile?.plan || "free";
+        if (rawPlan === "free" && daysDiff > 14) {
+          setTrialExpired(true);
+        }
 
         const pVal = profile?.plan === "premium" ? "premium" : (profile?.plan === "basic" ? "glowplus" : "glow");
         const profileObj = {
@@ -204,17 +217,84 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     setCopied(key);
     setTimeout(() => setCopied(null), 2000);
   }
+  const payWithPaystack = async (planKey: "basic" | "premium") => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("You must be logged in to upgrade your plan.");
+        return;
+      }
 
-  function sendChat() {
+      const email = user.email;
+      const prices = {
+        basic: 3500,
+        premium: 7000,
+      };
+      
+      const amount = prices[planKey] * 100; // in kobo
+
+      // Initialize Paystack Inline popup
+      const handler = (window as any).PaystackPop.setup({
+        key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_9fe0017d4e9d4499269c7f9b05b178b7e8e1c6be",
+        email: email,
+        amount: amount,
+        currency: "NGN",
+        callback: (response: any) => {
+          supabase
+            .from("profiles")
+            .update({ plan: planKey })
+            .eq("id", user.id)
+            .then(({ error }) => {
+              if (error) {
+                toast.error(`Update failed: ${error.message}`);
+              } else {
+                setUserProfile(prev => prev ? {
+                  ...prev,
+                  plan: planKey === "premium" ? "premium" : "glowplus"
+                } : null);
+                toast.success(`Welcome to ${planKey === "premium" ? "Premium Glow" : "Glow Pass+"}! Plan activated successfully!`);
+              }
+            });
+        },
+        onClose: () => {
+          toast.error("Upgrade checkout closed.");
+        }
+      });
+
+      handler.openIframe();
+    } catch (err: any) {
+      console.error("Paystack launch error:", err);
+      toast.error("Failed to initialize payment gateway.");
+    }
+  };
+  const sendChat = async () => {
     if (!chatMsg.trim()) return;
-    setChatHistory((h) => [...h, { from: "user", text: chatMsg }]);
-    const latestConcern = analysesList[0]?.concerns[0] || "hyperpigmentation";
-    const reply = chatMsg.toLowerCase().includes("hyperpig") || latestConcern.toLowerCase().includes("hyperpig")
-      ? "For hyperpigmentation on African skin, I'd prioritise niacinamide, vitamin C, and kojic acid. Avoid hydroquinone above 2%. Your routine products are selected specifically for this — consistency is key."
-      : `Based on your concern, I recommend keeping your routine simple. focus on consistency with daily sunscreen and active treatments. Want me to explain any ingredient in detail?`;
-    setTimeout(() => setChatHistory((h) => [...h, { from: "advisor", text: reply }]), 900);
+    
+    const userText = chatMsg;
     setChatMsg("");
-  }
+    
+    const updatedHistory = [...chatHistory, { from: "user" as const, text: userText }];
+    setChatHistory(updatedHistory);
+
+    try {
+      const contents = updatedHistory.map(h => ({
+        role: h.from === "user" ? "user" : "model",
+        parts: [{ text: h.text }]
+      }));
+
+      const { data, error } = await supabase.functions.invoke("chat-advisor", {
+        body: { contents }
+      });
+
+      if (error) throw error;
+      const reply = data?.reply || "I'm sorry, I couldn't process that response. Please try again.";
+      
+      setChatHistory([...updatedHistory, { from: "advisor" as const, text: reply }]);
+    } catch (err) {
+      console.error("Gemini advisor call failed:", err);
+      setChatHistory([...updatedHistory, { from: "advisor" as const, text: "I'm experiencing connection issues. Please try again in a moment!" }]);
+    }
+  };
 
   const latestAnalysis = analysesList[0] || null;
   const plan = userProfile?.plan || "glow";
@@ -228,6 +308,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     { id: "routine", label: "My Routine" },
     { id: "family", label: "Family" },
     { id: "perks", label: "Perks & Discounts" },
+    { id: "settings", label: "Billing & Plans" },
   ];
 
   if (loading) {
@@ -261,7 +342,75 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       />
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-8 space-y-7 relative">
-        <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap border-b border-border pb-4">
+        {trialExpired ? (
+          <div className="max-w-2xl mx-auto py-16 text-center">
+            <div className="bg-amber-50 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/30 rounded-3xl p-8 sm:p-12 shadow-md">
+              <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center mx-auto mb-6">
+                <Lock className="w-8 h-8 text-amber-700 dark:text-amber-400" />
+              </div>
+              <h2 className="text-3xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
+                Your 14-Day Free Trial Has Expired
+              </h2>
+              <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Your free trial of Anovra Skin Portal has ended. To continue evaluating your skin, building custom routines, tracking safety glossary terms, and chatting with experts, please choose a plan below.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+                {[
+                  {
+                    key: "glow" as const,
+                    name: "Glow Pass",
+                    price: "₦1,500/mo",
+                    desc: "1 analysis per month, top 3 recommendations, basic skin reports, ingredient checks."
+                  },
+                  {
+                    key: "basic" as const,
+                    name: "Glow Pass+",
+                    price: "₦3,500/mo",
+                    desc: "Unlimited analyses, full recommendation list, save & track skin history, personalized glossary."
+                  },
+                  {
+                    key: "premium" as const,
+                    name: "Premium Glow",
+                    price: "₦7,000/mo",
+                    desc: "Direct chats with certified skin advisors, monthly progress reports, family profiles, discounts."
+                  }
+                ].map((p) => (
+                  <div key={p.key} className="border border-border rounded-2xl p-4 bg-card flex flex-col justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</p>
+                      <p className="text-lg font-bold text-foreground mt-1 font-mono">{p.price}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (p.key === "glow") {
+                          // Allow setting basic Glow plan
+                          supabase.auth.getUser().then(({ data: { user } }) => {
+                            if (!user) return;
+                            supabase.from("profiles").update({ plan: "glow" }).eq("id", user.id).then(() => {
+                              setUserProfile(prev => prev ? { ...prev, plan: "glow" } : null);
+                              setTrialExpired(false);
+                              toast.success("Welcome back! Glow Pass activated successfully.");
+                            });
+                          });
+                        } else {
+                          payWithPaystack(p.key === "basic" ? "basic" : "premium");
+                        }
+                      }}
+                      className="w-full mt-4 py-2 bg-[#008236] hover:bg-[#006c2c] text-white text-[10px] font-semibold rounded-lg transition-colors cursor-pointer text-center"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      Subscribe & Activate
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap border-b border-border pb-4">
           <div className="flex items-center gap-2">
             <span className="text-xs bg-accent/15 text-accent border border-accent/20 px-3 py-1.5 rounded-full font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {userProfile?.plan === "premium" ? "Premium Glow" : (userProfile?.plan === "glowplus" ? "Glow Pass+" : "Glow Pass")}
@@ -299,7 +448,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               { label: "Skin score", value: latestAnalysis ? String(latestAnalysis.score) : "—", delta: latestAnalysis ? "Updated recently" : "No scan yet", icon: <Star className="w-4 h-4" />, color: "text-amber-500" },
               { label: "Analyses done", value: String(analysesList.length), delta: "Platform scans", icon: <Scan className="w-4 h-4" />, color: "text-accent" },
               { label: "Products matched", value: latestAnalysis ? String(matchedProducts.length) : "0", delta: "Safety verified", icon: <ShoppingBag className="w-4 h-4" />, color: "text-blue-500" },
-              { label: "Days on routine", value: latestAnalysis ? "12" : "—", delta: "Tracked days", icon: <Flame className="w-4 h-4" />, color: "text-orange-500" },
+              { label: "Days on routine", value: latestAnalysis ? String(Math.max(1, Math.round((Date.now() - new Date(latestAnalysis.date).getTime()) / (1000 * 60 * 60 * 24)))) : "—", delta: "Tracked days", icon: <Flame className="w-4 h-4" />, color: "text-orange-500" },
             ].map((s) => (
               <div key={s.label} className="bg-card border border-border rounded-lg p-4">
                 <div className={`flex items-center gap-2 mb-2 ${s.color}`}>
@@ -396,7 +545,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </button>
           </div>
           <div className="space-y-4 relative">
-            {plan === "glow" && <LockedOverlay label="Glow Pass+" />}
+            {plan === "glow" && <LockedOverlay label="Glow Pass+" onUpgrade={() => payWithPaystack("basic")} />}
             {analysesList.length > 0 ? (
               analysesList.map((a) => (
                 <div key={a.id} className="bg-card border border-border rounded-xl overflow-hidden">
@@ -498,7 +647,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
           </div>
           <div className="relative space-y-3">
-            {plan === "glow" && <LockedOverlay label="Glow Pass+" />}
+            {plan === "glow" && <LockedOverlay label="Glow Pass+" onUpgrade={() => payWithPaystack("basic")} />}
             {ingredientGlossary.map((ing) => (
               <div key={ing.name} className={cn("bg-card border rounded-xl p-4 flex items-start gap-4", ing.safe ? "border-border" : "border-red-200 bg-red-50/30")}>
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${ing.safe ? "bg-green-100" : "bg-red-100"}`}>
@@ -534,7 +683,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
 
           <div className="relative bg-card border border-border rounded-xl p-5">
-            {plan !== "premium" && <LockedOverlay label="Premium Glow" />}
+            {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
             {/* SVG chart */}
             <div className="mb-4 flex items-end gap-2 justify-between h-36">
               {progressScores.map((s, i) => {
@@ -583,7 +732,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Built for Combination skin · Hyperpigmentation · Lagos climate.</p>
           </div>
           <div className="relative">
-            {plan !== "premium" && <LockedOverlay label="Premium Glow" />}
+            {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
             <div className="grid sm:grid-cols-2 gap-4">
               {[
                 { label: "Morning Routine", steps: routineSteps.filter((s) => s.step.startsWith("AM")), color: "text-amber-600", bg: "bg-amber-50" },
@@ -628,7 +777,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </button>
           </div>
           <div className="relative space-y-3">
-            {plan !== "premium" && <LockedOverlay label="Premium Glow" />}
+            {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
             {showAddFamily && (
               <div className="bg-muted/30 border border-dashed border-border rounded-xl p-4 flex gap-2 flex-wrap">
                 <input placeholder="Name" className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-accent min-w-32" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
@@ -677,7 +826,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
             <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Discounts from Anovra partner vendors, available only to Premium Glow subscribers.</p>
             <div className="relative space-y-3">
-              {plan !== "premium" && <LockedOverlay label="Premium Glow" />}
+              {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
               {discounts.map((d) => (
                 <div key={d.code} className={cn("bg-card border rounded-xl p-4 flex items-center gap-4", d.used ? "opacity-50" : "border-border")}>
                   <div className="flex-1">
@@ -731,7 +880,105 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
         </div>
       )}
-    </div>
+      {/* ── SETTINGS / BILLING ── */}
+      {tab === "settings" && (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Subscription Billing & Plans</h2>
+            <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Manage your account subscription, unlock features, and view active benefits.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              {
+                id: "glow" as const,
+                name: "Glow Pass",
+                price: "₦1,500",
+                period: "month",
+                desc: "Essential skin health analysis & matched recommendations.",
+                features: ["1 full skin analysis per month", "Top 3 product recommendations", "Basic skin type & concern report", "Ingredient safety check", "Results shared via link"],
+                cta: plan === "glow" ? "Current Plan" : "Downgrade to Glow Pass",
+                planKey: null,
+                active: plan === "glow"
+              },
+              {
+                id: "glowplus" as const,
+                name: "Glow Pass+",
+                price: "₦3,500",
+                period: "month",
+                desc: "Unlimited skin analyses and complete history log files tracking.",
+                features: ["Unlimited skin analyses", "Full product recommendation list", "Detailed skin health report", "Save & track skin history", "Personalized ingredient glossary", "Priority product matching"],
+                cta: plan === "glow" ? "Upgrade to Glow Pass+" : (plan === "glowplus" ? "Current Plan" : "Downgrade to Glow Pass+"),
+                planKey: "basic" as const,
+                active: plan === "glowplus"
+              },
+              {
+                id: "premium" as const,
+                name: "Premium Glow",
+                price: "₦7,000",
+                period: "month",
+                desc: "Complete features including live dermatologist chats and routines.",
+                features: ["Everything in Glow Pass+", "Monthly progress reports & trend scores", "Direct chat with certified skin advisors", "Exclusive discounts from Anovra vendors", "Family skin profiles (up to 5 members)", "Skincare routine builder & early AI access"],
+                cta: plan === "premium" ? "Current Plan" : "Upgrade to Premium Glow",
+                planKey: "premium" as const,
+                active: plan === "premium"
+              }
+            ].map((p) => (
+              <div key={p.id} className={cn("bg-card border rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden", p.active ? "border-[#008236] ring-1 ring-[#008236]/20" : "border-border")}>
+                {p.active && (
+                  <div className="absolute top-0 right-0 bg-[#008236] text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-lg">
+                    Active
+                  </div>
+                )}
+                <div>
+                  <h3 className="font-semibold text-foreground text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</h3>
+                  <div className="mt-4 flex items-baseline gap-1">
+                    <span className="text-3xl font-extrabold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.price}</span>
+                    <span className="text-xs text-muted-foreground font-medium">/{p.period}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
+                  
+                  <div className="border-t border-border/60 my-5" />
+                  
+                  <ul className="space-y-3">
+                    {p.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-xs text-foreground/80" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <Check className="w-3.5 h-3.5 text-[#008236] shrink-0 mt-0.5" />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-8">
+                  {p.active ? (
+                    <button disabled className="w-full py-3 bg-muted text-muted-foreground rounded-xl text-xs font-semibold cursor-not-allowed">
+                      Current Plan
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        if (p.planKey) {
+                          payWithPaystack(p.planKey);
+                        } else {
+                          toast.error("Downgrades must be processed via account support.");
+                        }
+                      }}
+                      className="w-full py-3 bg-[#008236] hover:bg-[#006c2c] text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      {p.cta}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+          </>
+        )}
+      </div>
 
       {/* ── Floating advisor chat (Premium) ── */}
       {plan === "premium" && (

@@ -9,9 +9,9 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Demo credentials — in production this would hit a real auth endpoint
-  const ADMIN_EMAIL = "admin@anovra.africa";
-  const ADMIN_PASS = "Admin@2025!";
+  // Seeded credentials for admin
+  const ADMIN_EMAIL = "hello@anovra.africa";
+  const ADMIN_PASS = "@Skin_ana1";
 
   const handleLogin = () => {
     if (!email || !password) { setError("Please enter your admin email and password."); return; }
@@ -63,7 +63,7 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
               <input
                 type="email"
                 autoComplete="username"
-                placeholder="admin@anovra.africa"
+                placeholder="hello@anovra.africa"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
@@ -135,7 +135,7 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
           {/* Demo hint */}
           <div className="mt-5 p-3 bg-muted rounded-xl">
             <p className="text-[11px] text-muted-foreground text-center leading-relaxed" style={{ fontFamily: "'DM Mono', monospace" }}>
-              demo · admin@anovra.africa / Admin@2025!
+              admin · hello@anovra.africa / @Skin_ana1
             </p>
           </div>
         </div>

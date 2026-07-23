@@ -52,7 +52,7 @@ export function UnifiedDashboardHeader({
     fetchUserSlug();
   }, []);
 
-  const shopLink = `https://anovra.africa/shop/${brandSlug}`;
+  const shopLink = `https://anovra.africa/#/shop/${brandSlug}`;
 
   function copyLink() {
     navigator.clipboard.writeText(shopLink);

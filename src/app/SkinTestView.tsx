@@ -1,28 +1,29 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Camera, Upload, Shield, ChevronDown, ChevronUp, ChevronRight,
   CheckCircle, ArrowRight, MessageCircle, Zap, Globe, Lock,
   Scan, Activity, X, Check, Info, Store, Search, Star, AlertTriangle,
-  User, UserCheck, Square, Hand, Maximize2, MapPin, Sparkles, Smile
+  ScanFace, Badge, Bone, Hand, Footprints, PersonStanding, ScanSearch, Sparkles, Smile
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
 import { supabase } from "./utils/supabase";
+import { toast } from "sonner";
 
 // ---- SKIN TEST DATA ----
 
 const SKIN_AREAS = [
-  { name: "Face", desc: "Cheeks, forehead, chin, nose", photo: "1531746020798-e6953c6e8e04", guide: "oval", icon: <User className="w-5 h-5 text-emerald-600 shrink-0" /> },
-  { name: "Neck", desc: "Throat, nape, décolletage", photo: "1603291000179-afd74889979c", guide: "oval", icon: <UserCheck className="w-5 h-5 text-emerald-600 shrink-0" /> },
-  { name: "Back", desc: "Upper or lower back", photo: "1541752857837-f8a0154fd092", guide: "rect", icon: <Square className="w-5 h-5 text-emerald-600 shrink-0" /> },
-  { name: "Hands", desc: "Knuckles, palms, wrists", photo: "1558618666-fcd25c85cd64", guide: "rect", icon: <Hand className="w-5 h-5 text-emerald-600 shrink-0" /> },
-  { name: "Legs", desc: "Thighs, shins, calves", photo: "1523297736436-356615162cc8", guide: "rect", icon: <Activity className="w-5 h-5 text-emerald-600 shrink-0" /> },
-  { name: "Whole Body", desc: "Full-body video scan — face, torso, limbs and all visible skin areas analysed together", photo: "1707161256359-0919306e0d3c", guide: "rect", icon: <Maximize2 className="w-5 h-5 text-emerald-600 shrink-0" /> },
-  { name: "Other area", desc: "Any other visible skin area not listed above", photo: "1577746838851-816a43ca8733", guide: "rect", icon: <MapPin className="w-5 h-5 text-emerald-600 shrink-0" /> },
+  { name: "Face", desc: "Cheeks, forehead, chin, nose", photo: "1531746020798-e6953c6e8e04", guide: "oval", icon: ScanFace },
+  { name: "Neck", desc: "Throat, nape, décolletage", photo: "1603291000179-afd74889979c", guide: "oval", icon: Badge },
+  { name: "Back", desc: "Upper or lower back", photo: "1541752857837-f8a0154fd092", guide: "rect", icon: Bone },
+  { name: "Hands", desc: "Knuckles, palms, wrists", photo: "1558618666-fcd25c85cd64", guide: "rect", icon: Hand },
+  { name: "Legs", desc: "Thighs, shins, calves", photo: "1523297736436-356615162cc8", guide: "rect", icon: Footprints },
+  { name: "Whole Body", desc: "Full-body video scan — face, torso, limbs and all visible skin areas analyzed together", photo: "1707161256359-0919306e0d3c", guide: "rect", icon: PersonStanding },
+  { name: "Other area", desc: "Any other visible skin area not listed above", photo: "1577746838851-816a43ca8733", guide: "rect", icon: ScanSearch },
 ];
 
 const ANALYSIS_STEPS_LABELS = [
-  "Normalising image exposure and white balance...",
+  "Normalizing image exposure and white balance...",
   "Evaluating skin texture and surface detail...",
   "Scoring pigmentation and tone evenness...",
   "Detecting acne severity and blemishes...",
@@ -51,149 +52,405 @@ const SKIN_REPORT_CONCERNS = [
   { label: "Inflammation Signs", severity: 12, level: "Low", color: "#22C55E" },
 ];
 
-const recommendations = [
-  {
-    rank: 1,
-    score: 94,
-    name: "Niacinamide 10% + Zinc 1% Serum",
-    brand: "Veraski",
-    price: "₦4,500",
-    photo: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=300&h=300&fit=crop&auto=format",
-    why: "Your scan detected moderate hyperpigmentation across both cheeks and elevated sebum levels in the T-zone. Niacinamide directly targets both — it blocks melanin transfer to reduce dark spots while regulating sebum production without stripping moisture.",
-    benefits: [
-      "Visibly reduces hyperpigmentation and dark spots within 4–8 weeks",
-      "Regulates excess oil production without drying skin",
-      "Strengthens the skin barrier — critical in humid Lagos climate",
-      "Well-tolerated by darker skin tones; no bleaching effect",
-    ],
-    howToUse: "Apply 3–4 drops to clean, dry skin morning and night. Press gently — do not rub. Follow immediately with a moisturiser. In the AM, always finish with SPF 30+. Do not layer with Vitamin C at the same time; use them in alternating AM/PM routines. Expect visible results at 4 weeks, best results at 8–12 weeks.",
-    disadvantages: [
-      "May cause mild initial tingling on very sensitive skin in the first week",
-      "High-strength formula — start with once daily for 7 days before twice daily",
-    ],
-    warnings: [
-      "Patch test 24 hours before first use — apply to inner wrist",
-      "Always use broad-spectrum SPF 30+ when using niacinamide during the day",
-      "Discontinue and consult a dermatologist if irritation persists beyond 1 week",
-      "Not a medical treatment — for persistent acne or severe hyperpigmentation, see a dermatologist",
-    ],
-    waLink: "https://wa.me/2348012345678?text=Hi%2C%20I'd%20like%20to%20order%20the%20Niacinamide%20Serum",
-  },
-  {
-    rank: 2,
-    score: 81,
-    name: "Kojic Acid & Turmeric Brightening Cream",
-    brand: "GlowAfrique",
-    price: "₦6,200",
-    photo: "https://images.unsplash.com/photo-1601049541271-20f4e4e04360?w=300&h=300&fit=crop&auto=format",
-    why: "The scan found post-inflammatory hyperpigmentation (PIH) spots consistent with previous acne marks on the forehead and chin. Kojic acid combined with turmeric extract is clinically shown to reduce PIH in darker skin tones while maintaining evenness.",
-    benefits: [
-      "Targets post-acne dark marks (PIH) directly",
-      "Turmeric extract has anti-inflammatory properties that calm active spots",
-      "Shea butter base provides hydration — no dry-down effect",
-      "Ethically formulated; no mercury, no banned hydroquinone concentrations",
-    ],
-    howToUse: "Apply a pea-sized amount to affected areas only in the PM routine. Avoid full-face application initially. Use 3–4 nights per week for the first month, then nightly if tolerated. Do not use directly before sun exposure — always use SPF in the morning. Timeline: visible improvement in 6–10 weeks.",
-    disadvantages: [
-      "Turmeric extract can cause temporary yellowing on very light skin tones",
-      "Not recommended for use around the eye area",
-      "Heavier cream texture — may feel occlusive in hot and humid conditions",
-    ],
-    warnings: [
-      "Photosensitising ingredient — nighttime use only, always pair with morning SPF",
-      "Patch test required before first use",
-      "Avoid during pregnancy — consult your doctor first",
-      "If irritation, redness or unusual breakout occurs, discontinue use",
-    ],
-    waLink: "https://wa.me/2348012345678?text=Hi%2C%20I'd%20like%20to%20order%20the%20Brightening%20Cream",
-  },
-  {
-    rank: 3,
-    score: 73,
-    name: "SPF 50+ Invisible Sunscreen Fluid",
-    brand: "SunGuard NG",
-    price: "₦7,500",
-    photo: "https://images.unsplash.com/photo-1585232350010-2e7c7b6427eb?w=300&h=300&fit=crop&auto=format",
-    why: "Sun exposure is the primary cause of the pigmentation pattern detected in your scan and will worsen any dark spots without daily SPF protection. This product is formulated for darker skin tones — no white cast, lightweight fluid that works under makeup.",
-    benefits: [
-      "SPF 50+/PA++++ — clinically proven broad-spectrum protection",
-      "Zero white cast on deeper skin tones — tested on Fitzpatrick IV–VI",
-      "Contains niacinamide for ongoing tone-evenness support while protecting",
-      "Lightweight, non-comedogenic — won't clog pores or worsen acne",
-    ],
-    howToUse: "Apply generously to face and neck every morning as the final step, after moisturiser and before makeup. Use at least a ¼ teaspoon (1.25 ml) for the face — most people under-apply SPF. Re-apply every 2 hours when outdoors. Do not skip even on cloudy or indoor days.",
-    disadvantages: [
-      "Higher price point for daily sunscreen",
-      "Fluid formula may not give enough coverage if you prefer a more matte finish",
-    ],
-    warnings: [
-      "This does not replace medical treatment for sun damage or melanoma — see a dermatologist for unusual moles or lesions",
-      "Reapply after swimming or heavy sweating",
-      "SPF is not optional when using any skin-brightening or acid-containing products",
-    ],
-    waLink: "https://wa.me/2348012345678?text=Hi%2C%20I'd%20like%20to%20order%20the%20SPF%2050%2B%20Sunscreen",
-  },
-];
+type SeverityLevel = "Low" | "Mild" | "Moderate" | "Elevated";
+
+type ScanSeverity = {
+  label: string;
+  level: SeverityLevel;
+  score: number;
+};
 
 type SkinStep = 1 | 2 | 3 | 4 | 5;
 
+const titleFromSlug = (slug: string) =>
+  slug
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ") || "";
+
+const getScanSlugFromUrl = () => {
+  const hash = window.location.hash;
+  const queryMatch = hash.match(/[?&]vendor=([^&]+)/);
+  const hashSlug = hash.includes("/scan/")
+    ? hash.split("/scan/")[1]?.split("?")[0]
+    : "";
+  const slug = queryMatch?.[1] || hashSlug || sessionStorage.getItem("active_scan_slug") || "";
+  return slug === "israel-abazie" ? "vintage" : slug;
+};
+
+type MatchedProduct = {
+  id: string;
+  rank: number;
+  score: number;
+  name: string;
+  brand: string;
+  price: string;
+  priceVal: number;
+  photo: string;
+  images: string[];
+  category: string;
+  description: string;
+  benefits: string[];
+  usageInstructions: string;
+  precautions: string;
+  skinTypes: string[];
+  ingredients: string[];
+  matchReasons: string[];
+  vendorName: string;
+  whatsappUrl: string | null;
+};
+
+const parseJsonMeta = <T,>(text: string, key: string, fallback: T): T => {
+  const match = text.match(new RegExp(`<!--${key}:(.*)-->`));
+  if (!match) return fallback;
+  try {
+    return JSON.parse(match[1]);
+  } catch (e) {
+    return fallback;
+  }
+};
+
+const cleanProductDescription = (text: string) =>
+  text
+    .replace(/<!--IMAGES:(.*)-->/, "")
+    .replace(/<!--BENEFITS:(.*)-->/, "")
+    .replace(/<!--USAGE:(.*)-->/, "")
+    .replace(/<!--PRECAUTIONS:(.*)-->/, "")
+    .replace(/<!--SKINTYPES:(.*)-->/, "")
+    .replace(/<!--KEY_INGREDIENTS:(.*)-->/, "")
+    .replace(/<!--ACTIVE_INGREDIENTS:(.*)-->/, "")
+    .trim();
+
+const tokenize = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s/+-]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 2);
+
+const buildWhatsappUrl = (phone: string | null | undefined, productName: string) => {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return null;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(`Hi, I'd like to order ${productName}`)}`;
+};
+
 export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const [step, setStep] = useState<SkinStep>(1);
+  const [activeScanSlug] = useState(getScanSlugFromUrl);
   const [selectedArea, setSelectedArea] = useState("");
-  const [uploadMode, setUploadMode] = useState<"image" | "video" | null>(null);
+  const [uploadMode, setUploadMode] = useState<"image" | "video" | null>("image");
   const [progress, setProgress] = useState(0);
   const [expandedCard, setExpandedCard] = useState<number | null>(0);
   const [expandedSection, setExpandedSection] = useState<{ card: number; section: string } | null>(null);
   const [filters, setFilters] = useState({ country: "", state: "", city: "", vendor: "", category: "" });
   const [showFilters, setShowFilters] = useState(false);
   const [vendorProfile, setVendorProfile] = useState<any | null>(null);
+  const [matchedProducts, setMatchedProducts] = useState<MatchedProduct[]>([]);
+  const [matchingProducts, setMatchingProducts] = useState(false);
+
+  // Gemini scan state
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [scanResult, setScanResult] = useState<{
+    concern: string;
+    result: string;
+    score: number;
+    severity?: ScanSeverity[];
+    benefits: string[];
+  } | null>(null);
+  const [analyzingError, setAnalyzingError] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const vendorDisplayName = vendorProfile?.business_name || vendorProfile?.name || titleFromSlug(activeScanSlug);
+  const hasVendorBrand = Boolean(vendorDisplayName);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Enforce allowed file type formats (JPEG, PNG, WEBP)
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Unsupported format. Please select a JPEG, PNG, or WEBP image.");
+      return;
+    }
+
+    // Enforce maximum file upload size (5MB limit)
+    const maxSizeBytes = 5 * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      toast.error("File size exceeds 5MB limit. Please upload a smaller photo.");
+      return;
+    }
+
+    setSelectedFile(file);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImageBase64(reader.result as string);
+      setStep(3);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerFileSelect = () => {
+    fileInputRef.current?.click();
+  };
 
   useEffect(() => {
-    const hash = window.location.hash;
-    const match = hash.match(/[?&]vendor=([^&]+)/);
-    const slug = match ? match[1] : null;
+    const slug = activeScanSlug;
     if (slug) {
+      sessionStorage.setItem("active_scan_slug", slug);
       const fetchVendor = async () => {
-        const { data } = await supabase
-          .from("profiles")
-          .select("name, business_name, white_label, plan")
-          .ilike("business_name", slug.replace(/-/g, " "))
-          .maybeSingle();
-        if (data) {
-          setVendorProfile(data);
+        try {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("id, name, business_name, white_label, plan, phone")
+            .ilike("business_name", slug.replace(/-/g, " "))
+            .maybeSingle();
+            
+          if (error && error.message.includes("white_label")) {
+            // Fallback: Query base columns only if settings columns do not exist
+            const { data: baseData } = await supabase
+              .from("profiles")
+              .select("id, name, business_name, plan, phone")
+              .ilike("business_name", slug.replace(/-/g, " "))
+              .maybeSingle();
+            if (baseData) {
+              setVendorProfile({
+                ...baseData,
+                white_label: false
+              });
+            }
+          } else if (data) {
+            setVendorProfile(data);
+          }
+        } catch (e) {
+          console.error("Failed to fetch white-label status:", e);
         }
       };
       fetchVendor();
     }
-  }, []);
+  }, [activeScanSlug]);
 
-  const healthScore = 68;
+  const healthScore = scanResult ? scanResult.score : 68;
+  const scanId = scanResult
+    ? `T-${Math.abs(`${scanResult.concern}-${scanResult.score}-${selectedArea}`.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)).toString().padStart(4, "0").slice(-4)}`
+    : "Pending";
+  const visibleSeverity = scanResult?.severity?.length
+    ? scanResult.severity
+    : SKIN_REPORT_CONCERNS.map((c) => ({
+      label: c.label,
+      level: (scanResult && c.label.toLowerCase().includes(scanResult.concern.toLowerCase().split(" ")[0])
+        ? "Moderate"
+        : "Low") as SeverityLevel,
+      score: scanResult && c.label.toLowerCase().includes(scanResult.concern.toLowerCase().split(" ")[0])
+        ? Math.max(50, scanResult.score)
+        : 15,
+    }));
 
-  const activeRecommendations = recommendations.map((rec) => {
-    if (vendorProfile && vendorProfile.white_label && vendorProfile.plan === "premium") {
-      return {
-        ...rec,
-        brand: vendorProfile.business_name || vendorProfile.name,
-      };
+  useEffect(() => {
+    if (!scanResult || !vendorProfile?.id) {
+      setMatchedProducts([]);
+      return;
     }
-    return rec;
-  });
+
+    const fetchMatchedProducts = async () => {
+      setMatchingProducts(true);
+      try {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("vendor_id", vendorProfile.id)
+          .eq("nafdac_status", "approved");
+
+        if (error) throw error;
+
+        const queryText = [
+          scanResult.concern,
+          scanResult.result,
+          ...(scanResult.benefits || []),
+          ...(scanResult.severity || []).filter((item) => item.score >= 30).map((item) => item.label),
+        ].join(" ");
+        const queryTokens = new Set(tokenize(queryText));
+        const vendorName = vendorProfile.business_name || vendorProfile.name || "Vendor";
+
+        const formatted = (data || []).map((product) => {
+          const descriptionText = product.description || "";
+          const images = parseJsonMeta<string[]>(descriptionText, "IMAGES", []);
+          const benefitsText = parseJsonMeta<string>(descriptionText, "BENEFITS", "");
+          const usageInstructions = parseJsonMeta<string>(descriptionText, "USAGE", "");
+          const precautions = parseJsonMeta<string>(descriptionText, "PRECAUTIONS", "");
+          const skinTypes = parseJsonMeta<string[]>(descriptionText, "SKINTYPES", []);
+          const keyIngredients = parseJsonMeta<string[]>(descriptionText, "KEY_INGREDIENTS", []);
+          const activeIngredients = parseJsonMeta<string[]>(descriptionText, "ACTIVE_INGREDIENTS", []);
+          const ingredients = [...keyIngredients, ...activeIngredients];
+          const cleanDescription = cleanProductDescription(descriptionText);
+          const benefits = benefitsText
+            .split("\n")
+            .map((benefit) => benefit.replace(/^[•\-\*]\s*/, "").trim())
+            .filter(Boolean);
+          const searchable = [
+            product.name,
+            product.brand,
+            product.category,
+            cleanDescription,
+            benefitsText,
+            usageInstructions,
+            precautions,
+            skinTypes.join(" "),
+            ingredients.join(" "),
+          ].join(" ");
+          const productTokens = new Set(tokenize(searchable));
+          const overlap = [...queryTokens].filter((token) => productTokens.has(token));
+          const severityBoost = (scanResult.severity || []).reduce((sum, item) => {
+            return productTokens.has(item.label.toLowerCase().split(" ")[0]) ? sum + Math.min(18, Math.round(item.score / 5)) : sum;
+          }, 0);
+          const categoryBoost = product.category && queryText.toLowerCase().includes(String(product.category).toLowerCase()) ? 12 : 0;
+          const score = Math.max(45, Math.min(98, 58 + overlap.length * 5 + severityBoost + categoryBoost));
+          const matchReasons = overlap.slice(0, 3).map((token) => `Matches ${token} signals from your scan`);
+
+          return {
+            id: product.id,
+            rank: 0,
+            score,
+            name: product.name,
+            brand: product.brand || vendorName,
+            price: `₦${Number(product.price || 0).toLocaleString()}`,
+            priceVal: Number(product.price || 0),
+            photo: product.image_url || images[0] || "",
+            images,
+            category: product.category || "Skincare",
+            description: cleanDescription,
+            benefits,
+            usageInstructions,
+            precautions,
+            skinTypes,
+            ingredients,
+            matchReasons,
+            vendorName,
+            whatsappUrl: buildWhatsappUrl(vendorProfile.phone, product.name),
+          };
+        })
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 6)
+          .map((product, index) => ({ ...product, rank: index + 1 }));
+
+        setMatchedProducts(formatted);
+      } catch (err) {
+        console.error("Failed to match live catalog products:", err);
+        setMatchedProducts([]);
+      } finally {
+        setMatchingProducts(false);
+      }
+    };
+
+    fetchMatchedProducts();
+  }, [scanResult, vendorProfile]);
 
   useEffect(() => {
     if (step !== 3) return;
+    
     setProgress(0);
+    setAnalyzingError(null);
+    setScanResult(null);
+
+    // 1. Animate progress bar to simulate processing visually
+    let progressVal = 0;
     const interval = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          clearInterval(interval);
-          setTimeout(() => setStep(4), 600);
-          return 100;
+      progressVal = Math.min(92, progressVal + 2.5);
+      setProgress(progressVal);
+    }, 110);
+
+    // 2. Invoke real Gemini Multimodal analysis Edge Function
+    const runAnalysis = async () => {
+      try {
+        let finalImageUrl = "";
+        
+        // Upload photo to Supabase Storage skin-scans bucket
+        if (selectedFile) {
+          const fileExt = selectedFile.name.split('.').pop() || 'jpg';
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+          const filePath = `${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from("skin-scans")
+            .upload(filePath, selectedFile, {
+              cacheControl: '3600',
+              upsert: true
+            });
+
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage
+              .from("skin-scans")
+              .getPublicUrl(filePath);
+            finalImageUrl = publicUrl;
+          } else {
+            console.warn("Storage upload failed, falling back to base64 payload:", uploadError.message);
+          }
         }
-        return p + 0.9;
-      });
-    }, 55);
+
+        const payload: { imageUrl?: string; imageBase64?: string; mimeType: string; skinArea: string } = {
+          mimeType: selectedFile?.type || "image/jpeg",
+          skinArea: selectedArea || "Face"
+        };
+
+        if (finalImageUrl) {
+          payload.imageUrl = finalImageUrl;
+        } else if (imageBase64) {
+          payload.imageBase64 = imageBase64;
+        } else {
+          throw new Error("No image data available for analysis.");
+        }
+
+        const { data: resultData, error: invokeError } = await supabase.functions.invoke("analyse-skin", {
+          body: payload
+        });
+        if (invokeError) throw invokeError;
+        if (!resultData || !resultData.concern) throw new Error("Could not extract diagnostic skin report.");
+
+        clearInterval(interval);
+        setProgress(100);
+        setScanResult(resultData);
+
+        // Record scan dynamically in user scan history if authenticated
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          try {
+            const vendorId = vendorProfile?.id || null;
+            await supabase.from("scans").insert([{
+              customer_id: user.id,
+              vendor_id: vendorId,
+              concern: resultData.concern,
+              result: resultData.result,
+              city: filters.city || "Lagos"
+            }]);
+          } catch (dbErr) {
+            console.warn("Could not insert scan into database history:", dbErr);
+          }
+        }
+
+        setTimeout(() => setStep(4), 800);
+      } catch (err: any) {
+        console.error("AI Analysis failed:", err);
+        clearInterval(interval);
+        
+        let friendlyMsg = "We encountered a temporary connection issue. Please check your internet connection and try again.";
+        const msg = String(err.message || "");
+        if (msg.includes("Failed to send a request") || msg.includes("fetch") || msg.includes("net::ERR")) {
+          friendlyMsg = "Unable to connect to the skin scanner engine. Please check your internet connection and try again.";
+        } else if (msg.includes("400") || msg.includes("Bad Request") || msg.includes("Payload Too Large")) {
+          friendlyMsg = "The photo uploaded is too large or has an unsupported format. Please try a smaller file (under 5MB) in PNG/JPEG format.";
+        }
+        setAnalyzingError(friendlyMsg);
+      }
+    };
+
+    runAnalysis();
+
     return () => clearInterval(interval);
-  }, [step]);
+  }, [step, selectedFile, imageBase64, vendorProfile, filters.city]);
 
   const currentAnalysisStep = Math.min(
     Math.floor((progress / 100) * ANALYSIS_STEPS_LABELS.length),
@@ -218,9 +475,16 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     setShowFilters(false);
   }
 
-  const STEP_LABELS = ["Select Area", "Upload", "Analysing", "Skin Report", "Results"];
+  const STEP_LABELS = ["Select Area", "Upload", "Analyzing", "Skin Report", "Results"];
 
   const activeFilters = Object.values(filters).filter(Boolean).length;
+  const vendorOptions = Array.from(new Set(matchedProducts.map((product) => product.vendorName).filter(Boolean)));
+  const categoryOptions = Array.from(new Set(matchedProducts.map((product) => product.category).filter(Boolean)));
+  const filteredMatchedProducts = matchedProducts.filter((product) => {
+    const vendorOk = !filters.vendor || product.vendorName === filters.vendor;
+    const categoryOk = !filters.category || product.category === filters.category;
+    return vendorOk && categoryOk;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -228,27 +492,28 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       <div className="border-b border-border bg-background/90 backdrop-blur-md sticky top-0 z-40 transition-all">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-20">
           <div className="flex items-center gap-4">
-            {vendorProfile && vendorProfile.white_label && vendorProfile.plan === "premium" ? (
-              <span className="text-xl font-bold text-[#008236] tracking-wide animate-fade-in" style={{ fontFamily: "'Fraunces', serif" }}>
-                {vendorProfile.business_name || vendorProfile.name}
-              </span>
-            ) : (
-              <button
-                onClick={() => setView?.("landing")}
-                className="flex items-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-lg p-1 transition-transform active:scale-95"
-                aria-label="Anovra Home"
-              >
-                <img
-                  src="/logo.png"
-                  alt="Anovra Logo"
-                  className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
-                />
-              </button>
-            )}
+            <button
+              onClick={() => setView?.("landing")}
+              className="flex items-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-lg p-1 transition-transform active:scale-95"
+              aria-label="Anovra Home"
+            >
+              <img
+                src="/logo.png"
+                alt="Anovra Logo"
+                className="h-10 sm:h-12 w-auto object-contain transition-transform group-hover:scale-105"
+              />
+            </button>
             <div className="hidden sm:flex items-center gap-2 border-l border-border pl-4">
-              <span className="text-sm font-semibold text-foreground tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>
-                Skin Test Engine
-              </span>
+              <div>
+                <span className="block text-sm font-semibold text-foreground tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                  {hasVendorBrand ? `${vendorDisplayName} Skin Test` : "Skin Test Engine"}
+                </span>
+                {hasVendorBrand && (
+                  <span className="block text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Powered by Anovra
+                  </span>
+                )}
+              </div>
               <span className="text-[10px] font-mono bg-[#008236]/15 text-[#008236] border border-[#008236]/30 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#008236] animate-pulse" /> AI ACTIVE
               </span>
@@ -308,10 +573,12 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="mb-8 text-center sm:text-left">
             <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 1 of 5</p>
             <h2 className="text-3xl sm:text-4xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Select skin area to analyse
+              Select skin area to analyze
             </h2>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Anovra&apos;s AI engine can evaluate any visible area. Tap an option below to proceed.
+              {hasVendorBrand
+                ? `${vendorDisplayName} uses Anovra's AI engine to evaluate visible skin areas and recommend safer product matches.`
+                : "Anovra's AI engine can evaluate any visible area. Tap an option below to proceed."}
             </p>
           </div>
 
@@ -319,6 +586,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
             {SKIN_AREAS.map((area) => {
               const isSelected = selectedArea === area.name;
+              const AreaIcon = area.icon;
               return (
                 <button
                   key={area.name}
@@ -331,10 +599,12 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   )}
                 >
                   <div className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors",
-                    isSelected ? "bg-[#008236] text-white" : "bg-[#FAF7F2] text-[#008236]"
+                    "w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300",
+                    isSelected
+                      ? "bg-[#008236] text-white shadow-sm"
+                      : "bg-[#008236]/8 text-[#008236] group-hover:bg-[#008236]/12"
                   )}>
-                    {area.icon}
+                    <AreaIcon className="w-5 h-5" strokeWidth={1.9} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground text-sm leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{area.name}</p>
@@ -380,29 +650,11 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="mb-6">
             <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 2 of 5 · {selectedArea}</p>
             <h2 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Upload your skin image or video
+              Upload your skin photo
             </h2>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              High-quality, well-lit media gives the most accurate analysis. Anovra accepts both photos and short videos.
+              High-quality, well-lit photos give the most accurate skin analysis.
             </p>
-          </div>
-
-          {/* Upload mode selector */}
-          <div className="flex gap-3 mb-5">
-            {(["image", "video"] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setUploadMode(mode)}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all cursor-pointer",
-                  uploadMode === mode ? "border-[#008236] bg-[#008236]/10 text-[#008236]" : "border-border bg-card text-foreground hover:border-[#008236]/30"
-                )}
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              >
-                {mode === "image" ? <Camera className="w-4 h-4" /> : <Scan className="w-4 h-4" />}
-                {mode === "image" ? "Image / Photo" : "Short video"}
-              </button>
-            ))}
           </div>
 
           {/* Viewfinder with scanner animation */}
@@ -452,17 +704,25 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             </div>
           </div>
 
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/*"
+            className="hidden"
+          />
+
           <div className="grid grid-cols-2 gap-3 mb-4">
             <button
-              onClick={() => setStep(3)}
+              onClick={triggerFileSelect}
               className="flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold py-3.5 rounded-xl transition-all text-sm shadow-sm cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               <Camera className="w-4 h-4 text-white" />
-              {uploadMode === "video" ? "Record video" : "Take photo"}
+              Take photo
             </button>
             <button
-              onClick={() => setStep(3)}
+              onClick={triggerFileSelect}
               className="flex items-center justify-center gap-2 bg-white border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/5 font-bold py-3.5 rounded-xl transition-colors text-sm cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
@@ -474,7 +734,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="flex items-start gap-2 p-3.5 bg-secondary/50 rounded-xl">
             <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Your image is analysed in real-time and never stored. We do not share your data with any third party.
+              Your image is analyzed in real-time and never stored. We do not share your data with any third party.
             </p>
           </div>
         </div>
@@ -483,58 +743,94 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       {/* ---- STEP 3: AI Analysis ---- */}
       {step === 3 && (
         <div className="max-w-xl mx-auto px-4 py-16 text-center">
-          <div className="w-28 h-28 rounded-full bg-[#008236]/10 flex items-center justify-center mx-auto mb-8 relative">
-            <Activity className="w-12 h-12 text-[#008236] animate-pulse" />
-            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 112 112">
-              <circle cx="56" cy="56" r="52" fill="none" stroke="rgba(200,107,58,0.15)" strokeWidth="4" />
-              <circle
-                cx="56" cy="56" r="52" fill="none" stroke="#008236" strokeWidth="4"
-                strokeDasharray={`${2 * Math.PI * 52}`}
-                strokeDashoffset={`${2 * Math.PI * 52 * (1 - progress / 100)}`}
-                strokeLinecap="round"
-                style={{ transition: "stroke-dashoffset 0.08s linear" }}
-              />
-            </svg>
-          </div>
-
-          <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>AI Engine Active</p>
-          <h2 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-            Analysing your {selectedArea.toLowerCase()}...
-          </h2>
-
-          <div className="min-h-[2rem] mb-6">
-            <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {ANALYSIS_STEPS_LABELS[currentAnalysisStep]}
-            </p>
-          </div>
-
-          {/* Characteristics being evaluated */}
-          <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto mb-8">
-            {["Texture", "Pigmentation", "Acne", "Pores", "Wrinkles", "Fine Lines", "Redness", "Dryness", "Oiliness", "Tone", "Inflammation", "Blemishes"].map((attr, idx) => {
-              const evaluated = idx < Math.floor((progress / 100) * 12);
-              return (
-                <div
-                  key={attr}
-                  className={cn(
-                    "text-xs py-1.5 px-2 rounded-full border transition-all duration-300",
-                    evaluated ? "border-[#008236]/40 bg-[#008236]/10 text-[#008236] font-medium" : "border-border bg-secondary text-muted-foreground"
-                  )}
-                  style={{ fontFamily: "'DM Mono', monospace" }}
+          {analyzingError ? (
+            <div className="bg-red-50 dark:bg-red-950/10 border border-red-200 dark:border-red-900/30 rounded-3xl p-6 sm:p-8 shadow-md">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-red-900 dark:text-red-300 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>AI Scanning Interrupted</h3>
+              <p className="text-xs text-red-700 dark:text-red-400 mb-6 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {analyzingError}
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => setStep(2)}
+                  className="w-full bg-[#008236] hover:bg-[#006c2c] text-white font-bold py-3 rounded-xl transition-all text-xs cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
-                  {evaluated && <span className="mr-1">✓</span>}{attr}
-                </div>
-              );
-            })}
-          </div>
+                  Choose another photo
+                </button>
+                <button
+                  onClick={() => {
+                    // Force a restart of the analysis
+                    setStep(1);
+                    setTimeout(() => {
+                      setStep(3);
+                    }, 50);
+                  }}
+                  className="w-full bg-white border border-border text-foreground hover:bg-secondary font-bold py-3 rounded-xl transition-all text-xs cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Retry analysis
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="w-28 h-28 rounded-full bg-[#008236]/10 flex items-center justify-center mx-auto mb-8 relative">
+                <Activity className="w-12 h-12 text-[#008236] animate-pulse" />
+                <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 112 112">
+                  <circle cx="56" cy="56" r="52" fill="none" stroke="rgba(200,107,58,0.15)" strokeWidth="4" />
+                  <circle
+                    cx="56" cy="56" r="52" fill="none" stroke="#008236" strokeWidth="4"
+                    strokeDasharray={`${2 * Math.PI * 52}`}
+                    strokeDashoffset={`${2 * Math.PI * 52 * (1 - progress / 100)}`}
+                    strokeLinecap="round"
+                    style={{ transition: "stroke-dashoffset 0.08s linear" }}
+                  />
+                </svg>
+              </div>
 
-          <div className="w-full bg-muted rounded-full h-1.5 max-w-xs mx-auto">
-            <div className="bg-[#008236] h-1.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
-          </div>
-          <p className="text-xs text-muted-foreground mt-2" style={{ fontFamily: "'DM Mono', monospace" }}>{Math.round(progress)}%</p>
+              <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>AI Engine Active</p>
+              <h2 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
+                Analyzing your {selectedArea.toLowerCase()}...
+              </h2>
 
-          <p className="text-xs text-muted-foreground mt-8 max-w-xs mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Results are AI-powered personalized recommendations — not a medical diagnosis.
-          </p>
+              <div className="min-h-[2rem] mb-6">
+                <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {ANALYSIS_STEPS_LABELS[currentAnalysisStep]}
+                </p>
+              </div>
+
+              {/* Characteristics being evaluated */}
+              <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto mb-8">
+                {["Texture", "Pigmentation", "Acne", "Pores", "Wrinkles", "Fine Lines", "Redness", "Dryness", "Oiliness", "Tone", "Inflammation", "Blemishes"].map((attr, idx) => {
+                  const evaluated = idx < Math.floor((progress / 100) * 12);
+                  return (
+                    <div
+                      key={attr}
+                      className={cn(
+                        "text-xs py-1.5 px-2 rounded-full border transition-all duration-300",
+                        evaluated ? "border-[#008236]/40 bg-[#008236]/10 text-[#008236] font-medium" : "border-border bg-secondary text-muted-foreground"
+                      )}
+                      style={{ fontFamily: "'DM Mono', monospace" }}
+                    >
+                      {evaluated && <span className="mr-1">✓</span>}{attr}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="w-full bg-muted rounded-full h-1.5 max-w-xs mx-auto">
+                <div className="bg-[#008236] h-1.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground mt-2" style={{ fontFamily: "'DM Mono', monospace" }}>{Math.round(progress)}%</p>
+
+              <p className="text-xs text-muted-foreground mt-8 max-w-xs mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Results are AI-powered personalized recommendations — not a medical diagnosis.
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -547,7 +843,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="bg-gradient-to-br from-[#008236] to-[#005a25] text-white rounded-3xl p-6 sm:p-8 mb-6 shadow-xl border border-[#008236]/20">
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <p className="text-xs text-white/60 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>ANALYSIS COMPLETE · Scan ID T-2848</p>
+                <p className="text-xs text-white/60 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>ANALYSIS COMPLETE · Scan ID {scanId}</p>
                 <h2 className="text-3xl font-light mb-1" style={{ fontFamily: "'Fraunces', serif" }}>Your skin report</h2>
                 <p className="text-sm text-white/80" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   Area: <span className="text-white font-bold">{selectedArea}</span>
@@ -574,8 +870,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             {/* Skin type + condition */}
             <div className="flex flex-wrap gap-3 mb-6">
               {[
-                { label: "Skin Type", value: "Combination (oily T-zone, dry cheeks)" },
-                { label: "Skin Condition", value: "Mild inflammatory, post-acne pigmentation" },
+                { label: "Skin Type", value: scanResult ? scanResult.result : "Combination (oily T-zone, dry cheeks)" },
+                { label: "Skin Condition", value: scanResult ? scanResult.concern : "Mild inflammatory, post-acne pigmentation" },
               ].map((item) => (
                 <div key={item.label} className="bg-white/10 border border-white/10 rounded-2xl px-4 py-3 flex-1 min-w-[200px]">
                   <p className="text-[10px] text-white/50 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>{item.label.toUpperCase()}</p>
@@ -588,17 +884,21 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             <div>
               <p className="text-xs text-white/60 mb-3.5 uppercase tracking-wider font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Detected skin concerns & severity</p>
               <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3.5">
-                {SKIN_REPORT_CONCERNS.map((c) => (
-                  <div key={c.label}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs text-white/90" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{c.label}</span>
-                      <span className="text-xs font-bold" style={{ color: c.level === "Good" || c.level === "Normal" || c.level === "Low" ? "#A7F3D0" : c.level === "Mild" || c.level === "Moderate" ? "#FDBA74" : "#FCA5A5", fontFamily: "'DM Mono', monospace" }}>{c.level}</span>
+                {visibleSeverity.map((c) => {
+                  const level = c.level;
+                  const severity = Math.max(0, Math.min(100, c.score));
+                  return (
+                    <div key={c.label}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs text-white/90" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{c.label}</span>
+                        <span className="text-xs font-bold" style={{ color: level === "Good" || level === "Normal" || level === "Low" ? "#A7F3D0" : level === "Mild" || level === "Moderate" ? "#FDBA74" : "#FCA5A5", fontFamily: "'DM Mono', monospace" }}>{level}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/15">
+                        <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${severity}%`, backgroundColor: level === "Good" || level === "Normal" || level === "Low" ? "#10B981" : level === "Mild" || level === "Moderate" ? "#C86B3A" : "#EF4444" }} />
+                      </div>
                     </div>
-                    <div className="h-1.5 rounded-full bg-white/15">
-                      <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${c.severity}%`, backgroundColor: c.level === "Good" || c.level === "Normal" || c.level === "Low" ? "#10B981" : c.level === "Mild" || c.level === "Moderate" ? "#C86B3A" : "#EF4444" }} />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -612,7 +912,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   Personalized recommendations ready
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Based on your scan, Anovra&apos;s engine has identified products targeting hyperpigmentation, T-zone oil control, and barrier repair. 3 products from verified vendors matched your skin profile.
+                  {scanResult 
+                    ? `Based on your scan, Anovra's engine has identified products targeting ${scanResult.concern.toLowerCase()} (${scanResult.result}). Target benefits: ${scanResult.benefits.join(', ')}.`
+                    : "Based on your scan, Anovra's engine has identified products targeting hyperpigmentation, T-zone oil control, and barrier repair. 3 products from verified vendors matched your skin profile."}
                 </p>
               </div>
             </div>
@@ -682,17 +984,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {([
-                  { key: "country", label: "Country", options: ["Nigeria", "Ghana", "Kenya", "South Africa"] },
-                  { key: "state", label: "State / Region", options: ["Lagos", "Abuja FCT", "Rivers", "Kano"] },
-                  { key: "city", label: "City", options: ["Lagos Island", "Victoria Island", "Lekki", "Ikeja"] },
-                  { 
-                    key: "vendor", 
-                    label: "Vendor", 
-                    options: vendorProfile && vendorProfile.white_label && vendorProfile.plan === "premium"
-                      ? [vendorProfile.business_name || vendorProfile.name]
-                      : ["Veraski", "GlowAfrique", "SunGuard NG", "SkinHQ"] 
-                  },
-                  { key: "category", label: "Product Category", options: ["Serums", "Creams", "SPF / Sunscreen", "Cleansers", "Toners"] },
+                  { key: "vendor", label: "Vendor", options: vendorOptions },
+                  { key: "category", label: "Product Category", options: categoryOptions },
                 ]).map((f) => (
                   <div key={f.key}>
                     <label className="text-[11px] font-bold text-muted-foreground mb-1 block uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.label}</label>
@@ -719,14 +1012,41 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
           {/* Product recommendation cards */}
           <div className="space-y-4.5 mb-6">
-            {activeRecommendations.map((rec, i) => (
-              <div key={rec.rank} className="bg-card border-2 border-border rounded-2xl overflow-hidden hover:shadow-md transition-all duration-300">
+            {matchingProducts && (
+              <div className="bg-card border border-border rounded-2xl p-6 text-center">
+                <div className="w-10 h-10 rounded-full border-4 border-[#008236]/20 border-t-[#008236] animate-spin mx-auto mb-3" />
+                <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Matching products from {vendorDisplayName || "this vendor"}...
+                </p>
+              </div>
+            )}
+
+            {!matchingProducts && filteredMatchedProducts.length === 0 && (
+              <div className="bg-card border border-border rounded-2xl p-8 text-center">
+                <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  No live catalog matches yet
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  This vendor does not have approved products matching your scan in the live catalog yet.
+                </p>
+              </div>
+            )}
+
+            {!matchingProducts && filteredMatchedProducts.map((rec, i) => (
+              <div key={rec.id} className="bg-card border-2 border-border rounded-2xl overflow-hidden hover:shadow-md transition-all duration-300">
                 {/* Card header */}
                 <button
                   className="w-full p-4 flex items-start gap-4.5 text-left hover:bg-secondary/25 transition-colors cursor-pointer"
                   onClick={() => setExpandedCard(expandedCard === i ? null : i)}
                 >
-                  <img src={rec.photo} alt={rec.name} className="w-16 h-16 rounded-2xl object-cover flex-shrink-0 bg-secondary border border-border" />
+                  {rec.photo ? (
+                    <img src={rec.photo} alt={rec.name} className="w-16 h-16 rounded-2xl object-cover flex-shrink-0 bg-secondary border border-border" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 bg-secondary border border-border text-muted-foreground">
+                      <Package className="w-6 h-6" />
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10px] font-bold bg-[#C86B3A]/10 text-[#C86B3A] px-2 py-0.5 rounded-full font-mono uppercase tracking-wider">#{rec.rank} match</span>
@@ -743,15 +1063,19 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                     {/* Why recommended */}
                     <div className="p-4.5 border-b border-border/60 bg-[#FAF7F2]/40">
                       <p className="text-xs font-bold text-[#C86B3A] uppercase tracking-wider mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Why we recommended this</p>
-                      <p className="text-sm text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.why}</p>
+                      <p className="text-sm text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {rec.matchReasons.length > 0
+                          ? `${rec.matchReasons.join(". ")}.`
+                          : `${rec.name} is in ${vendorDisplayName || "this vendor"}'s approved catalog and is the closest available match for ${scanResult?.concern.toLowerCase() || "your scan result"}.`}
+                      </p>
                     </div>
 
                     {/* Product details grid */}
                     <div className="grid grid-cols-2 gap-0 border-b border-border/60">
                       {[
-                        { label: "Suitable skin type", value: "Combination / Oily" },
-                        { label: "Availability", value: "In stock · Ships Lagos" },
-                        { label: "Expected results", value: "4–8 weeks with consistent use" },
+                        { label: "Suitable skin type", value: rec.skinTypes.length > 0 ? rec.skinTypes.join(", ") : "See product details" },
+                        { label: "Availability", value: "Approved catalog product" },
+                        { label: "Category", value: rec.category },
                         { label: "Price", value: rec.price },
                       ].map((item) => (
                         <div key={item.label} className="p-3.5 border-r border-b border-border/60 last:border-r-0 last:border-b-0 odd:border-r">
@@ -763,7 +1087,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
                     {/* Expandable sections */}
                     {[
-                      { key: "benefits", label: "Benefits", icon: <CheckCircle className="w-4 h-4 text-[#008236]" />, content: (
+                      rec.description && { key: "description", label: "Description", icon: <Info className="w-4 h-4 text-[#008236]" />, content: (
+                        <p className="text-xs text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.description}</p>
+                      )},
+                      rec.benefits.length > 0 && { key: "benefits", label: "Benefits", icon: <CheckCircle className="w-4 h-4 text-[#008236]" />, content: (
                         <ul className="space-y-2">
                           {rec.benefits.map((b) => (
                             <li key={b} className="flex items-start gap-2 text-xs text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -772,28 +1099,22 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                           ))}
                         </ul>
                       )},
-                      { key: "howToUse", label: "How to use for real results", icon: <Star className="w-4 h-4 text-[#C86B3A]" />, content: (
-                        <p className="text-xs text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.howToUse}</p>
+                      rec.usageInstructions && { key: "usage", label: "How to use", icon: <Star className="w-4 h-4 text-[#C86B3A]" />, content: (
+                        <p className="text-xs text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.usageInstructions}</p>
                       )},
-                      { key: "disadvantages", label: "Disadvantages", icon: <X className="w-4 h-4 text-muted-foreground" />, content: (
-                        <ul className="space-y-2">
-                          {rec.disadvantages.map((d) => (
-                            <li key={d} className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              <X className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />{d}
-                            </li>
+                      rec.ingredients.length > 0 && { key: "ingredients", label: "Ingredients", icon: <Sparkles className="w-4 h-4 text-[#C86B3A]" />, content: (
+                        <div className="flex flex-wrap gap-1.5">
+                          {rec.ingredients.map((ingredient) => (
+                            <span key={ingredient} className="text-[11px] bg-[#008236]/10 text-[#008236] px-2 py-0.5 rounded-full font-medium">
+                              {ingredient}
+                            </span>
                           ))}
-                        </ul>
+                        </div>
                       )},
-                      { key: "warnings", label: "Warnings", icon: <AlertTriangle className="w-4 h-4 text-amber-600" />, content: (
-                        <ul className="space-y-2">
-                          {rec.warnings.map((w) => (
-                            <li key={w} className="flex items-start gap-2 text-xs text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />{w}
-                            </li>
-                          ))}
-                        </ul>
+                      rec.precautions && { key: "precautions", label: "Precautions", icon: <AlertTriangle className="w-4 h-4 text-amber-600" />, content: (
+                        <p className="text-xs text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec.precautions}</p>
                       )},
-                    ].map((section) => (
+                    ].filter(Boolean).map((section: any) => (
                       <div key={section.key} className="border-b border-border/60 last:border-b-0">
                         <button
                           className="w-full px-4.5 py-3 flex items-center justify-between hover:bg-secondary/40 transition-colors cursor-pointer"
@@ -817,22 +1138,33 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                       <div className="flex items-center gap-2 mb-3.5">
                         <Store className="w-4 h-4 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          Sold by <strong className="text-foreground">{rec.brand}</strong> · Verified vendor
+                          Sold by <strong className="text-foreground">{rec.vendorName}</strong> · Live catalog item
                         </span>
                         <span className="ml-auto flex items-center gap-1 text-xs text-[#008236] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>
                           <CheckCircle className="w-3.5 h-3.5" /> In stock
                         </span>
                       </div>
-                      <a
-                        href={rec.waLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BB5A] text-white py-3.5 rounded-xl transition-all font-bold text-sm shadow-sm"
-                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                      >
-                        <MessageCircle className="w-4 h-4 text-white" />
-                        Order via WhatsApp
-                      </a>
+                      {rec.whatsappUrl ? (
+                        <a
+                          href={rec.whatsappUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BB5A] text-white py-3.5 rounded-xl transition-all font-bold text-sm shadow-sm"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          <MessageCircle className="w-4 h-4 text-white" />
+                          Order via WhatsApp
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full flex items-center justify-center gap-2 bg-muted text-muted-foreground py-3.5 rounded-xl font-bold text-sm cursor-not-allowed"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          Vendor contact unavailable
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

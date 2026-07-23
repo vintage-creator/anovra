@@ -343,7 +343,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                       <label className={labelCls}>Business / Company Name *</label>
                       <input
                         className={inputCls}
-                        placeholder="e.g. Veraski Skincare"
+                        placeholder="e.g. Radiant Skin Co."
                         value={form.businessName}
                         onChange={(e) => set("businessName", e.target.value)}
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -936,7 +936,7 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       const userRole = data.user.user_metadata?.role;
       const cleanEmail = email.trim().toLowerCase();
 
-      if (cleanEmail === "admin@anovra.africa") {
+      if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
         setView("admin");
       } else if (userRole === "vendor") {
         setView("dashboard");
@@ -990,7 +990,7 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       const userRole = data.user.user_metadata?.role;
       const cleanEmail = email.trim().toLowerCase();
 
-      if (cleanEmail === "admin@anovra.africa") {
+      if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
         setView("admin");
       } else if (userRole === "vendor") {
         setView("dashboard");

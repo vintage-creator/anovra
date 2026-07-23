@@ -64,15 +64,16 @@ type ProductForm = {
   skinTypes: string[];
   keyIngredients: string[];
   activeIngredients: string[];
-  photoFile?: File | null;
-  image?: string | null;
+  photoFiles?: File[] | null;
+  images?: string[] | null;
 };
 
 const EMPTY_PRODUCT_FORM: ProductForm = {
   name: "", brand: "", price: "", stock: "", description: "",
   benefits: "", precautions: "", usageInstructions: "", category: "",
   concerns: [], skinTypes: [], keyIngredients: [], activeIngredients: [],
-  photoFile: null,
+  photoFiles: [],
+  images: [],
 };
 
 function TagInput({
@@ -128,13 +129,15 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
         skinTypes: initialData.skinTypes || [],
         keyIngredients: initialData.ingredients || [],
         activeIngredients: initialData.activeIngredients || [],
-        photoFile: null,
-        image: initialData.image || null,
+        photoFiles: [],
+        images: initialData.images || (initialData.image ? [initialData.image] : []),
       };
     }
     return EMPTY_PRODUCT_FORM;
   });
-  const [imagePreview, setImagePreview] = useState<string | null>(initialData?.image || null);
+  const [imagePreviews, setImagePreviews] = useState<string[]>(
+    initialData?.images || (initialData?.image ? [initialData.image] : [])
+  );
   const [ingMode, setIngMode] = useState<"type" | "scan">("type");
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -158,59 +161,79 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
   const removeTag = (k: "keyIngredients" | "activeIngredients", v: string) =>
     setForm((f) => ({ ...f, [k]: f[k].filter((x) => x !== v) }));
 
-  // Simulated OCR extraction — realistic ingredient pools keyed to common African skincare products
-  const MOCK_KEY = ["Aqua", "Glycerin", "Niacinamide", "Shea Butter", "Aloe Vera Extract", "Vitamin C", "Kojic Acid", "Zinc PCA", "Panthenol", "Allantoin"];
-  const MOCK_ACTIVE = ["Niacinamide 5%", "Alpha Arbutin 2%", "Kojic Acid 1%", "Retinol 0.1%", "Salicylic Acid 0.5%"];
+  const extractTextWithGemini = async (file: File, type: "ingredients" | "description" | "benefits") => {
+    const imageBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (e) => reject(e);
+    });
 
-  const handleScanImage = (file: File) => {
+    const { data, error } = await supabase.functions.invoke("extract-product-label", {
+      body: {
+        imageBase64,
+        mimeType: file.type || "image/jpeg",
+        type,
+      },
+    });
+
+    if (error) throw error;
+    return data;
+  };
+
+  const handleScanImage = async (file: File) => {
     setScanPreview(URL.createObjectURL(file));
     setScanDone(false);
     setScanning(true);
-    setTimeout(() => {
-      const picked = (arr: string[], n: number) =>
-        [...arr].sort(() => Math.random() - 0.5).slice(0, n);
+    try {
+      const data = await extractTextWithGemini(file, "ingredients");
       setForm((f) => ({
         ...f,
-        keyIngredients: [...new Set([...f.keyIngredients, ...picked(MOCK_KEY, 6)])],
-        activeIngredients: [...new Set([...f.activeIngredients, ...picked(MOCK_ACTIVE, 3)])],
+        keyIngredients: [...new Set([...f.keyIngredients, ...(data.keyIngredients || [])])],
+        activeIngredients: [...new Set([...f.activeIngredients, ...(data.activeIngredients || [])])],
       }));
-      setScanning(false);
       setScanDone(true);
-    }, 2200);
+      toast.success("Ingredients successfully extracted via AI!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("AI extraction failed. Please enter details manually.");
+    } finally {
+      setScanning(false);
+    }
   };
 
-  const MOCK_DESCRIPTIONS = [
-    "A lightweight, fast-absorbing serum formulated to visibly reduce dark spots, even out skin tone, and restore natural radiance. Enriched with brightening actives and skin-soothing botanicals for daily use.",
-    "An advanced daily moisturiser that deeply hydrates and strengthens the skin barrier. Suitable for all skin types, this formula improves texture and leaves skin feeling soft, smooth, and balanced.",
-    "A targeted treatment cream designed to combat acne-causing bacteria while calming redness and inflammation. Non-comedogenic formula works overnight to clear blemishes without over-drying.",
-  ];
-  const MOCK_BENEFITS = [
-    "Visibly reduces dark spots and hyperpigmentation within 4 weeks\nEvens out skin tone and boosts natural radiance\nStrengthens the skin moisture barrier\nNon-comedogenic — safe for acne-prone skin\nDermatologist tested and approved for African skin tones",
-    "Deep hydration that lasts up to 72 hours\nReduces appearance of fine lines and wrinkles\nCalms sensitive and reactive skin\nImproves overall skin texture with continued use\nFree from parabens, sulphates, and artificial fragrances",
-  ];
-
-  const handleScanDescription = (file: File) => {
+  const handleScanDescription = async (file: File) => {
     setDescScanPreview(URL.createObjectURL(file));
     setDescScanDone(false);
     setDescScanning(true);
-    setTimeout(() => {
-      const text = MOCK_DESCRIPTIONS[Math.floor(Math.random() * MOCK_DESCRIPTIONS.length)];
-      setForm((f) => ({ ...f, description: text }));
-      setDescScanning(false);
+    try {
+      const data = await extractTextWithGemini(file, "description");
+      setForm((f) => ({ ...f, description: data.description || "" }));
       setDescScanDone(true);
-    }, 2000);
+      toast.success("Description successfully extracted via AI!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("AI extraction failed. Please enter description manually.");
+    } finally {
+      setDescScanning(false);
+    }
   };
 
-  const handleScanBenefits = (file: File) => {
+  const handleScanBenefits = async (file: File) => {
     setBenefitsScanPreview(URL.createObjectURL(file));
     setBenefitsScanDone(false);
     setBenefitsScanning(true);
-    setTimeout(() => {
-      const text = MOCK_BENEFITS[Math.floor(Math.random() * MOCK_BENEFITS.length)];
-      setForm((f) => ({ ...f, benefits: text }));
-      setBenefitsScanning(false);
+    try {
+      const data = await extractTextWithGemini(file, "benefits");
+      setForm((f) => ({ ...f, benefits: data.benefits || "" }));
       setBenefitsScanDone(true);
-    }, 1800);
+      toast.success("Benefits list successfully extracted via AI!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("AI extraction failed. Please enter benefits manually.");
+    } finally {
+      setBenefitsScanning(false);
+    }
   };
 
   const inputCls = "w-full px-3 py-2 bg-input-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-accent/50";
@@ -250,53 +273,115 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
                 <input className={inputCls} placeholder="e.g. Glow Serum 30ml" value={form.name} onChange={(e) => set("name", e.target.value)} />
               </div>
               <div>
-                <label className={labelCls}>Brand</label>
+                <label className={labelCls}>Brand / Manufacturer *</label>
                 <input className={inputCls} placeholder="Brand name" value={form.brand} onChange={(e) => set("brand", e.target.value)} />
               </div>
               <div>
-                <label className={labelCls}>Pricing (₦)</label>
-                <input className={inputCls} placeholder="e.g. 8,500" value={form.price} onChange={(e) => set("price", e.target.value)} />
+                <label className={labelCls}>Pricing (₦) *</label>
+                <input 
+                  className={inputCls} 
+                  placeholder="e.g. 8,500" 
+                  value={form.price} 
+                  onChange={(e) => set("price", e.target.value.replace(/[^\d.]/g, ""))} 
+                />
               </div>
               <div className="col-span-2">
-                <label className={labelCls}>Available Stock</label>
-                <input className={inputCls} type="number" placeholder="Units in stock" value={form.stock} onChange={(e) => set("stock", e.target.value)} />
+                <label className={labelCls}>Available Stock *</label>
+                <input 
+                  className={inputCls} 
+                  type="number" 
+                  min="0" 
+                  placeholder="Units in stock" 
+                  value={form.stock} 
+                  onChange={(e) => set("stock", e.target.value.replace(/[^\d]/g, ""))} 
+                />
               </div>
             </div>
           </div>
 
           {/* 2 — Image upload */}
           <div className={sectionCls}>
-            <h3 className="text-sm font-semibold text-foreground mb-3">Product Images</h3>
-            <label className="block">
-              <div className={`relative flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-6 cursor-pointer transition-colors ${imagePreview ? "border-accent/40 bg-accent/5" : "border-border hover:border-accent/40 hover:bg-muted/40"}`}>
-                {imagePreview ? (
-                  <>
-                    <img src={imagePreview} alt="preview" className="w-24 h-24 object-cover rounded-lg" />
-                    <p className="text-xs text-muted-foreground">Click to change image</p>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-6 h-6 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground text-center">
-                      Drop images here or <span className="text-accent font-medium">browse</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">PNG, JPG, WEBP up to 10MB</p>
-                  </>
-                )}
+            <h3 className="text-sm font-semibold text-foreground mb-1">Product Images *</h3>
+            <p className="text-xs text-muted-foreground mb-3">Upload high-resolution shots showing the bottle, texture, and box.</p>
+            
+            {imagePreviews.length > 0 ? (
+              <div className="flex flex-wrap gap-3 items-center">
+                {imagePreviews.map((img, idx) => (
+                  <div key={idx} className="relative group w-20 h-20">
+                    <img src={img} alt="preview" className="w-full h-full object-cover rounded-lg border border-border" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updatedPreviews = imagePreviews.filter((_, i) => i !== idx);
+                        setImagePreviews(updatedPreviews);
+                        setForm(f => {
+                          const updatedPhotos = f.photoFiles ? f.photoFiles.filter((_, i) => i !== idx) : [];
+                          const updatedImages = f.images ? f.images.filter((_, i) => i !== idx) : [];
+                          return {
+                            ...f,
+                            photoFiles: updatedPhotos,
+                            images: updatedImages,
+                          };
+                        });
+                      }}
+                      className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-full p-0.5 shadow-md transition-all cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                
+                {/* Inline Add More Button */}
+                <label className="w-20 h-20 border-2 border-dashed border-border hover:border-accent/40 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-muted/40 transition-colors">
+                  <Plus className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground mt-0.5 font-bold">Add Image</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="sr-only"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length > 0) {
+                        const urls = files.map(file => URL.createObjectURL(file));
+                        setImagePreviews(prev => [...prev, ...urls]);
+                        setForm(f => ({
+                          ...f,
+                          photoFiles: [...(f.photoFiles || []), ...files]
+                        }));
+                      }
+                    }}
+                  />
+                </label>
               </div>
-              <input
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setImagePreview(URL.createObjectURL(file));
-                    setForm((f) => ({ ...f, photoFile: file }));
-                  }
-                }}
-              />
-            </label>
+            ) : (
+              <label className="block">
+                <div className="relative flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border hover:border-accent/40 hover:bg-muted/40 rounded-lg p-6 cursor-pointer transition-colors">
+                  <Upload className="w-6 h-6 text-muted-foreground animate-bounce" />
+                  <p className="text-sm text-muted-foreground text-center">
+                    Drop images here or <span className="text-accent font-medium">browse</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">Select multiple images (PNG, JPG, WEBP up to 10MB)</p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) {
+                      const urls = files.map(file => URL.createObjectURL(file));
+                      setImagePreviews(urls);
+                      setForm(f => ({
+                        ...f,
+                        photoFiles: files
+                      }));
+                    }
+                  }}
+                />
+              </label>
+            )}
           </div>
 
           {/* 3 — Product category */}
@@ -335,7 +420,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
 
           {/* 5 — Suitable skin types */}
           <div className={sectionCls}>
-            <h3 className="text-sm font-semibold text-foreground mb-1">Suitable Skin Types</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-1">Suitable Skin Types *</h3>
             <p className="text-xs text-muted-foreground mb-3">Select all that apply</p>
             <div className="flex flex-wrap gap-2">
               {SKIN_TYPE_OPTIONS.map((t) => {
@@ -359,7 +444,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
           <div className={sectionCls}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-semibold text-foreground">Ingredients</h3>
+                <h3 className="text-sm font-semibold text-foreground">Ingredients *</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">Type manually or scan the product label</p>
               </div>
               {/* Mode toggle */}
@@ -388,7 +473,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
             {ingMode === "type" ? (
               <div className="space-y-4">
                 <div>
-                  <label className={labelCls}>Key Ingredients</label>
+                  <label className={labelCls}>Key Ingredients *</label>
                   <TagInput
                     tags={form.keyIngredients}
                     onAdd={(v) => addTag("keyIngredients", v)}
@@ -501,7 +586,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
                 {(form.keyIngredients.length > 0 || form.activeIngredients.length > 0) && (
                   <div className="space-y-4 pt-2">
                     <div>
-                      <label className={labelCls}>Key Ingredients {scanning && <span className="text-accent animate-pulse ml-1">Extracting…</span>}</label>
+                      <label className={labelCls}>Key Ingredients * {scanning && <span className="text-accent animate-pulse ml-1">Extracting…</span>}</label>
                       <TagInput
                         tags={form.keyIngredients}
                         onAdd={(v) => addTag("keyIngredients", v)}
@@ -638,7 +723,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
             {/* Product Benefits */}
             <div className={sectionCls}>
               <div className="flex items-center justify-between mb-3">
-                <label className={labelCls} style={{ margin: 0 }}>Product Benefits</label>
+                <label className={labelCls} style={{ margin: 0 }}>Product Benefits *</label>
                 <div className="flex items-center gap-1 p-0.5 bg-muted rounded-lg">
                   <button
                     type="button"
@@ -739,11 +824,11 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
 
             {/* Usage Instructions & Precautions — type only */}
             <div>
-              <label className={labelCls}>Usage Instructions</label>
+              <label className={labelCls}>Usage Instructions *</label>
               <textarea className={`${inputCls} resize-none h-20`} placeholder="How to apply, how often, AM/PM, patch test advice…" value={form.usageInstructions} onChange={(e) => set("usageInstructions", e.target.value)} />
             </div>
             <div>
-              <label className={labelCls}>Precautions & Warnings</label>
+              <label className={labelCls}>Precautions & Warnings *</label>
               <textarea className={`${inputCls} resize-none h-20`} placeholder="Any warnings, side effects, or contraindications…" value={form.precautions} onChange={(e) => set("precautions", e.target.value)} />
             </div>
           </div>
@@ -762,8 +847,59 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
             </button>
             <button
               type="button"
-              onClick={() => { onSave(form); onClose(); }}
-              className="text-sm px-4 py-2 rounded bg-accent text-white hover:bg-accent/90 transition-colors font-medium"
+              onClick={() => {
+                if (imagePreviews.length === 0) {
+                  toast.error("At least one Product Image is required.");
+                  return;
+                }
+                if (!form.name.trim()) {
+                  toast.error("Product Name is required.");
+                  return;
+                }
+                if (!form.brand.trim()) {
+                  toast.error("Brand name is required.");
+                  return;
+                }
+                if (!form.price.trim()) {
+                  toast.error("Retail Price is required.");
+                  return;
+                }
+                if (!form.stock.trim()) {
+                  toast.error("Available Stock quantity is required.");
+                  return;
+                }
+                if (!form.category) {
+                  toast.error("Product Category is required.");
+                  return;
+                }
+                if (form.skinTypes.length === 0) {
+                  toast.error("Please select at least one suitable skin type.");
+                  return;
+                }
+                if (form.keyIngredients.length === 0) {
+                  toast.error("Please add at least one key ingredient.");
+                  return;
+                }
+                if (!form.description.trim()) {
+                  toast.error("Product Description is required.");
+                  return;
+                }
+                if (!form.benefits.trim()) {
+                  toast.error("Product Benefits are required.");
+                  return;
+                }
+                if (!form.usageInstructions.trim()) {
+                  toast.error("Usage Instructions are required.");
+                  return;
+                }
+                if (!form.precautions.trim()) {
+                  toast.error("Precautions & Warnings are required.");
+                  return;
+                }
+                onSave(form);
+                onClose();
+              }}
+              className="text-sm px-4 py-2 rounded bg-accent text-white font-bold hover:bg-accent/90 transition-colors"
             >
               Save Product
             </button>
@@ -774,7 +910,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
   );
 }
 
-export function CatalogView({ setView }: { setView?: (v: View) => void }) {
+export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) => void; role?: "Vendor" | "Manager" | "Viewer" }) {
   const [expandedFlag, setExpandedFlag] = useState<number | null>(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -786,7 +922,13 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
 
   useEffect(() => {
     const fetchProducts = async () => {
-      setCatalogLoading(true);
+      const cached = sessionStorage.getItem("cached_vendor_products");
+      if (cached) {
+        setProductsList(JSON.parse(cached));
+      } else {
+        setCatalogLoading(true);
+      }
+
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -797,23 +939,89 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
           .eq("vendor_id", user.id);
 
         if (data && data.length > 0) {
-          const formatted = data.map((p) => ({
-            id: p.id,
-            name: p.name,
-            brand: p.brand || "Own Brand",
-            price: `₦${Number(p.price).toLocaleString()}`,
-            priceVal: p.price,
-            status: p.nafdac_status === "approved" ? "active" : p.nafdac_status === "flagged" ? "blocked" : "pending",
-            nafdac: p.nafdac_status === "approved" ? "Approved" : p.nafdac_status === "flagged" ? "Flagged" : "Pending",
-            description: p.description || "",
-            image: p.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
-            ingredients: [],
-            concerns: [],
-            safety: { rating: "A+", label: "Verified Safe" }
-          }));
+          const formatted = data.map((p) => {
+            const descriptionText = p.description || "";
+            const imagesMatch = descriptionText.match(/<!--IMAGES:(.*)-->/);
+            const benefitsMatch = descriptionText.match(/<!--BENEFITS:(.*)-->/);
+            const usageMatch = descriptionText.match(/<!--USAGE:(.*)-->/);
+            const precautionsMatch = descriptionText.match(/<!--PRECAUTIONS:(.*)-->/);
+            const skinTypesMatch = descriptionText.match(/<!--SKINTYPES:(.*)-->/);
+            const keyMatch = descriptionText.match(/<!--KEY_INGREDIENTS:(.*)-->/);
+            const activeMatch = descriptionText.match(/<!--ACTIVE_INGREDIENTS:(.*)-->/);
+
+            let parsedImages: string[] = [];
+            let benefits = "";
+            let usageInstructions = "";
+            let precautions = "";
+            let skinTypes: string[] = [];
+            let keyIngredients: string[] = [];
+            let activeIngredients: string[] = [];
+            let cleanDescription = descriptionText;
+
+            if (imagesMatch) {
+              try { parsedImages = JSON.parse(imagesMatch[1]); } catch (e) {}
+            }
+            if (benefitsMatch) {
+              try { benefits = JSON.parse(benefitsMatch[1]); } catch (e) {}
+            }
+            if (usageMatch) {
+              try { usageInstructions = JSON.parse(usageMatch[1]); } catch (e) {}
+            }
+            if (precautionsMatch) {
+              try { precautions = JSON.parse(precautionsMatch[1]); } catch (e) {}
+            }
+            if (skinTypesMatch) {
+              try { skinTypes = JSON.parse(skinTypesMatch[1]); } catch (e) {}
+            }
+            if (keyMatch) {
+              try { keyIngredients = JSON.parse(keyMatch[1]); } catch (e) {}
+            }
+            if (activeMatch) {
+              try { activeIngredients = JSON.parse(activeMatch[1]); } catch (e) {}
+            }
+
+            cleanDescription = cleanDescription
+              .replace(/<!--IMAGES:(.*)-->/, "")
+              .replace(/<!--BENEFITS:(.*)-->/, "")
+              .replace(/<!--USAGE:(.*)-->/, "")
+              .replace(/<!--PRECAUTIONS:(.*)-->/, "")
+              .replace(/<!--SKINTYPES:(.*)-->/, "")
+              .replace(/<!--KEY_INGREDIENTS:(.*)-->/, "")
+              .replace(/<!--ACTIVE_INGREDIENTS:(.*)-->/, "")
+              .trim();
+
+            if (parsedImages.length === 0 && p.image_url) {
+              parsedImages = [p.image_url];
+            }
+            return {
+              id: p.id,
+              name: p.name,
+              brand: p.brand || "Own Brand",
+              price: `₦${Number(p.price).toLocaleString()}`,
+              priceVal: p.price,
+              status: p.nafdac_status === "approved" ? "active" : p.nafdac_status === "flagged" ? "blocked" : "pending",
+              nafdac: p.nafdac_status === "approved" ? "Approved" : p.nafdac_status === "flagged" ? "Flagged" : "Pending",
+              description: cleanDescription,
+              image: p.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
+              images: parsedImages,
+              benefits,
+              usageInstructions,
+              precautions,
+              skinTypes,
+              keyIngredients,
+              activeIngredients,
+              ingredients: [...keyIngredients, ...activeIngredients],
+              concerns: [p.category || "General"],
+              safety: { rating: "A+", label: "Verified Safe" },
+              views: p.views || 0,
+              clicks: p.clicks || 0,
+            };
+          });
           setProductsList(formatted);
+          sessionStorage.setItem("cached_vendor_products", JSON.stringify(formatted));
         } else {
           setProductsList([]);
+          sessionStorage.setItem("cached_vendor_products", JSON.stringify([]));
         }
       } catch (err) {
         console.error("Failed to load catalog products:", err);
@@ -825,50 +1033,74 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
   }, []);
 
   const handleSaveProduct = async (newProd: any) => {
+    if (role === "Viewer") {
+      toast.error("Viewer role is read-only. You cannot add or edit products.");
+      return;
+    }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Authentication required to save products.");
 
-      // Upload product image to Supabase Storage if file was provided
-      let finalImageUrl = newProd.image || null;
-      if (newProd.photoFile) {
-        try {
-          const fileExt = newProd.photoFile.name.split('.').pop();
-          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-          const filePath = `${fileName}`;
-          
-          const { error: uploadError } = await supabase.storage
-            .from("product-images")
-            .upload(filePath, newProd.photoFile, {
-              cacheControl: '3600',
-              upsert: true
-            });
+      // Upload product images to Supabase Storage if files were provided
+      const uploadedUrls = [...(newProd.images || [])];
+      let finalImageUrl = uploadedUrls[0] || null;
+
+      if (newProd.photoFiles && newProd.photoFiles.length > 0) {
+        for (const file of newProd.photoFiles) {
+          try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+            const filePath = `${fileName}`;
             
-          if (!uploadError) {
-            const { data: { publicUrl } } = supabase.storage
+            const { error: uploadError } = await supabase.storage
               .from("product-images")
-              .getPublicUrl(filePath);
-            finalImageUrl = publicUrl;
-          } else {
-            console.warn("Product image storage upload failed:", uploadError);
-            toast.error(`Image upload failed: ${uploadError.message || "Unknown error"}. Check if 'product-images' bucket is created in Supabase.`);
+              .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: true
+              });
+              
+            if (!uploadError) {
+              const { data: { publicUrl } } = supabase.storage
+                .from("product-images")
+                .getPublicUrl(filePath);
+              uploadedUrls.push(publicUrl);
+            } else {
+              console.warn("Product image storage upload failed:", uploadError);
+              toast.error(`Image upload failed: ${uploadError.message || "Unknown error"}`);
+            }
+          } catch (storageErr: any) {
+            console.warn("Product image storage upload exception:", storageErr);
+            toast.error(`Image upload error: ${storageErr.message || "Storage error"}`);
           }
-        } catch (storageErr: any) {
-          console.warn("Product image storage upload exception:", storageErr);
-          toast.error(`Image upload error: ${storageErr.message || "Storage error"}`);
         }
+      }
+
+      if (uploadedUrls.length > 0) {
+        finalImageUrl = uploadedUrls[0];
       }
 
       const rawPrice = typeof newProd.price === "string"
         ? Number(newProd.price.replace(/[^\d.]/g, ""))
         : Number(newProd.price);
 
+      // Serialize all uploaded URLs and fields in description metadata
+      let finalDesc = newProd.description || "";
+      if (uploadedUrls.length > 0) {
+        finalDesc += `\n\n<!--IMAGES:${JSON.stringify(uploadedUrls)}-->`;
+      }
+      finalDesc += `\n<!--BENEFITS:${JSON.stringify(newProd.benefits || "")}-->`;
+      finalDesc += `\n<!--USAGE:${JSON.stringify(newProd.usageInstructions || "")}-->`;
+      finalDesc += `\n<!--PRECAUTIONS:${JSON.stringify(newProd.precautions || "")}-->`;
+      finalDesc += `\n<!--SKINTYPES:${JSON.stringify(newProd.skinTypes || [])}-->`;
+      finalDesc += `\n<!--KEY_INGREDIENTS:${JSON.stringify(newProd.keyIngredients || [])}-->`;
+      finalDesc += `\n<!--ACTIVE_INGREDIENTS:${JSON.stringify(newProd.activeIngredients || [])}-->`;
+
       const dbPayload = {
         vendor_id: user.id,
         name: newProd.name,
         brand: newProd.brand || "Own Brand",
         price: isNaN(rawPrice) ? 0 : rawPrice,
-        description: newProd.description || "",
+        description: finalDesc,
         image_url: finalImageUrl,
         nafdac_status: "approved",
         category: newProd.category || "Skincare",
@@ -898,6 +1130,20 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
         savedData = data;
       }
 
+      const descriptionText = savedData.description || "";
+      const imagesMatch = descriptionText.match(/<!--IMAGES:(.*)-->/);
+      let parsedImages: string[] = [];
+      let cleanDescription = descriptionText;
+      if (imagesMatch) {
+        try {
+          parsedImages = JSON.parse(imagesMatch[1]);
+          cleanDescription = descriptionText.replace(/<!--IMAGES:(.*)-->/, "").trim();
+        } catch (e) {}
+      }
+      if (parsedImages.length === 0 && savedData.image_url) {
+        parsedImages = [savedData.image_url];
+      }
+
       const formattedProduct = {
         id: savedData.id,
         name: savedData.name,
@@ -906,8 +1152,9 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
         priceVal: savedData.price,
         status: savedData.nafdac_status === "approved" ? "active" : savedData.nafdac_status === "flagged" ? "blocked" : "pending",
         nafdac: savedData.nafdac_status === "approved" ? "Approved" : savedData.nafdac_status === "flagged" ? "Flagged" : "Pending",
-        description: savedData.description || "",
+        description: cleanDescription,
         image: savedData.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
+        images: parsedImages,
         ingredients: newProd.keyIngredients || [],
         concerns: newProd.concerns || [],
         safety: { rating: "A+", label: "Verified Safe" }
@@ -928,6 +1175,10 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
   };
 
   const handleDeleteProduct = async (id: string) => {
+    if (role === "Viewer") {
+      toast.error("Viewer role is read-only. You cannot delete products.");
+      return;
+    }
     const ok = window.confirm("Are you sure you want to remove this product from your catalogue?");
     if (!ok) return;
 
@@ -997,7 +1248,11 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
           </div>
           <div className="bg-card border border-border rounded-xl p-4 shadow-xs">
             <p className="text-xs text-muted-foreground uppercase font-mono mb-1">NAFDAC Compliance</p>
-            <p className="text-2xl font-semibold text-emerald-600">92%</p>
+            <p className="text-2xl font-semibold text-emerald-600">
+              {productsList.length > 0 
+                ? Math.round((productsList.filter(p => p.nafdac === "Approved").length / productsList.length) * 100)
+                : 100}%
+            </p>
           </div>
         </div>
 
@@ -1023,13 +1278,24 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
               <option value="blocked">Blocked / Review</option>
             </select>
           </div>
-          <button
-            onClick={() => setShowAddProduct(true)}
-            className="flex items-center justify-center gap-1.5 text-xs sm:text-sm bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors font-medium shadow-xs shrink-0"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
-            + Add product
-          </button>
+          {role !== "Viewer" ? (
+            <button
+              onClick={() => setShowAddProduct(true)}
+              className="flex items-center justify-center gap-1.5 text-xs sm:text-sm bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors font-medium shadow-xs shrink-0 cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              + Add product
+            </button>
+          ) : (
+            <button
+              disabled
+              className="flex items-center justify-center gap-1.5 text-xs sm:text-sm bg-muted text-muted-foreground px-4 py-2 rounded-lg border border-border font-medium shrink-0 cursor-not-allowed"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              title="Viewer role is read-only"
+            >
+              <Lock className="w-3.5 h-3.5 text-muted-foreground" /> Add product (Locked)
+            </button>
+          )}
         </div>
 
       {/* Safety alert */}
@@ -1048,126 +1314,149 @@ export function CatalogView({ setView }: { setView?: (v: View) => void }) {
       )}
 
       <div className="space-y-3">
-        {filteredProducts.map((p) => (
-          <div
-            key={p.id}
-            className={cn(
-              "bg-card border rounded-lg overflow-hidden",
-              p.status === "blocked" ? "border-amber-200" : "border-border"
-            )}
-          >
-            <div className="p-4 flex items-start gap-4">
-              <img
-                src={p.photo || p.image}
-                alt={p.name}
-                className="w-16 h-16 rounded-lg object-cover flex-shrink-0 bg-secondary"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-medium text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {p.name}
-                      </h3>
-                      {p.status === "blocked" && (
-                        <span className="flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
-                          <AlertTriangle className="w-2.5 h-2.5" />
-                          Blocked
-                        </span>
-                      )}
-                      {p.status === "active" && (
-                        <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                          Active
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {p.brand} · {p.price}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    <div className="flex items-center gap-2 font-mono" style={{ fontFamily: "'DM Mono', monospace" }}>
-                      <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.views || 0}</span>
-                      <span className="flex items-center gap-1"><ExternalLink className="w-3 h-3" />{p.clicks || 0}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setEditingProduct(p)}
-                        className="text-xs text-accent hover:underline font-semibold cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                      <span className="text-border">|</span>
-                      <button
-                        onClick={() => handleDeleteProduct(p.id)}
-                        className="text-xs text-red-600 hover:underline font-semibold cursor-pointer"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {(p.concerns || []).map((c) => (
-                    <span key={c} className="text-xs bg-secondary text-foreground px-2 py-0.5 rounded" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {c}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {(p.ingredients || []).map((ing) => (
-                    <span
-                      key={ing}
-                      className={cn(
-                        "text-xs px-2 py-0.5 rounded-full flex items-center gap-1",
-                        p.status === "blocked"
-                          ? "bg-red-50 text-red-700 border border-red-200"
-                          : "bg-accent/10 text-accent border border-accent/20"
-                      )}
-                      style={{ fontFamily: "'DM Mono', monospace" }}
-                    >
-                      <FlaskConical className="w-2.5 h-2.5" />
-                      {ing}
-                    </span>
-                  ))}
+        {catalogLoading ? (
+          Array.from({ length: 3 }).map((_, idx) => (
+            <div key={`skel-${idx}`} className="bg-card border border-border rounded-lg overflow-hidden animate-pulse">
+              <div className="p-4 flex items-start gap-4">
+                <div className="w-16 h-16 bg-muted rounded-lg flex-shrink-0" />
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="h-4 bg-muted rounded w-1/3" />
+                  <div className="h-3 bg-muted rounded w-1/4" />
+                  <div className="h-2 bg-muted rounded w-1/2" />
                 </div>
               </div>
             </div>
-
-            {p.safetyFlag && (
-              <div className="border-t border-amber-200 bg-amber-50">
-                <button
-                  className="w-full px-4 py-2.5 flex items-center justify-between text-xs text-amber-700 hover:bg-amber-100 transition-colors"
-                  onClick={() => setExpandedFlag(expandedFlag === p.id ? null : p.id)}
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                >
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <Shield className="w-3.5 h-3.5" />
-                    Safety violation — click to view details
-                  </span>
-                  {expandedFlag === p.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </button>
-                {expandedFlag === p.id && (
-                  <div className="px-4 pb-3">
-                    <p className="text-xs text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {p.safetyFlag}
-                    </p>
-                    <div className="flex gap-2 mt-3">
-                      <button className="text-xs bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Edit product
-                      </button>
-                      <button className="text-xs bg-white border border-amber-300 text-amber-700 px-3 py-1.5 rounded hover:bg-amber-50 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Contact support
-                      </button>
+          ))
+        ) : filteredProducts.length === 0 ? (
+          <div className="text-center py-12 text-sm text-muted-foreground font-sans border border-dashed border-border rounded-xl">
+            No products found matching your search.
+          </div>
+        ) : (
+          filteredProducts.map((p) => (
+            <div
+              key={p.id}
+              className={cn(
+                "bg-card border rounded-lg overflow-hidden",
+                p.status === "blocked" ? "border-amber-200" : "border-border"
+              )}
+            >
+              <div className="p-4 flex items-start gap-4">
+                <img
+                  src={p.photo || p.image}
+                  alt={p.name}
+                  className="w-16 h-16 rounded-lg object-cover flex-shrink-0 bg-secondary"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-medium text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {p.name}
+                        </h3>
+                        {p.status === "blocked" && (
+                          <span className="flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            Blocked
+                          </span>
+                        )}
+                        {p.status === "active" && (
+                          <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {p.brand} · {p.price}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      <div className="flex items-center gap-2 font-mono" style={{ fontFamily: "'DM Mono', monospace" }}>
+                        <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.views || 0}</span>
+                        <span className="flex items-center gap-1"><ExternalLink className="w-3 h-3" />{p.clicks || 0}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setEditingProduct(p)}
+                          className="text-xs text-accent hover:underline font-semibold cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <span className="text-border">|</span>
+                        <button
+                          onClick={() => handleDeleteProduct(p.id)}
+                          className="text-xs text-red-600 hover:underline font-semibold cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
-                )}
+
+                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {p.description}
+                  </p>
+
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {(p.concerns || []).map((c) => (
+                      <span key={c} className="text-xs bg-secondary text-foreground px-2 py-0.5 rounded" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {(p.ingredients || []).map((ing) => (
+                      <span
+                        key={ing}
+                        className={cn(
+                          "text-xs px-2 py-0.5 rounded-full flex items-center gap-1",
+                          p.status === "blocked"
+                            ? "bg-red-50 text-red-700 border border-red-200"
+                            : "bg-accent/10 text-accent border border-accent/20"
+                        )}
+                        style={{ fontFamily: "'DM Mono', monospace" }}
+                      >
+                        <FlaskConical className="w-2.5 h-2.5" />
+                        {ing}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+
+              {p.safetyFlag && (
+                <div className="border-t border-amber-200 bg-amber-50">
+                  <button
+                    className="w-full px-4 py-2.5 flex items-center justify-between text-xs text-amber-700 hover:bg-amber-100 transition-colors"
+                    onClick={() => setExpandedFlag(expandedFlag === p.id ? null : p.id)}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Shield className="w-3.5 h-3.5" />
+                      Safety violation — click to view details
+                    </span>
+                    {expandedFlag === p.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                  {expandedFlag === p.id && (
+                    <div className="px-4 pb-3">
+                      <p className="text-xs text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {p.safetyFlag}
+                      </p>
+                      <div className="flex gap-2 mt-3">
+                        <button className="text-xs bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          Edit product
+                        </button>
+                        <button className="text-xs bg-white border border-amber-300 text-amber-700 px-3 py-1.5 rounded hover:bg-amber-50 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          Contact support
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
       </div>
     </div>

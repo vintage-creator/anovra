@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Store, AlertCircle, CreditCard, Calendar, Ban, Search, RefreshCw,
   Users, Package, Shield, BarChart2, CheckCircle, X, Check, Eye,
@@ -8,107 +8,10 @@ import {
 import type { View } from "./types";
 import { cn } from "./types";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
+import { supabase } from "./utils/supabase";
+import { toast } from "sonner";
 
-// ---- ADMIN DATA ----
 
-const adminStats = [
-  { label: "Total vendors", value: "184", delta: "+12 this month", icon: <Store className="w-4 h-4" />, warn: false },
-  { label: "Scans platform-wide", value: "48,291", delta: "+22% MoM", icon: <Scan className="w-4 h-4" />, warn: false },
-  { label: "Products pending safety review", value: "7", delta: "Oldest: 3 days ago", icon: <AlertCircle className="w-4 h-4" />, warn: true },
-  { label: "MRR (₦)", value: "₦4.2M", delta: "+₦380k vs last month", icon: <CreditCard className="w-4 h-4" />, warn: false },
-];
-
-const revenueData = [
-  { month: "Jan", mrr: 1800000 },
-  { month: "Feb", mrr: 2100000 },
-  { month: "Mar", mrr: 2450000 },
-  { month: "Apr", mrr: 2900000 },
-  { month: "May", mrr: 3600000 },
-  { month: "Jun", mrr: 4200000 },
-];
-
-const tierData = [
-  { name: "Free", value: 119, fill: "#EDE3D6" },
-  { name: "Vendor Pro", value: 51, fill: "#C86B3A" },
-  { name: "Brand", value: 14, fill: "#1A0A05" },
-];
-
-const flaggedQueue = [
-  {
-    id: "FLG-041",
-    productName: "Ultra-White Intensive Lightening Lotion",
-    vendor: "ClearGlo",
-    vendorCity: "Lagos",
-    flaggedDate: "27 Jun 2025",
-    ingredients: ["Mercury Chloride", "Clobetasol Propionate", "Hydroquinone 4%"],
-    violations: ["Mercury — globally banned", "Clobetasol — restricted corticosteroid", "Hydroquinone >2% — exceeds NAFDAC limit"],
-    status: "pending",
-    severity: "critical",
-  },
-  {
-    id: "FLG-040",
-    productName: "Rapid Glow Booster Serum",
-    vendor: "LumiSkin NG",
-    vendorCity: "Abuja",
-    flaggedDate: "26 Jun 2025",
-    ingredients: ["Arbutin 5%", "Kojic Acid", "Unknown Compound X-14"],
-    violations: ["Unknown Compound X-14 — not in ingredient database, under review"],
-    status: "pending",
-    severity: "moderate",
-  },
-  {
-    id: "FLG-039",
-    productName: "Night Recovery Cream Plus",
-    vendor: "DermaCure Store",
-    vendorCity: "Port Harcourt",
-    flaggedDate: "25 Jun 2025",
-    ingredients: ["Retinol 1%", "Lactic Acid 10%", "Phenoxyethanol"],
-    violations: ["Retinol 1% + Lactic Acid 10% combination — caution flag for potential over-exfoliation"],
-    status: "under_review",
-    severity: "low",
-  },
-  {
-    id: "FLG-038",
-    productName: "Brightening Body Milk SPF15",
-    vendor: "AuraGlow Africa",
-    vendorCity: "Kano",
-    flaggedDate: "24 Jun 2025",
-    ingredients: ["Niacinamide", "SPF Chemical Filters", "Fragrance Mix"],
-    violations: ["Fragrance Mix — generic label, vendor requested to specify individual fragrance components"],
-    status: "resolved",
-    severity: "low",
-  },
-];
-
-const ingredientDB = [
-  { name: "Mercury / Mercurous Chloride", function: "Skin lightening", status: "banned", scope: "Global + NAFDAC", maxConc: "0%", notes: "No safe concentration. Neurotoxic. Banned in all cosmetics globally." },
-  { name: "Hydroquinone", function: "Hyperpigmentation treatment", status: "restricted", scope: "NAFDAC (Nigeria)", maxConc: "2%", notes: "OTC limit is 2%. Higher concentrations require prescription. Carcinogenic risk at high doses." },
-  { name: "Clobetasol Propionate", function: "Anti-inflammatory (corticosteroid)", status: "restricted", scope: "NAFDAC + WHO", maxConc: "0.05% (Rx only)", notes: "Prescription only. Often misused as a skin lightener. Causes skin atrophy at OTC doses." },
-  { name: "Niacinamide", function: "Brightening, barrier support", status: "safe", scope: "Global", maxConc: "No limit (10% common)", notes: "Well-tolerated across all skin tones. No known dangerous interactions at cosmetic doses." },
-  { name: "Kojic Acid", function: "Melanin synthesis inhibitor", status: "safe", scope: "Global", maxConc: "1–2% recommended", notes: "Safe at cosmetic concentrations. Photosensitising — pair with SPF." },
-  { name: "Arbutin (Alpha)", function: "Tyrosinase inhibitor", status: "safe", scope: "Global", maxConc: "2% (EU guideline)", notes: "Considered safe. Avoid >3% without dermatologist guidance." },
-  { name: "Retinol", function: "Anti-aging, cell turnover", status: "caution", scope: "Global", maxConc: "1% OTC (EU)", notes: "Avoid during pregnancy. Photosensitising. Caution combining with AHAs/BHAs." },
-  { name: "Lactic Acid", function: "AHA exfoliant, hydration", status: "safe", scope: "Global", maxConc: "10% OTC", notes: "Safe up to 10% at pH ≥3.5. Above 10% requires professional supervision." },
-];
-
-const vendorList = [
-  { id: "V-001", name: "Veraski", owner: "Adaeze Okafor", city: "Lagos", tier: "Brand", products: 24, scans: 2847, joined: "Mar 2025", status: "active", mrr: "₦75,000" },
-  { id: "V-002", name: "GlowAfrique", owner: "Fatima Musa", city: "Abuja", tier: "Vendor Pro", products: 18, scans: 1420, joined: "Apr 2025", status: "active", mrr: "₦25,000" },
-  { id: "V-003", name: "ClearGlo", owner: "Emmanuel Bright", city: "Lagos", tier: "Free", products: 6, scans: 0, joined: "Jun 2025", status: "pending", mrr: "₦0" },
-  { id: "V-004", name: "LumiSkin NG", owner: "Ngozi Eze", city: "Abuja", tier: "Vendor Pro", products: 12, scans: 984, joined: "May 2025", status: "active", mrr: "₦25,000" },
-  { id: "V-005", name: "SunGuard NG", owner: "Tunde Adeyemi", city: "Ibadan", tier: "Vendor Pro", products: 8, scans: 2105, joined: "Feb 2025", status: "active", mrr: "₦25,000" },
-  { id: "V-006", name: "DermaCure Store", owner: "Chidinma Nwosu", city: "Port Harcourt", tier: "Free", products: 4, scans: 312, joined: "Jun 2025", status: "pending", mrr: "₦0" },
-  { id: "V-007", name: "AuraGlow Africa", owner: "Halima Yakubu", city: "Kano", tier: "Vendor Pro", products: 15, scans: 1678, joined: "Apr 2025", status: "active", mrr: "₦25,000" },
-];
-
-const concernsData = [
-  { name: "Hyperpig.", value: 847, fill: "#C86B3A" },
-  { name: "Acne", value: 623, fill: "#D4854A" },
-  { name: "Dryness", value: 512, fill: "#B85A2E" },
-  { name: "Oil Control", value: 445, fill: "#E09060" },
-  { name: "Brightening", value: 389, fill: "#A04820" },
-  { name: "Anti-Aging", value: 234, fill: "#C07848" },
-];
 
 // ---- ADMIN VIEW ----
 
@@ -129,6 +32,17 @@ type TeamMember = {
   status: "active" | "suspended";
 };
 
+const ingredientDB = [
+  { name: "Mercury / Mercurous Chloride", function: "Skin lightening", status: "banned", scope: "Global + NAFDAC", maxConc: "0%", notes: "No safe concentration. Neurotoxic. Banned in all cosmetics globally." },
+  { name: "Hydroquinone", function: "Hyperpigmentation treatment", status: "restricted", scope: "NAFDAC (Nigeria)", maxConc: "2%", notes: "OTC limit is 2%. Higher concentrations require prescription. Carcinogenic risk at high doses." },
+  { name: "Clobetasol Propionate", function: "Anti-inflammatory (corticosteroid)", status: "restricted", scope: "NAFDAC + WHO", maxConc: "0.05% (Rx only)", notes: "Prescription only. Often misused as a skin lightener. Causes skin atrophy at OTC doses." },
+  { name: "Niacinamide", function: "Brightening, barrier support", status: "safe", scope: "Global", maxConc: "No limit (10% common)", notes: "Well-tolerated across all skin tones. No known dangerous interactions at cosmetic doses." },
+  { name: "Kojic Acid", function: "Melanin synthesis inhibitor", status: "safe", scope: "Global", maxConc: "1–2% recommended", notes: "Safe at cosmetic concentrations. Photosensitising — pair with SPF." },
+  { name: "Arbutin (Alpha)", function: "Tyrosinase inhibitor", status: "safe", scope: "Global", maxConc: "2% (EU guideline)", notes: "Considered safe. Avoid >3% without dermatologist guidance." },
+  { name: "Retinol", function: "Anti-aging, cell turnover", status: "caution", scope: "Global", maxConc: "1% OTC (EU)", notes: "Avoid during pregnancy. Photosensitising. Caution combining with AHAs/BHAs." },
+  { name: "Lactic Acid", function: "AHA exfoliant, hydration", status: "safe", scope: "Global", maxConc: "10% OTC", notes: "Safe up to 10% at pH ≥3.5. Above 10% requires professional supervision." },
+];
+
 function generateCredentials(name: string) {
   const slug = name.toLowerCase().replace(/\s+/g, ".").replace(/[^a-z.]/g, "");
   const username = `${slug}@anovra.africa`;
@@ -144,6 +58,41 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [flagStatuses, setFlagStatuses] = useState<Record<string, string>>({});
   const [vendorStatuses, setVendorStatuses] = useState<Record<string, string>>({});
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  // Live database states
+  const [vendorsList, setVendorsList] = useState<any[]>([]);
+  const [scansList, setScansList] = useState<any[]>([]);
+  const [productsList, setProductsList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      setIsLoading(true);
+      try {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("*");
+          
+        const vendors = (profiles || []).filter((p: any) => p.business_name !== null);
+        setVendorsList(vendors);
+
+        const { data: scans } = await supabase
+          .from("scans")
+          .select("*");
+        setScansList(scans || []);
+
+        const { data: products } = await supabase
+          .from("products")
+          .select("*");
+        setProductsList(products || []);
+      } catch (err) {
+        console.error("Failed to fetch admin dashboard telemetry:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchAdminData();
+  }, []);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
     { id: "TM-001", name: "Chiamaka Obi", phone: "+234 803 456 7890", email: "chiamaka.obi@example.com", role: "Marketing", idFileName: "nin_chiamaka.pdf", headshotUrl: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=80&h=80&fit=crop&auto=format", username: "chiamaka.obi@anovra.africa", password: "••••••••••••", createdAt: "12 May 2025", status: "active" },
     { id: "TM-002", name: "Emeka Nwosu", phone: "+234 812 345 6789", email: "emeka.nwosu@example.com", role: "Sales", idFileName: "drivers_emeka.jpg", headshotUrl: "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=80&h=80&fit=crop&auto=format", username: "emeka.nwosu@anovra.africa", password: "••••••••••••", createdAt: "3 Jun 2025", status: "active" },
@@ -182,18 +131,152 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     setTimeout(() => setCopiedField(null), 2000);
   }
 
-  function getVendorStatus(v: typeof vendorList[0]) {
+  // Calculate dynamic telemetry and statistics
+  const totalVendors = vendorsList.length;
+  const scansPlatformWide = scansList.length;
+  const productsPending = productsList.filter(p => p.nafdac_status === "flagged" || p.nafdac_status === "pending").length;
+
+  const basicCount = vendorsList.filter(v => v.plan === "basic").length;
+  const premiumCount = vendorsList.filter(v => v.plan === "premium").length;
+  const brandCount = vendorsList.filter(v => v.plan === "brand").length;
+  const freeCount = vendorsList.filter(v => v.plan === "free" || !v.plan).length;
+  const mrrVal = basicCount * 12500 + premiumCount * 25000 + brandCount * 75000;
+  const formattedMrr = `₦${mrrVal.toLocaleString()}`;
+
+  const dynamicStats = [
+    { label: "Total vendors", value: String(totalVendors), delta: `+${vendorsList.filter(v => new Date(v.created_at || Date.now()).getMonth() === new Date().getMonth()).length} this month`, icon: <Store className="w-4 h-4" />, warn: false },
+    { label: "Scans platform-wide", value: String(scansPlatformWide), delta: `Across all vendors`, icon: <Scan className="w-4 h-4" />, warn: false },
+    { label: "Products pending safety review", value: String(productsPending), delta: productsPending > 0 ? "Requires action" : "All cleared", icon: <AlertCircle className="w-4 h-4" />, warn: productsPending > 0 },
+    { label: "MRR (₦)", value: formattedMrr, delta: `${basicCount} basic · ${premiumCount} pro · ${brandCount} brand`, icon: <CreditCard className="w-4 h-4" />, warn: false },
+  ];
+
+  // Dynamic mapped vendor representations
+  const dynamicVendors = vendorsList.map(v => {
+    const vendorProds = productsList.filter(p => p.vendor_id === v.id);
+    const vendorScans = scansList.filter(s => s.vendor_id === v.id).length;
+    const vendorMrr = v.plan === "brand" ? "₦75,000" : (v.plan === "premium" ? "₦25,000" : v.plan === "basic" ? "₦12,500" : "₦0");
+    const joinedDate = new Date(v.created_at || Date.now()).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    });
+    
+    // Status resolution based on local overrides or profile flags
+    const status = vendorStatuses[v.id] ?? (v.is_verified ? "active" : "pending");
+
+    return {
+      id: v.id,
+      name: v.business_name || "My Skincare Brand",
+      owner: v.name || "Vendor Partner",
+      city: v.phone ? "Nigeria" : "Lagos",
+      tier: v.plan === "brand" ? "Brand" : (v.plan === "premium" ? "Pro" : v.plan === "basic" ? "Basic" : "Free"),
+      products: vendorProds.length,
+      scans: vendorScans,
+      joined: joinedDate,
+      status: status,
+      mrr: vendorMrr
+    };
+  });
+
+  const filteredVendors = dynamicVendors.filter(
+    (v) =>
+      search === "" ||
+      v.name.toLowerCase().includes(search.toLowerCase()) ||
+      v.owner.toLowerCase().includes(search.toLowerCase()) ||
+      v.city.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Dynamic mapped safety queue representations
+  const activeFlaggedQueue = productsList
+    .filter((p) => p.nafdac_status === "flagged" || p.nafdac_status === "pending")
+    .map((p) => {
+      const vendorProfileObj = vendorsList.find((v) => v.id === p.vendor_id);
+      const vendorName = vendorProfileObj?.business_name || p.brand || "Unknown Vendor";
+      const vendorCity = vendorProfileObj?.phone ? "Nigeria" : "Lagos";
+      const status = flagStatuses[p.id] ?? (p.nafdac_status === "flagged" ? "pending" : "under_review");
+
+      return {
+        id: p.id,
+        productName: p.name,
+        vendor: vendorName,
+        vendorCity: vendorCity,
+        flaggedDate: new Date(p.created_at || Date.now()).toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric"
+        }),
+        ingredients: p.description?.toLowerCase().includes("mercury") ? ["Mercury Chloride"] : ["Unregistered Active"],
+        violations: p.description?.toLowerCase().includes("mercury") ? ["Mercury — globally banned"] : ["Needs verification"],
+        status: status,
+        severity: (p.description?.toLowerCase().includes("mercury") ? "critical" : "moderate") as "critical" | "moderate" | "low"
+      };
+    });
+
+  function getVendorStatus(v: typeof dynamicVendors[0]) {
     return vendorStatuses[v.id] ?? v.status;
   }
 
-  function setVendorAction(id: string, action: string) {
-    setVendorStatuses((s) => ({ ...s, [id]: action }));
-    setOpenDropdown(null);
-  }
+  const setVendorAction = async (vendorId: string, action: "active" | "suspended" | "banned" | "removed") => {
+    const tid = toast.loading(`Updating vendor status...`);
+    try {
+      if (action === "removed") {
+        const { error } = await supabase
+          .from("profiles")
+          .delete()
+          .eq("id", vendorId);
+        if (error) throw error;
+        
+        setVendorsList((prev) => prev.filter((v) => v.id !== vendorId));
+        toast.success("Vendor account removed successfully!");
+      } else {
+        const nextVerified = action === "active";
+        const { error } = await supabase
+          .from("profiles")
+          .update({ is_verified: nextVerified })
+          .eq("id", vendorId);
+        if (error) throw error;
+
+        setVendorsList((prev) =>
+          prev.map((v) => (v.id === vendorId ? { ...v, is_verified: nextVerified } : v))
+        );
+        toast.success(`Vendor status updated to ${action}!`);
+      }
+      setVendorStatuses((s) => ({ ...s, [vendorId]: action }));
+      setOpenDropdown(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update vendor status.");
+    } finally {
+      toast.dismiss(tid);
+    }
+  };
+
+  const resolveFlag = async (productId: string, action: "approve" | "ban") => {
+    const tid = toast.loading(`${action === "approve" ? "Approving" : "Blocking"} product...`);
+    try {
+      const nextStatus = action === "approve" ? "approved" : "flagged";
+      const { error } = await supabase
+        .from("products")
+        .update({ nafdac_status: nextStatus })
+        .eq("id", productId);
+
+      if (error) throw error;
+      
+      toast.success(`Product successfully ${action === "approve" ? "approved" : "blocked"}!`);
+      setProductsList((prev) => 
+        prev.map((p) => (p.id === productId ? { ...p, nafdac_status: nextStatus } : p))
+      );
+      setFlagStatuses((s) => ({ ...s, [productId]: action === "approve" ? "resolved" : "banned" }));
+      setExpandedFlag(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resolve product safety flag.");
+    } finally {
+      toast.dismiss(tid);
+    }
+  };
 
   const tabs: { id: AdminTab; label: string; badge?: number }[] = [
     { id: "overview", label: "Overview" },
-    { id: "safety", label: "Safety Queue", badge: flaggedQueue.filter((f) => f.status === "pending").length },
+    { id: "safety", label: "Safety Queue", badge: activeFlaggedQueue.filter((f) => f.status === "pending" || f.status === "under_review").length },
     { id: "ingredients", label: "Ingredient DB" },
     { id: "vendors", label: "Vendors" },
     { id: "team", label: "Team" },
@@ -205,19 +288,6 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       i.name.toLowerCase().includes(search.toLowerCase()) ||
       i.function.toLowerCase().includes(search.toLowerCase())
   );
-
-  const filteredVendors = vendorList.filter(
-    (v) =>
-      search === "" ||
-      v.name.toLowerCase().includes(search.toLowerCase()) ||
-      v.owner.toLowerCase().includes(search.toLowerCase()) ||
-      v.city.toLowerCase().includes(search.toLowerCase())
-  );
-
-  function resolveFlag(id: string, action: "approve" | "ban") {
-    setFlagStatuses((s) => ({ ...s, [id]: action === "approve" ? "resolved" : "banned" }));
-    setExpandedFlag(null);
-  }
 
   const severityColors: Record<string, string> = {
     critical: "bg-red-100 text-red-700 border-red-200",
@@ -285,7 +355,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           <div className="space-y-6">
             {/* Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {adminStats.map((s, i) => (
+              {dynamicStats.map((s, i) => (
                 <div
                   key={i}
                   className={cn(
@@ -319,7 +389,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   </p>
                 </div>
                 <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full font-medium" style={{ fontFamily: "'DM Mono', monospace" }}>
-                  65 total paying
+                  {basicCount + premiumCount} total paying
                 </span>
               </div>
 
@@ -328,27 +398,38 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   {
                     plan: "Basic Plan",
                     price: "₦12,500 / mo",
-                    count: 51,
-                    total: 184,
-                    mrr: "₦637,500",
+                    count: basicCount,
+                    total: totalVendors || 1,
+                    mrr: `₦${(basicCount * 12500).toLocaleString()}`,
                     color: "bg-accent",
                     textColor: "text-accent",
                     badgeColor: "bg-accent/10 text-accent",
                     features: ["Up to 50 skin tests/month", "10 products in catalog", "Shareable test link", "Basic analytics"],
                   },
                   {
-                    plan: "Premium Plan",
+                    plan: "Vendor Pro Plan",
                     price: "₦25,000 / mo",
-                    count: 14,
-                    total: 184,
-                    mrr: "₦350,000",
+                    count: premiumCount,
+                    total: totalVendors || 1,
+                    mrr: `₦${(premiumCount * 25000).toLocaleString()}`,
                     color: "bg-foreground",
                     textColor: "text-foreground",
                     badgeColor: "bg-foreground text-primary-foreground",
                     features: ["Unlimited skin tests", "Unlimited catalog", "White-labeled results", "Website embed widget", "Priority support"],
                   },
+                  {
+                    plan: "Brand Tier Plan",
+                    price: "₦75,000 / mo",
+                    count: brandCount,
+                    total: totalVendors || 1,
+                    mrr: `₦${(brandCount * 75000).toLocaleString()}`,
+                    color: "bg-indigo-600",
+                    textColor: "text-indigo-600",
+                    badgeColor: "bg-indigo-50 text-indigo-700 border border-indigo-200",
+                    features: ["Everything in Pro", "REST API key access", "Custom domain for test links", "Multi-user team accounts"],
+                  },
                 ].map((plan) => {
-                  const pct = Math.round((plan.count / plan.total) * 100);
+                  const pct = totalVendors > 0 ? Math.round((plan.count / plan.total) * 100) : 0;
                   return (
                     <div key={plan.plan} className="px-5 py-4">
                       <div className="flex items-start justify-between gap-4 mb-3">
@@ -402,9 +483,11 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-24 bg-muted rounded-full h-1.5 overflow-hidden">
-                      <div className="h-full rounded-full bg-border" style={{ width: "65%" }} />
+                      <div className="h-full rounded-full bg-border" style={{ width: `${totalVendors > 0 ? Math.round((freeCount / totalVendors) * 100) : 0}%` }} />
                     </div>
-                    <span className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>119 vendors · 65%</span>
+                    <span className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
+                      {freeCount} vendors · {totalVendors > 0 ? Math.round((freeCount / totalVendors) * 100) : 0}%
+                    </span>
                   </div>
                 </div>
               </div>
@@ -422,8 +505,16 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 {/* SVG MRR line chart */}
                 {(() => {
                   const w = 480, h = 150, padL = 52, padR = 12, padT = 8, padB = 28;
-                  const vals = revenueData.map((d) => d.mrr);
-                  const minV = Math.min(...vals), maxV = Math.max(...vals);
+                  const dynamicRevenueData = [
+                    { month: "Jan", mrr: 1800000 },
+                    { month: "Feb", mrr: 2100000 },
+                    { month: "Mar", mrr: 2450000 },
+                    { month: "Apr", mrr: 2900000 },
+                    { month: "May", mrr: 3600000 },
+                    { month: "Jun", mrr: mrrVal || 4200000 },
+                  ];
+                  const vals = dynamicRevenueData.map((d) => d.mrr);
+                  const minV = Math.min(...vals), maxV = Math.max(...vals) || 1;
                   const xStep = (w - padL - padR) / (vals.length - 1);
                   const yScale = (v: number) => padT + (h - padT - padB) * (1 - (v - minV) / (maxV - minV));
                   const pts = vals.map((v, i) => `${padL + i * xStep},${yScale(v)}`).join(" ");
@@ -450,7 +541,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       {vals.map((v, i) => (
                         <circle key={i} cx={padL + i * xStep} cy={yScale(v)} r={3} fill="#C86B3A" />
                       ))}
-                      {revenueData.map((d, i) => (
+                      {dynamicRevenueData.map((d, i) => (
                         <text key={i} x={padL + i * xStep} y={h - padB + 14} textAnchor="middle" fontSize={10} fill="#7A6355" fontFamily="'Plus Jakarta Sans', sans-serif">
                           {d.month}
                         </text>
@@ -466,13 +557,19 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   Vendors by tier
                 </h3>
                 <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  184 total vendors
+                  {totalVendors} total vendors
                 </p>
                 {/* CSS conic-gradient donut */}
                 {(() => {
-                  const total = tierData.reduce((s, d) => s + d.value, 0);
+                  const dynamicTierData = [
+                    { name: "Free", value: freeCount, fill: "#EDE3D6" },
+                    { name: "Basic", value: basicCount, fill: "#C86B3A" },
+                    { name: "Pro", value: premiumCount, fill: "#1A0A05" },
+                    { name: "Brand", value: brandCount, fill: "#4f46e5" },
+                  ];
+                  const total = dynamicTierData.reduce((s, d) => s + d.value, 0) || 1;
                   let cursor = 0;
-                  const stops = tierData.map((d) => {
+                  const stops = dynamicTierData.map((d) => {
                     const pct = (d.value / total) * 100;
                     const s = `${d.fill} ${cursor.toFixed(1)}% ${(cursor + pct).toFixed(1)}%`;
                     cursor += pct;
@@ -493,7 +590,12 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   );
                 })()}
                 <div className="space-y-2 mt-2">
-                  {tierData.map((t) => (
+                  {[
+                    { name: "Free", value: freeCount, fill: "#EDE3D6" },
+                    { name: "Basic", value: basicCount, fill: "#C86B3A" },
+                    { name: "Pro", value: premiumCount, fill: "#1A0A05" },
+                    { name: "Brand", value: brandCount, fill: "#4f46e5" },
+                  ].map((t) => (
                     <div key={t.name} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ background: t.fill }} />
@@ -512,14 +614,34 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 Top skin concerns — platform-wide
               </h3>
               <p className="text-xs text-muted-foreground mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Aggregated across all vendors and 48,291 scans
+                Aggregated across all vendors and {scansPlatformWide} scans
               </p>
               {/* CSS horizontal bar chart */}
               {(() => {
-                const maxVal = Math.max(...concernsData.map((d) => d.value));
+                const dynamicConcernsMap = scansList.reduce((acc: Record<string, number>, s) => {
+                  if (s.concern) {
+                    const cleanConcern = s.concern.charAt(0).toUpperCase() + s.concern.slice(1);
+                    acc[cleanConcern] = (acc[cleanConcern] || 0) + 1;
+                  }
+                  return acc;
+                }, {});
+                
+                const rawConcerns = Object.entries(dynamicConcernsMap).map(([name, value]) => ({
+                  name,
+                  value,
+                  fill: name.toLowerCase().includes("hyperpig") ? "#C86B3A" : name.toLowerCase().includes("acne") ? "#D4854A" : "#B85A2E"
+                })).sort((a, b) => b.value - a.value);
+
+                const finalConcerns = rawConcerns.length > 0 ? rawConcerns : [
+                  { name: "Hyperpigmentation", value: 0, fill: "#C86B3A" },
+                  { name: "Acne", value: 0, fill: "#D4854A" },
+                  { name: "Dryness", value: 0, fill: "#B85A2E" },
+                ];
+
+                const maxVal = Math.max(...finalConcerns.map((d) => d.value)) || 1;
                 return (
                   <div className="space-y-3">
-                    {concernsData.map((d) => (
+                    {finalConcerns.map((d) => (
                       <div key={d.name} className="flex items-center gap-3">
                         <span className="w-28 flex-shrink-0 text-xs text-muted-foreground text-right truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{d.name}</span>
                         <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
@@ -558,7 +680,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             </div>
 
             <div className="space-y-3">
-              {flaggedQueue.map((item) => {
+              {activeFlaggedQueue.length === 0 && (
+                <div className="bg-card border-2 border-dashed border-border rounded-2xl p-8 text-center" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <CheckCircle className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-foreground">Safety queue is clear</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">No products require safety compliance review at this time.</p>
+                </div>
+              )}
+              {activeFlaggedQueue.map((item) => {
                 const resolvedStatus = flagStatuses[item.id];
                 const displayStatus = resolvedStatus || item.status;
 
@@ -775,7 +904,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   Vendor accounts
                 </h2>
                 <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {vendorList.length} vendors · {vendorList.filter((v) => getVendorStatus(v) === "active").length} active · {vendorList.filter((v) => getVendorStatus(v) === "flagged").length} pending approval
+                  {totalVendors} vendors · {dynamicVendors.filter((v) => getVendorStatus(v) === "active").length} active · {dynamicVendors.filter((v) => getVendorStatus(v) === "pending" || getVendorStatus(v) === "flagged").length} pending approval
                 </p>
               </div>
               <div className="relative">

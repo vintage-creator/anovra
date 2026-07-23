@@ -11,55 +11,231 @@ import { toast } from "sonner";
 
 const catalogProducts: any[] = [];
 
-// ---- SHOP VIEW ----
+const slugify = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-const SHOP_VENDOR = {
-  name: "Veraski",
-  slug: "veraski-ng",
-  tagline: "Science-backed skincare for African skin",
-  location: "Lagos, Nigeria",
-  rating: 4.8,
-  reviews: 312,
-  since: "2023",
-  banner: "1531746020798-e6953c6e8e04",
-  avatar: "1531746020798-e6953c6e8e04",
+const titleFromSlug = (slug: string) =>
+  slug
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ") || "Vintage";
+
+const isPlaceholderName = (value?: string | null) =>
+  !value || ["my brand", "israel abazie", "my skincare brand"].includes(value.trim().toLowerCase());
+
+const getShopSlugFromUrl = () => {
+  const hashSlug = window.location.hash.includes("/shop/")
+    ? window.location.hash.split("/shop/")[1]?.split("?")[0]
+    : "";
+  const storedSlug = sessionStorage.getItem("active_shop_slug") || "";
+  const slug = hashSlug || storedSlug || "vintage";
+  return slug === "israel-abazie" ? "vintage" : slug;
 };
 
+// ---- SHOP VIEW ----
+
 export function ShopView({ setView }: { setView: (v: View) => void }) {
+  const [activeSlug] = useState(getShopSlugFromUrl);
+  const [isPreviewMode] = useState(() => sessionStorage.getItem("shop_preview_mode") === "true");
+  const [vendor, setVendor] = useState<any>(() => {
+    const snapshot = sessionStorage.getItem("active_shop_snapshot");
+    if (snapshot) {
+      try {
+        const parsed = JSON.parse(snapshot);
+        return {
+          name: isPlaceholderName(parsed.name) ? titleFromSlug(activeSlug) : parsed.name,
+          tagline: parsed.tagline || "Science-backed skincare for African skin",
+          location: parsed.location || "Lagos, Nigeria",
+          rating: 4.8,
+          reviews: 312,
+          since: parsed.since || "2023",
+          is_verified: parsed.is_verified || false
+        };
+      } catch (e) {}
+    }
+
+    return {
+      name: titleFromSlug(activeSlug),
+      tagline: "Science-backed skincare for African skin",
+      location: "Lagos, Nigeria",
+      rating: 4.8,
+      reviews: 312,
+      since: "2023",
+      is_verified: false
+    };
+  });
   const [productsList, setProductsList] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(true);
   const [addedToCart, setAddedToCart] = useState<string | number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
+  const [activeImgIdx, setActiveImgIdx] = useState(0);
 
   const activeProducts = productsList.filter((p) => p.status === "active");
   const allConcerns = ["All", ...Array.from(new Set(activeProducts.flatMap((p) => p.concerns || [])))];
-  const shopUrl = `anovra.africa/shop/${SHOP_VENDOR.slug}`;
+  const shopSlug = slugify(vendor.name || titleFromSlug(activeSlug)) || activeSlug;
+  const shopUrl = `https://anovra.africa/#/shop/${shopSlug}`;
 
   useEffect(() => {
     const loadProducts = async () => {
+      const cacheKey = `cached_shop_products_${activeSlug}`;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        setProductsList(JSON.parse(cached));
+      }
+
       try {
-        const { data, error } = await supabase
-          .from("products")
-          .select("*")
-          .eq("nafdac_status", "approved");
+        sessionStorage.setItem("active_shop_slug", activeSlug);
+        
+        // 1. Fetch profiles to match by business name slug
+        const { data: profiles } = await supabase.from("profiles").select("*");
+        let targetProfile = profiles?.find((p) => {
+          const businessName = isPlaceholderName(p.business_name) ? "" : p.business_name || "";
+          const fallbackName = isPlaceholderName(p.name) ? "" : p.name || "";
+          return [businessName, fallbackName].some((name) => slugify(name) === activeSlug);
+        });
+
+        // Dashboard previews should use the signed-in vendor. Public shop links should not.
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!targetProfile && user && isPreviewMode) {
+          const { data: loggedProfile } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", user.id)
+            .maybeSingle();
+          if (loggedProfile) {
+            targetProfile = loggedProfile;
+          }
+        }
+
+        let query = supabase.from("products").select("*").eq("nafdac_status", "approved");
+        
+        if (targetProfile) {
+          query = query.eq("vendor_id", targetProfile.id);
+          
+          const joinedYear = targetProfile.created_at ? new Date(targetProfile.created_at).getFullYear() : 2023;
+          let taglineVal = "Science-backed skincare for African skin";
+          let locationVal = "Lagos, Nigeria";
+          let sinceVal = String(joinedYear);
+          
+          if (user && user.id === targetProfile.id && user.user_metadata) {
+            if (user.user_metadata.tagline) taglineVal = user.user_metadata.tagline;
+            if (user.user_metadata.location) locationVal = user.user_metadata.location;
+            if (user.user_metadata.since) sinceVal = user.user_metadata.since;
+          } else if (targetProfile.business_name === "Vintage") {
+            // Fallback for demo storefront matching the default name
+            taglineVal = "Science-backed skincare for African skin";
+            locationVal = "Lagos, Nigeria";
+            sinceVal = "2023";
+          }
+
+          const displayName = isPlaceholderName(targetProfile.business_name)
+            ? titleFromSlug(activeSlug)
+            : targetProfile.business_name;
+
+          setVendor({
+            name: displayName || titleFromSlug(activeSlug),
+            tagline: taglineVal,
+            location: locationVal,
+            rating: 4.8,
+            reviews: 312,
+            since: sinceVal,
+            is_verified: targetProfile.is_verified || false
+          });
+        } else {
+          query = query.eq("vendor_id", "00000000-0000-0000-0000-000000000000");
+          setVendor((current: any) => ({
+            ...current,
+            name: titleFromSlug(activeSlug),
+            is_verified: false,
+          }));
+        }
+
+        const { data, error } = await query;
 
         if (data && data.length > 0) {
-          const formatted = data.map((p) => ({
-            id: p.id,
-            name: p.name,
-            brand: p.brand || "Own Brand",
-            concerns: [p.category || "General"],
-            skinTypes: ["All"],
-            price: `₦${Number(p.price).toLocaleString()}`,
-            priceVal: p.price,
-            status: "active",
-            photo: p.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
-            ingredients: [],
-          }));
+          const formatted = data.map((p) => {
+            const descriptionText = p.description || "";
+            const imagesMatch = descriptionText.match(/<!--IMAGES:(.*)-->/);
+            const benefitsMatch = descriptionText.match(/<!--BENEFITS:(.*)-->/);
+            const usageMatch = descriptionText.match(/<!--USAGE:(.*)-->/);
+            const precautionsMatch = descriptionText.match(/<!--PRECAUTIONS:(.*)-->/);
+            const skinTypesMatch = descriptionText.match(/<!--SKINTYPES:(.*)-->/);
+            const keyMatch = descriptionText.match(/<!--KEY_INGREDIENTS:(.*)-->/);
+            const activeMatch = descriptionText.match(/<!--ACTIVE_INGREDIENTS:(.*)-->/);
+
+            let parsedImages: string[] = [];
+            let benefits = "";
+            let usageInstructions = "";
+            let precautions = "";
+            let skinTypes: string[] = [];
+            let keyIngredients: string[] = [];
+            let activeIngredients: string[] = [];
+            let cleanDescription = descriptionText;
+
+            if (imagesMatch) {
+              try { parsedImages = JSON.parse(imagesMatch[1]); } catch (e) {}
+            }
+            if (benefitsMatch) {
+              try { benefits = JSON.parse(benefitsMatch[1]); } catch (e) {}
+            }
+            if (usageMatch) {
+              try { usageInstructions = JSON.parse(usageMatch[1]); } catch (e) {}
+            }
+            if (precautionsMatch) {
+              try { precautions = JSON.parse(precautionsMatch[1]); } catch (e) {}
+            }
+            if (skinTypesMatch) {
+              try { skinTypes = JSON.parse(skinTypesMatch[1]); } catch (e) {}
+            }
+            if (keyMatch) {
+              try { keyIngredients = JSON.parse(keyMatch[1]); } catch (e) {}
+            }
+            if (activeMatch) {
+              try { activeIngredients = JSON.parse(activeMatch[1]); } catch (e) {}
+            }
+
+            cleanDescription = cleanDescription
+              .replace(/<!--IMAGES:(.*)-->/, "")
+              .replace(/<!--BENEFITS:(.*)-->/, "")
+              .replace(/<!--USAGE:(.*)-->/, "")
+              .replace(/<!--PRECAUTIONS:(.*)-->/, "")
+              .replace(/<!--SKINTYPES:(.*)-->/, "")
+              .replace(/<!--KEY_INGREDIENTS:(.*)-->/, "")
+              .replace(/<!--ACTIVE_INGREDIENTS:(.*)-->/, "")
+              .trim();
+
+            if (parsedImages.length === 0 && p.image_url) {
+              parsedImages = [p.image_url];
+            }
+            return {
+              id: p.id,
+              name: p.name,
+              brand: p.brand || "Own Brand",
+              concerns: [p.category || "General"],
+              skinTypes: skinTypes.length > 0 ? skinTypes : ["All"],
+              price: `₦${Number(p.price).toLocaleString()}`,
+              priceVal: p.price,
+              status: "active",
+              photo: p.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
+              images: parsedImages,
+              description: cleanDescription,
+              benefits,
+              usageInstructions,
+              precautions,
+              keyIngredients,
+              activeIngredients,
+              ingredients: [...keyIngredients, ...activeIngredients],
+            };
+          });
           setProductsList(formatted);
+          sessionStorage.setItem(cacheKey, JSON.stringify(formatted));
         } else {
           setProductsList([]);
+          sessionStorage.setItem(cacheKey, JSON.stringify([]));
         }
       } catch (err) {
         console.error("Failed to query live shop items:", err);
@@ -69,7 +245,12 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
       }
     };
     loadProducts();
-  }, []);
+  }, [activeSlug, isPreviewMode]);
+
+  const openSkinTest = () => {
+    sessionStorage.setItem("active_scan_slug", activeSlug);
+    setView("skintest");
+  };
 
   const handleAddToCart = async (product: any) => {
     setAddedToCart(product.id);
@@ -99,7 +280,11 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
     }
   };
 
-  const filtered = filter === "All" ? activeProducts : activeProducts.filter((p) => p.concerns.includes(filter));
+  const filtered = activeProducts.filter((p) => {
+    const matchesFilter = filter === "All" || p.concerns.includes(filter);
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.brand.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesFilter && matchesSearch;
+  });
 
   const copy = () => {
     navigator.clipboard?.writeText(shopUrl).catch(() => {});
@@ -113,10 +298,10 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         <div className="w-16 h-16 rounded-full border-4 border-accent/20 border-t-accent animate-spin" />
         <div className="text-center">
           <p className="text-lg font-light text-foreground mb-1" style={{ fontFamily: "'Fraunces', serif" }}>
-            Generating your shop…
+            Loading storefront preview…
           </p>
           <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Publishing {activeProducts.length} products to your storefront
+            Retrieving catalog & brand information
           </p>
         </div>
         <div className="w-64 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -127,72 +312,112 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground">
 
-      {/* Top admin bar */}
-      <div className="bg-foreground text-primary-foreground py-2 px-4 border-b border-white/10">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Anovra" className="h-5 w-auto object-contain shrink-0 bg-white/10 p-0.5 rounded" />
-            <div className="w-2 h-2 rounded-full bg-green-400" />
-            <span className="text-xs" style={{ fontFamily: "'DM Mono', monospace" }}>
-              {shopUrl}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={copy}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              {copied ? <Check className="w-3 h-3 text-green-400" /> : <ExternalLink className="w-3 h-3" />}
-              {copied ? "Copied!" : "Copy link"}
-            </button>
-            <button
-              onClick={() => setView("dashboard")}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-accent hover:bg-accent/90 transition-colors"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              ← Back to dashboard
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Shop header */}
-      <div className="bg-foreground text-primary-foreground">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-            {/* Logo placeholder */}
-            <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center flex-shrink-0 shadow-lg">
-              <span className="text-2xl font-bold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
-                {SHOP_VENDOR.name[0]}
+      {/* Preview bar, only shown inside the vendor dashboard preview. */}
+      {isPreviewMode && (
+        <div className="sticky top-0 z-30 bg-foreground text-primary-foreground py-2 px-4 border-b border-white/10 shadow-md">
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <Store className="w-4 h-4 text-green-400" />
+              <span className="text-xs font-mono opacity-80">
+                Preview: {shopUrl}
               </span>
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-3 flex-wrap mb-1">
-                <h1 className="text-2xl font-light" style={{ fontFamily: "'Fraunces', serif" }}>
-                  {SHOP_VENDOR.name}
-                </h1>
-                <span className="flex items-center gap-1 text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium">
-                  <CheckCircle className="w-3 h-3" /> Verified vendor
-                </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={copy}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {copied ? <Check className="w-3 h-3 text-green-400" /> : <ExternalLink className="w-3 h-3" />}
+                {copied ? "Copied!" : "Copy link"}
+              </button>
+              <button
+                onClick={() => {
+                  sessionStorage.removeItem("shop_preview_mode");
+                  setView("dashboard");
+                }}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-accent hover:bg-accent/90 transition-colors font-semibold cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                Back to dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isPreviewMode && (
+        <div className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md transition-all">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-20 gap-4">
+            <button
+              onClick={() => setView("landing")}
+              className="flex items-center group rounded-lg p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] transition-transform active:scale-95 cursor-pointer"
+              aria-label="Anovra Home"
+            >
+              <img
+                src="/logo.png"
+                alt="Anovra"
+                className="h-10 sm:h-12 w-auto object-contain transition-transform group-hover:scale-105"
+              />
+            </button>
+            <div className="flex items-center gap-3 border-l border-border pl-4 min-w-0">
+              <div className="hidden sm:flex w-8 h-8 rounded-lg bg-[#008236]/10 text-[#008236] items-center justify-center shrink-0">
+                <Shield className="w-4 h-4" />
               </div>
-              <p className="text-sm text-white/60 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {SHOP_VENDOR.tagline}
-              </p>
-              <div className="flex items-center gap-4 text-xs text-white/50 flex-wrap" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{SHOP_VENDOR.location}</span>
-                <span className="flex items-center gap-1">
-                  <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                  {SHOP_VENDOR.rating} ({SHOP_VENDOR.reviews} reviews)
-                </span>
-                <span>{activeProducts.length} products · Since {SHOP_VENDOR.since}</span>
+              <div className="text-right sm:text-left min-w-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <p className="text-xs font-semibold text-foreground truncate">
+                  Secure storefront
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Powered by <span className="font-semibold text-[#008236]">Anovra</span>
+                </p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shop Header */}
+      <div className="bg-foreground text-primary-foreground py-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+              {/* Logo container */}
+              <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center flex-shrink-0 shadow-lg">
+                <span className="text-2xl font-bold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
+                  {vendor.name[0]}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className="text-2xl font-light" style={{ fontFamily: "'Fraunces', serif" }}>
+                    {vendor.name}
+                  </h1>
+                  {vendor.is_verified && (
+                    <span className="flex items-center gap-1 text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium">
+                      <CheckCircle className="w-3 h-3" /> Verified vendor
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm opacity-60" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {vendor.tagline}
+                </p>
+                <div className="flex items-center gap-4 text-xs opacity-50 flex-wrap" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{vendor.location}</span>
+                  <span className="flex items-center gap-1">
+                    <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                    {vendor.rating} ({vendor.reviews} reviews)
+                  </span>
+                  <span>{activeProducts.length} product{activeProducts.length !== 1 ? "s" : ""} · Since {vendor.since}</span>
+                </div>
+              </div>
+            </div>
+
             <button
-              onClick={() => setView("skintest")}
-              className="flex-shrink-0 flex items-center gap-2 bg-accent text-white px-5 py-3 rounded-xl font-medium text-sm hover:bg-accent/90 transition-colors shadow-lg"
+              onClick={openSkinTest}
+              className="flex-shrink-0 flex items-center gap-2 bg-accent text-white px-5 py-3 rounded-xl font-medium text-sm hover:bg-accent/90 transition-colors shadow-lg cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               <Scan className="w-4 h-4" />
@@ -206,15 +431,15 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
       <div className="bg-accent/8 border-b border-accent/20 py-3 px-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <Zap className="w-4 h-4 text-accent flex-shrink-0" />
+            <Zap className="w-4 h-4 text-accent shrink-0" />
             <p className="text-sm text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               <span className="font-medium">Not sure which product is right for you?</span>{" "}
               <span className="text-muted-foreground">Take a 90-second AI skin test and get matched to the exact products your skin needs.</span>
             </p>
           </div>
           <button
-            onClick={() => setView("skintest")}
-            className="flex-shrink-0 text-xs font-medium text-accent border border-accent/40 px-3 py-1.5 rounded-lg hover:bg-accent hover:text-white transition-colors"
+            onClick={openSkinTest}
+            className="text-xs font-medium text-accent border border-accent/40 px-3 py-1.5 rounded-lg hover:bg-accent hover:text-white transition-colors cursor-pointer"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             Start free skin test →
@@ -225,22 +450,36 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
       {/* Main content */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
 
-        {/* Concern filter tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
-          {allConcerns.map((c) => (
-            <button
-              key={c}
-              onClick={() => setFilter(c)}
-              className={`flex-shrink-0 text-sm px-4 py-2 rounded-full border transition-all ${
-                filter === c
-                  ? "bg-foreground text-primary-foreground border-foreground"
-                  : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
-              }`}
+        {/* Filter & Search Bar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
+            {allConcerns.map((c) => (
+              <button
+                key={c}
+                onClick={() => setFilter(c)}
+                className={`flex-shrink-0 text-sm px-4 py-2 rounded-full border transition-all cursor-pointer ${
+                  filter === c
+                    ? "bg-foreground text-primary-foreground border-foreground"
+                    : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                }`}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-input-background border border-border rounded-full text-sm placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-accent/50 text-foreground"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              {c}
-            </button>
-          ))}
+            />
+          </div>
         </div>
 
         {/* Results count */}
@@ -253,7 +492,8 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           {filtered.map((product) => (
             <div
               key={product.id}
-              className="bg-card border border-border rounded-2xl overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col"
+              onClick={() => { setSelectedProduct(product); setActiveImgIdx(0); }}
+              className="bg-card border border-border rounded-2xl overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col cursor-pointer"
             >
               {/* Product image */}
               <div className="relative aspect-square bg-secondary overflow-hidden">
@@ -277,7 +517,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
                   {product.brand}
                 </p>
                 <h3
-                  className="font-medium text-foreground text-sm leading-snug mb-2 flex-1"
+                  className="font-medium text-foreground text-sm leading-snug mb-2 flex-1 hover:text-accent transition-colors"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   {product.name}
@@ -301,8 +541,8 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
                     {product.price}
                   </p>
                   <button
-                    onClick={() => { setAddedToCart(product.id); setTimeout(() => setAddedToCart(null), 2000); }}
-                    className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-all ${
+                    onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
+                    className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-all cursor-pointer ${
                       addedToCart === product.id
                         ? "bg-green-500 text-white"
                         : "bg-accent text-white hover:bg-accent/90"
@@ -319,8 +559,8 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
 
                 {/* Skin match CTA */}
                 <button
-                  onClick={() => setView("skintest")}
-                  className="mt-2 w-full text-xs text-center text-accent underline underline-offset-2 hover:text-accent/80 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); openSkinTest(); }}
+                  className="mt-2 w-full text-xs text-center text-accent underline underline-offset-2 hover:text-accent/80 transition-colors cursor-pointer"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   Check if this matches my skin →
@@ -356,6 +596,190 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           ))}
         </div>
       </div>
+
+      {/* Product Details Modal overlay */}
+      {selectedProduct && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-border/60">
+              <div>
+                <p className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground">{selectedProduct.brand}</p>
+                <h3 className="font-semibold text-foreground text-base leading-tight mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {selectedProduct.name}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setSelectedProduct(null)} 
+                className="w-8 h-8 rounded-full hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              
+              {/* Product Gallery & Core Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Column: Image Gallery */}
+                <div className="space-y-3">
+                  <div className="aspect-square bg-muted rounded-2xl overflow-hidden border border-border">
+                    <img 
+                      src={selectedProduct.images?.[activeImgIdx] || selectedProduct.photo} 
+                      alt={selectedProduct.name} 
+                      className="w-full h-full object-cover" 
+                    />
+                  </div>
+                  {/* Thumbnail slider */}
+                  {selectedProduct.images && selectedProduct.images.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                      {selectedProduct.images.map((imgUrl: string, idx: number) => (
+                        <button
+                          key={idx}
+                          onClick={() => setActiveImgIdx(idx)}
+                          className={`w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 transition-colors cursor-pointer ${activeImgIdx === idx ? "border-accent" : "border-transparent"}`}
+                        >
+                          <img src={imgUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column: Pricing & Verification */}
+                <div className="flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">Retail Price</p>
+                      <p className="text-2xl font-light text-foreground mt-1" style={{ fontFamily: "'Fraunces', serif" }}>
+                        {selectedProduct.price}
+                      </p>
+                    </div>
+
+                    {/* NAFDAC Verification Badge */}
+                    <div className="p-3 bg-emerald-500/5 border border-emerald-500/15 rounded-xl flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 shrink-0">
+                        <Shield className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-800" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          NAFDAC Safety Screened
+                        </p>
+                        <p className="text-[11px] text-emerald-700/80 mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          This product has been screened against prohibited steroid levels and mercury toxins.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Concerns & Skin Types Tags */}
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wider mb-2">Suitable Skin Types</p>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedProduct.skinTypes?.map((t: string) => (
+                          <span key={t} className="text-xs bg-muted text-muted-foreground px-2.5 py-1 rounded-md font-medium">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Add to Cart CTA */}
+                  <div className="pt-4 md:pt-0">
+                    <button
+                      onClick={() => {
+                        handleAddToCart(selectedProduct);
+                        setSelectedProduct(null);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 text-white py-3 rounded-xl font-bold text-sm transition-colors shadow-lg cursor-pointer"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      <Package className="w-4 h-4" />
+                      Add to cart
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <hr className="border-border/60" />
+
+              {/* Detailed fields: Description, Ingredients, Benefits, Usage, Warnings */}
+              <div className="space-y-4">
+                
+                {/* Description */}
+                <div>
+                  <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Description
+                  </h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {selectedProduct.description || "No description provided."}
+                  </p>
+                </div>
+
+                {/* Key Ingredients */}
+                {selectedProduct.ingredients && selectedProduct.ingredients.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      Key Ingredients
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedProduct.ingredients.map((ing: string, i: number) => (
+                        <span key={i} className="text-[11px] bg-accent/10 text-accent px-2 py-0.5 rounded-full font-medium">
+                          {ing}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Product Benefits */}
+                {selectedProduct.benefits && (
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      Product Benefits
+                    </h4>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 pl-1">
+                      {selectedProduct.benefits.split("\n").filter((b: string) => b.trim()).map((b: string, i: number) => (
+                        <span key={i} className="block text-sm text-muted-foreground">
+                          • {b.replace(/^[•\-\*]\s*/, "")}
+                        </span>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Usage Instructions */}
+                {selectedProduct.usageInstructions && (
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      Usage Instructions
+                    </h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {selectedProduct.usageInstructions}
+                    </p>
+                  </div>
+                )}
+
+                {/* Precautions & Warnings */}
+                {selectedProduct.precautions && (
+                  <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-xl">
+                    <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      Precautions & Warnings
+                    </h4>
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                      {selectedProduct.precautions}
+                    </p>
+                  </div>
+                )}
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

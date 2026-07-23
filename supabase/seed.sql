@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   cac_document_url TEXT,
   plan TEXT DEFAULT 'free' CHECK (plan IN ('free', 'basic', 'premium')),
   is_verified BOOLEAN DEFAULT false,
+  custom_domain TEXT,
+  white_label BOOLEAN DEFAULT false,
+  webhook_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -19,7 +22,10 @@ CREATE POLICY "Allow public read access to profiles" ON public.profiles
   FOR SELECT USING (true);
 
 CREATE POLICY "Allow individual write access to profiles" ON public.profiles
-  FOR ALL USING (auth.uid() = id);
+  FOR ALL USING (
+    auth.uid() = id
+    OR (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid()) = 'admin'
+  );
 
 
 -- 2. Create Products Table
@@ -43,7 +49,10 @@ CREATE POLICY "Allow public read access to products" ON public.products
   FOR SELECT USING (true);
 
 CREATE POLICY "Allow vendor edit access to own products" ON public.products
-  FOR ALL USING (auth.uid() = vendor_id);
+  FOR ALL USING (
+    auth.uid() = vendor_id
+    OR (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid()) = 'admin'
+  );
 
 
 -- 3. Create Scans Table
@@ -61,10 +70,20 @@ CREATE TABLE IF NOT EXISTS public.scans (
 ALTER TABLE public.scans ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow select on scans" ON public.scans
-  FOR SELECT USING (true);
+  FOR SELECT USING (
+    auth.uid() = customer_id
+    OR auth.uid() = vendor_id
+    OR (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid()) = 'admin'
+  );
 
 CREATE POLICY "Allow insert on scans" ON public.scans
   FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow edit/delete on scans" ON public.scans
+  FOR ALL USING (
+    auth.uid() = customer_id
+    OR (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid()) = 'admin'
+  );
 
 
 -- 4. Create Cart Items Table
@@ -129,7 +148,8 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
   ('vendor-documents', 'vendor-documents', true),
-  ('product-images', 'product-images', true)
+  ('product-images', 'product-images', true),
+  ('skin-scans', 'skin-scans', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Enable RLS for storage objects
@@ -139,16 +159,90 @@ ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public read access to storage objects" ON storage.objects
   FOR SELECT USING (true);
 
-CREATE POLICY "Allow authenticated uploads to storage objects" ON storage.objects
-  FOR INSERT TO authenticated WITH CHECK (bucket_id = 'product-images' OR bucket_id = 'vendor-documents');
+-- Allow anyone to upload to skin-scans bucket (strictly JPEG/PNG/WEBP images under 5MB)
+CREATE POLICY "Allow uploads to skin-scans" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'skin-scans'
+    AND (metadata->>'size')::int <= 5242880
+    AND (metadata->>'mimetype') IN ('image/jpeg', 'image/jpg', 'image/png', 'image/webp')
+  );
 
-CREATE POLICY "Allow authenticated updates to storage objects" ON storage.objects
-  FOR UPDATE TO authenticated USING (bucket_id = 'product-images' OR bucket_id = 'vendor-documents');
+-- Allow anyone (including anonymous onboarding guests) to upload to vendor-documents (strictly JPEG/PNG/WEBP/PDF under 5MB)
+CREATE POLICY "Allow uploads to vendor-documents" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'vendor-documents'
+    AND (metadata->>'size')::int <= 5242880
+    AND (metadata->>'mimetype') IN ('image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf')
+  );
 
-CREATE POLICY "Allow authenticated deletions of storage objects" ON storage.objects
-  FOR DELETE TO authenticated USING (bucket_id = 'product-images' OR bucket_id = 'vendor-documents');
+-- Allow only authenticated users to upload product images (strictly JPEG/PNG/WEBP images under 5MB)
+CREATE POLICY "Allow authenticated uploads to product-images" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (
+    bucket_id = 'product-images'
+    AND (metadata->>'size')::int <= 5242880
+    AND (metadata->>'mimetype') IN ('image/jpeg', 'image/jpg', 'image/png', 'image/webp')
+  );
+
+-- Only authenticated owners or admins can modify/delete product images
+CREATE POLICY "Allow updates to product-images" ON storage.objects
+  FOR UPDATE TO authenticated USING (bucket_id = 'product-images');
+
+CREATE POLICY "Allow deletions of product-images" ON storage.objects
+  FOR DELETE TO authenticated USING (bucket_id = 'product-images');
+
+-- Only admins can modify or delete vendor documents
+CREATE POLICY "Allow admin to manage vendor-documents" ON storage.objects
+  FOR ALL TO authenticated USING (
+    bucket_id = 'vendor-documents'
+    AND (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid()) = 'admin'
+  );
 
 -- Add settings fields to profiles table
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS custom_domain TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS white_label BOOLEAN DEFAULT false;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS webhook_url TEXT;
+
+-- 6. Seed Admin User
+-- Email: hello@anovra.africa | Password: @Skin_ana1
+INSERT INTO auth.users (
+  instance_id,
+  id,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  recovery_sent_at,
+  last_sign_in_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at,
+  confirmation_token,
+  email_change,
+  email_change_token_new,
+  recovery_token
+)
+VALUES (
+  '00000000-0000-0000-0000-000000000000',
+  'a0e0a0e0-a0e0-a0e0-a0e0-a0e0a0e0a0e0',
+  'authenticated',
+  'hello@anovra.africa',
+  crypt('@Skin_ana1', gen_salt('bf')),
+  NOW(),
+  NULL,
+  NOW(),
+  '{"provider": "email", "providers": ["email"]}',
+  '{"full_name": "Anovra Admin", "role": "admin"}',
+  NOW(),
+  NOW(),
+  '',
+  '',
+  '',
+  ''
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Ensure admin profile is marked verified and set to premium plan
+UPDATE public.profiles
+SET plan = 'premium', is_verified = true
+WHERE id = 'a0e0a0e0-a0e0-a0e0-a0e0-a0e0a0e0a0e0';

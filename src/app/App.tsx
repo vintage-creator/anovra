@@ -110,15 +110,15 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => setView("userdashboard")}
-                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700"
+                  onClick={() => setView("signin")}
+                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700 focus:bg-emerald-500/10 focus:text-emerald-700 data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-700 outline-none"
                 >
                   <User className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="text-sm font-medium">Sign in as a User</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setView("signin")}
-                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700"
+                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700 focus:bg-emerald-500/10 focus:text-emerald-700 data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-700 outline-none"
                 >
                   <Store className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="text-sm font-medium">Sign in as a Vendor</span>
@@ -213,7 +213,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                     Account Sign In
                   </p>
                   <button
-                    onClick={() => handleNavClick("userdashboard")}
+                    onClick={() => handleNavClick("signin")}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary text-left"
                   >
                     <User className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -257,7 +257,32 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
 
 export default function App() {
   const getViewFromHash = (): View => {
+    // Client-side fallback redirect for direct non-hash URLs (handles server redirects/fallbacks)
+    const path = window.location.pathname;
+    if (path.startsWith("/shop/")) {
+      const slug = path.replace("/shop/", "").split("/")[0];
+      sessionStorage.setItem("active_shop_slug", slug);
+      window.location.href = window.location.origin + `/#/shop/${slug}`;
+      return "shop";
+    }
+    if (path.startsWith("/scan/")) {
+      const slug = path.replace("/scan/", "").split("/")[0];
+      sessionStorage.setItem("active_scan_slug", slug);
+      window.location.href = window.location.origin + `/#/scan/${slug}`;
+      return "skintest";
+    }
+
     const hash = window.location.hash.replace("#", "").replace(/^\//, "");
+    if (hash.startsWith("shop/")) {
+      const slug = hash.replace("shop/", "").split("?")[0];
+      sessionStorage.setItem("active_shop_slug", slug);
+      return "shop";
+    }
+    if (hash.startsWith("scan/")) {
+      const slug = hash.replace("scan/", "").split("?")[0];
+      sessionStorage.setItem("active_scan_slug", slug);
+      return "skintest";
+    }
     const validViews: View[] = [
       "landing", "dashboard", "catalog", "skintest", "admin",
       "adminlogin", "shop", "signin", "signup", "customersignup", "forgotpassword",
@@ -275,6 +300,12 @@ export default function App() {
       if (window.location.hash) {
         window.history.pushState(null, "", window.location.pathname);
       }
+    } else if (v === "shop") {
+      const slug = sessionStorage.getItem("active_shop_slug") || "vintage";
+      window.location.hash = `#/shop/${slug}`;
+    } else if (v === "skintest") {
+      const slug = sessionStorage.getItem("active_scan_slug") || "vintage";
+      window.location.hash = `#/scan/${slug}`;
     } else {
       window.location.hash = `#/${v}`;
     }

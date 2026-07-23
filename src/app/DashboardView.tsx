@@ -13,6 +13,7 @@ import type { View } from "./types";
 import { cn } from "./types";
 import { CatalogView } from "./CatalogView";
 import { supabase } from "./utils/supabase";
+import { toast } from "sonner";
 
 // ---- DASHBOARD TAB TYPES ----
 
@@ -24,7 +25,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [analyticsRange, setAnalyticsRange] = useState<"7d" | "30d" | "90d">("7d");
   const [copied, setCopied] = useState<string | null>(null);
   const [whiteLabelEnabled, setWhiteLabelEnabled] = useState(false);
-  const [brandName, setBrandName] = useState("My Brand");
+  const [brandName, setBrandName] = useState("Vintage");
   const [customDomain, setCustomDomain] = useState("");
   const [domainSaved, setDomainSaved] = useState(false);
 
@@ -32,8 +33,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [isVerified, setIsVerified] = useState(false);
   const [vendorPlan, setVendorPlan] = useState<"free" | "basic" | "premium">("free");
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [upgradeTargetFeature, setUpgradeTargetFeature] = useState<string | null>(null);
+  const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<"basic" | "premium" | "brand" | null>(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showApiDocs, setShowApiDocs] = useState(false);
+  const [showRoleSimModal, setShowRoleSimModal] = useState(false);
+  const [simulatedRoleInfo, setSimulatedRoleInfo] = useState<"Vendor" | "Manager" | "Viewer">("Vendor");
   const [embedPlatform, setEmbedPlatform] = useState<"html" | "shopify" | "wordpress">("html");
+  const [teamRole, setTeamRole] = useState<"Vendor" | "Manager" | "Viewer">("Vendor");
 
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [showInvite, setShowInvite] = useState(false);
@@ -45,14 +52,23 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [totalScans, setTotalScans] = useState(0);
   const [totalPurchases, setTotalPurchases] = useState(0);
   const [webhookSaved, setWebhookSaved] = useState(false);
+  const [tagline, setTagline] = useState("Science-backed skincare for African skin");
+  const [location, setLocation] = useState("Lagos, Nigeria");
+  const [since, setSince] = useState("2023");
+  const [isSavingStore, setIsSavingStore] = useState(false);
+  const [storeSaved, setStoreSaved] = useState(false);
 
   const shopSlug = brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "my-brand";
-  const shopLink = `https://anovra.africa/shop/${shopSlug}`;
-  const testLink = `https://anovra.africa/scan/${shopSlug}`;
-  const apiKey = "sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c";
+  const shopLink = `https://anovra.africa/#/shop/${shopSlug}`;
+  const testLink = `https://anovra.africa/#/scan/${shopSlug}`;
+  const [apiKey, setApiKey] = useState("sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c");
 
   const [liveScans, setLiveScans] = useState<any[]>([]);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [trialExpired, setTrialExpired] = useState(false);
+  const [allProducts, setAllProducts] = useState<any[]>([]);
+  const [allScans, setAllScans] = useState<any[]>([]);
+  const [allCartItems, setAllCartItems] = useState<any[]>([]);
 
   const [statsList, setStatsList] = useState<any[]>([
     { label: "Tests this month", value: "0", delta: "No scan data", icon: <Scan className="w-4 h-4" /> },
@@ -86,16 +102,49 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           setView("signin");
           return;
         }
-        if (user.user_metadata?.business_name) {
-          setBrandName(user.user_metadata.business_name);
+        setApiKey(`sk_live_${user.id.replace(/-/g, "").substring(0, 16)}`);
+        const normalizeName = (value?: string | null) => (value || "").trim().toLowerCase();
+        const personalName = normalizeName(user.user_metadata?.full_name || user.user_metadata?.name);
+        const isPlaceholderBusinessName = (value?: string | null) => {
+          const normalized = normalizeName(value);
+          return !normalized || normalized === "my brand" || normalized === "my skincare brand" || (personalName && normalized === personalName);
+        };
+        if (user.user_metadata) {
+          const rawBiz = user.user_metadata.business_name;
+          const initialBrandName = isPlaceholderBusinessName(rawBiz) ? "Vintage" : rawBiz;
+          setBrandName(initialBrandName);
+          if (user.user_metadata.tagline) setTagline(user.user_metadata.tagline);
+          if (user.user_metadata.location) setLocation(user.user_metadata.location);
+          if (user.user_metadata.since) setSince(user.user_metadata.since);
         }
 
-        // 1. Fetch vendor profile
-        let { data: profile } = await supabase
-          .from("profiles")
-          .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url")
-          .eq("id", user.id)
-          .maybeSingle();
+        // 1. Fetch vendor profile (fail-safe fallback query if live schema isn't migrated yet)
+        let profile: any = null;
+        let fetchErr: any = null;
+        try {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url")
+            .eq("id", user.id)
+            .maybeSingle();
+          if (error) {
+            fetchErr = error;
+          } else {
+            profile = data;
+          }
+        } catch (e) {
+          fetchErr = e;
+        }
+
+        if (fetchErr || !profile) {
+          // Fallback to base columns if query failed due to missing settings columns
+          const { data: baseData } = await supabase
+            .from("profiles")
+            .select("name, plan, is_verified, business_name")
+            .eq("id", user.id)
+            .maybeSingle();
+          profile = baseData;
+        }
 
         if (!profile) {
           // Fallback: If backend triggers haven't executed yet, insert profile directly since client is now authenticated
@@ -108,21 +157,39 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             plan: "free",
             is_verified: false,
           };
-          const { data: inserted, error: insertErr } = await supabase
-            .from("profiles")
-            .insert([fallbackProfile])
-            .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url")
-            .maybeSingle();
-            
-          if (!insertErr && inserted) {
-            profile = inserted;
+          
+          let insertedData: any = null;
+          try {
+            const { data } = await supabase
+              .from("profiles")
+              .insert([fallbackProfile])
+              .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url")
+              .maybeSingle();
+            insertedData = data;
+          } catch (e) {
+            // Fallback select if settings columns do not exist
+            const { data } = await supabase
+              .from("profiles")
+              .insert([fallbackProfile])
+              .select("name, plan, is_verified, business_name")
+              .maybeSingle();
+            insertedData = data;
+          }
+          if (insertedData) {
+            profile = insertedData;
           }
         }
 
         if (profile) {
           setIsVerified(profile.is_verified);
           setVendorPlan(profile.plan as any);
-          if (profile.business_name) {
+          if (isPlaceholderBusinessName(profile.business_name)) {
+            setBrandName("Vintage");
+            // Sync Vintage to profiles table
+            supabase.from("profiles").update({ business_name: "Vintage" }).eq("id", user.id).then(() => {});
+            // Sync Vintage to auth user metadata
+            supabase.auth.updateUser({ data: { business_name: "Vintage" } }).then(() => {});
+          } else {
             setBrandName(profile.business_name);
           }
           if (profile.custom_domain) {
@@ -137,12 +204,20 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             setWebhookSaved(true);
           }
 
-          // Populate team members list with the actual logged-in owner
+          // Enforce 14-day trial check
+          const createdDate = user.created_at ? new Date(user.created_at) : new Date();
+          const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
+          const planVal = profile.plan || "free";
+          if (planVal === "free" && daysDiff > 14) {
+            setTrialExpired(true);
+          }
+
+          // Populate team members list with the actual logged-in vendor admin
           setTeamMembers([
             {
-              name: profile.name || user.user_metadata?.full_name || "Owner",
+              name: profile.name || user.user_metadata?.full_name || "Vendor",
               email: user.email || "",
-              role: "Owner",
+              role: "Vendor",
               status: "active",
               joined: "Joined"
             }
@@ -182,119 +257,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
         const numCart = matchedCartItems.length;
 
-        // Calculate top concern
-        const concernCounts = (scans || []).reduce((acc: Record<string, number>, s: any) => {
-          acc[s.concern] = (acc[s.concern] || 0) + 1;
-          return acc;
-        }, {});
-
-        let maxConcern = "None";
-        let maxCount = 0;
-        Object.entries(concernCounts).forEach(([name, count]) => {
-          if (count > maxCount) {
-            maxCount = count;
-            maxConcern = name;
-          }
-        });
-        const maxConcernPct = numScans > 0 ? ((maxCount / numScans) * 100).toFixed(1) : "0";
-
-        // Bind stats card data
-        setStatsList([
-          { label: "Tests this month", value: numScans.toLocaleString(), delta: `+${numScans > 0 ? "100" : "0"}% increase`, icon: <Scan className="w-4 h-4" /> },
-          { label: "Products in catalog", value: numProducts.toString(), delta: `${flaggedProds} flagged for review`, icon: <Package className="w-4 h-4" />, warn: flaggedProds > 0 },
-          { label: "Product link clicks", value: (numScans * 1.5).toFixed(0), delta: "+31% vs last month", icon: <TrendingUp className="w-4 h-4" /> },
-          { label: "Top concern detected", value: maxConcern, delta: `${maxConcernPct}% of all scans`, icon: <Activity className="w-4 h-4" /> },
-        ]);
-
-        // Bind recent tests list
-        if (scans && scans.length > 0) {
-          const formatted = scans.slice(0, 5).map((s) => {
-            const date = new Date(s.created_at);
-            const timeAgo = Math.max(1, Math.round((Date.now() - date.getTime()) / 60000));
-            const timeLabel = timeAgo < 60 ? `${timeAgo} min ago` : `${Math.round(timeAgo/60)} hr${Math.round(timeAgo/60) > 1 ? 's' : ''} ago`;
-            return {
-              id: s.id.substring(0, 8).toUpperCase(),
-              time: timeLabel,
-              concern: s.concern,
-              result: s.result,
-              city: s.city || "Unknown",
-            };
-          });
-          setLiveScans(formatted);
-        }
-
-        // Bind live concerns distribution
-        const colors = ["#C86B3A", "#D4854A", "#B85A2E", "#E09060", "#A04820", "#C07848"];
-        const formattedConcerns = Object.entries(concernCounts).map(([name, val], index) => ({
-          name: name.substring(0, 12),
-          value: val,
-          fill: colors[index % colors.length]
-        }));
-        setLiveConcerns(formattedConcerns);
-
-        // Bind weekly analytics
-        const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-        const weeklyDistribution = days.map((day, index) => {
-          const scansOnDay = (scans || []).filter(s => {
-            const d = new Date(s.created_at).getDay();
-            const jsDayIndex = d === 0 ? 6 : d - 1;
-            return jsDayIndex === index;
-          }).length;
-
-          const cartOnDay = matchedCartItems.filter(c => {
-            const d = new Date(c.created_at).getDay();
-            const jsDayIndex = d === 0 ? 6 : d - 1;
-            return jsDayIndex === index;
-          }).length;
-
-          return {
-            day,
-            visits: Math.round(scansOnDay * 1.3),
-            analyses: scansOnDay,
-            purchases: cartOnDay
-          };
-        });
-        setLiveAnalytics(weeklyDistribution);
-
-        // Bind funnel metrics
-        const totalVisitsVal = Math.round(numScans * 1.3);
-        const clickShop = totalVisitsVal;
-        const startScan = numScans;
-        const completeRecs = Math.round(numScans * 0.9);
-        const clickProd = Math.round(numScans * 0.5);
-        const makePurchase = numCart;
-
-        setTotalVisits(clickShop);
-        setTotalScans(startScan);
-        setTotalPurchases(makePurchase);
-
-        setFunnelSteps([
-          { label: "Clicked shop link", count: clickShop, pct: 100, color: "bg-[#C86B3A]" },
-          { label: "Started skin analysis", count: startScan, pct: clickShop > 0 ? Math.round((startScan / clickShop) * 100) : 0, color: "bg-blue-400" },
-          { label: "Completed recommendations", count: completeRecs, pct: clickShop > 0 ? Math.round((completeRecs / clickShop) * 100) : 0, color: "bg-indigo-400" },
-          { label: "Clicked a product", count: clickProd, pct: clickShop > 0 ? Math.round((clickProd / clickShop) * 100) : 0, color: "bg-amber-400" },
-          { label: "Made a purchase", count: makePurchase, pct: clickShop > 0 ? Math.round((makePurchase / clickShop) * 100) : 0, color: "bg-[#008236]" },
-        ]);
-
-        // Bind Purchases by product list
-        const purchasesByProduct: Record<string, { count: number; revenue: number }> = {};
-        matchedCartItems.forEach((c: any) => {
-          const pName = c.products?.name || "Unknown Product";
-          const pPrice = c.products?.price || 0;
-          if (!purchasesByProduct[pName]) {
-            purchasesByProduct[pName] = { count: 0, revenue: 0 };
-          }
-          purchasesByProduct[pName].count += c.quantity;
-          purchasesByProduct[pName].revenue += c.quantity * pPrice;
-        });
-
-        const formattedPurchases = Object.entries(purchasesByProduct).map(([name, data]) => ({
-          name,
-          purchases: data.count,
-          revenue: `₦${data.revenue.toLocaleString()}`,
-          convRate: "35%"
-        }));
-        setLiveProductPurchases(formattedPurchases);
+        // Store all database records in raw state variables for dynamic filtering
+        setAllProducts(products || []);
+        setAllScans(scans || []);
+        setAllCartItems(matchedCartItems || []);
 
       } catch (err) {
         console.error("Dashboard failed to retrieve live data:", err);
@@ -318,6 +284,138 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     };
   }, []);
 
+  useEffect(() => {
+
+    const rangeDays = analyticsRange === "7d" ? 7 : (analyticsRange === "30d" ? 30 : 90);
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - rangeDays);
+
+    const filteredScans = allScans.filter(s => new Date(s.created_at) >= cutoffDate);
+    const filteredCartItems = allCartItems.filter(c => new Date(c.created_at) >= cutoffDate);
+
+    const numScans = filteredScans.length;
+    const numCart = filteredCartItems.length;
+
+    // 1. Calculate Stats
+    const flaggedProds = allProducts.filter(p => p.nafdac_status === "flagged").length;
+    
+    // Find top concern
+    const concernCounts: Record<string, number> = {};
+    filteredScans.forEach((s) => {
+      if (s.concern) {
+        concernCounts[s.concern] = (concernCounts[s.concern] || 0) + 1;
+      }
+    });
+    let topConcern = "None";
+    let maxCount = 0;
+    Object.entries(concernCounts).forEach(([c, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        topConcern = c;
+      }
+    });
+
+    const maxConcernPct = numScans > 0 ? ((maxCount / numScans) * 100).toFixed(1) : "0";
+
+    setStatsList([
+      { label: `Tests (${analyticsRange})`, value: String(numScans), delta: `${analyticsRange} scan data`, icon: <Scan className="w-4 h-4" /> },
+      { label: "Products in catalog", value: String(allProducts.length), delta: `${flaggedProds} flagged`, icon: <Package className="w-4 h-4" /> },
+      { label: `Sales conversions (${analyticsRange})`, value: String(numCart), delta: `${numCart} checkouts`, icon: <TrendingUp className="w-4 h-4" /> },
+      { label: "Top concern detected", value: topConcern, delta: topConcern !== "None" ? `${maxConcernPct}% of all scans` : "No scans", icon: <Activity className="w-4 h-4" /> },
+    ]);
+
+    // Bind recent tests list
+    if (filteredScans.length > 0) {
+      const formatted = filteredScans.slice(0, 5).map((s) => {
+        const date = new Date(s.created_at);
+        const timeAgo = Math.max(1, Math.round((Date.now() - date.getTime()) / 60000));
+        const timeLabel = timeAgo < 60 ? `${timeAgo} min ago` : `${Math.round(timeAgo/60)} hr${Math.round(timeAgo/60) > 1 ? 's' : ''} ago`;
+        return {
+          id: s.id.substring(0, 8).toUpperCase(),
+          time: timeLabel,
+          concern: s.concern,
+          result: s.result,
+          city: s.city || "Unknown",
+        };
+      });
+      setLiveScans(formatted);
+    }
+
+    // 2. Weekly Analytics
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const weeklyDistribution = days.map((day, index) => {
+      const scansOnDay = filteredScans.filter(s => {
+        const d = new Date(s.created_at).getDay();
+        const jsDayIndex = d === 0 ? 6 : d - 1;
+        return jsDayIndex === index;
+      }).length;
+
+      const cartOnDay = filteredCartItems.filter(c => {
+        const d = new Date(c.created_at).getDay();
+        const jsDayIndex = d === 0 ? 6 : d - 1;
+        return jsDayIndex === index;
+      }).length;
+
+      return {
+        day,
+        visits: Math.round(scansOnDay * 1.3),
+        analyses: scansOnDay,
+        purchases: cartOnDay
+      };
+    });
+    setLiveAnalytics(weeklyDistribution);
+
+    // 3. Funnel Steps
+    const totalVisitsVal = Math.round(numScans * 1.3);
+    const clickShop = totalVisitsVal;
+    const startScan = numScans;
+    const completeRecs = Math.round(numScans * 0.9);
+    const clickProd = Math.round(numScans * 0.5);
+    const makePurchase = numCart;
+
+    setTotalVisits(clickShop);
+    setTotalScans(startScan);
+    setTotalPurchases(makePurchase);
+
+    setFunnelSteps([
+      { label: "Clicked shop link", count: clickShop, pct: 100, color: "bg-[#C86B3A]" },
+      { label: "Started skin analysis", count: startScan, pct: clickShop > 0 ? Math.round((startScan / clickShop) * 100) : 0, color: "bg-blue-400" },
+      { label: "Completed recommendations", count: completeRecs, pct: clickShop > 0 ? Math.round((completeRecs / clickShop) * 100) : 0, color: "bg-indigo-400" },
+      { label: "Clicked a product", count: clickProd, pct: clickShop > 0 ? Math.round((clickProd / clickShop) * 100) : 0, color: "bg-amber-400" },
+      { label: "Made a purchase", count: makePurchase, pct: clickShop > 0 ? Math.round((makePurchase / clickShop) * 100) : 0, color: "bg-[#008236]" },
+    ]);
+
+    // 4. Product Purchases
+    const purchasesByProduct: Record<string, { count: number; revenue: number }> = {};
+    filteredCartItems.forEach((c: any) => {
+      const pName = c.products?.name || "Unknown Product";
+      const pPrice = c.products?.price || 0;
+      if (!purchasesByProduct[pName]) {
+        purchasesByProduct[pName] = { count: 0, revenue: 0 };
+      }
+      purchasesByProduct[pName].count += c.quantity;
+      purchasesByProduct[pName].revenue += c.quantity * pPrice;
+    });
+
+    const formattedPurchases = Object.entries(purchasesByProduct).map(([name, data]) => ({
+      name,
+      purchases: data.count,
+      revenue: `₦${data.revenue.toLocaleString()}`,
+      convRate: "35%"
+    }));
+    setLiveProductPurchases(formattedPurchases);
+
+    // 5. Concerns distributions
+    const colors = ["#C86B3A", "#D4854A", "#B85A2E", "#E09060", "#A04820", "#C07848"];
+    const formattedConcerns = Object.entries(concernCounts).map(([name, val], index) => ({
+      name: name.substring(0, 12),
+      value: val,
+      fill: colors[index % colors.length]
+    }));
+    setLiveConcerns(formattedConcerns);
+
+  }, [analyticsRange, allProducts, allScans, allCartItems]);
+
   function copy(text: string, key: string) {
     navigator.clipboard.writeText(text);
     setCopied(key);
@@ -325,6 +423,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   }
 
   const saveSettings = async (updates: { custom_domain?: string; white_label?: boolean; webhook_url?: string; business_name?: string }) => {
+    if (teamRole !== "Vendor") {
+      const msg = teamRole === "Viewer" 
+        ? "Viewer role is read-only. You cannot save settings."
+        : "Only the Brand Owner can save brand profile configurations.";
+      toast.error(msg);
+      return;
+    }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -345,6 +450,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   };
 
   const payWithPaystack = async (planKey: "basic" | "premium") => {
+    if (teamRole !== "Vendor") {
+      toast.error("Only the Brand Owner can manage plan subscriptions and billing.");
+      return;
+    }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -354,7 +463,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
       const email = user.email;
       const prices = {
-        basic: 10000,
+        basic: 12500,
         premium: 25000,
       };
       const amount = prices[planKey] * 100; // in kobo
@@ -369,22 +478,22 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         email: email,
         amount: amount,
         currency: "NGN",
-        callback: async function(response: any) {
+        callback: function(response: any) {
           const tid = toast.loading("Verifying payment transaction...");
           
-          // Log payment and update vendor plan in backend profiles table
-          const { error } = await supabase
+          supabase
             .from("profiles")
             .update({ plan: planKey })
-            .eq("id", user.id);
-
-          toast.dismiss(tid);
-          if (error) {
-            toast.error("Payment successful, but failed to update subscription. Please contact support.");
-          } else {
-            setVendorPlan(planKey);
-            toast.success(`Subscription successfully updated to ${planKey.toUpperCase()} plan!`);
-          }
+            .eq("id", user.id)
+            .then(({ error }) => {
+              toast.dismiss(tid);
+              if (error) {
+                toast.error("Payment successful, but failed to update subscription. Please contact support.");
+              } else {
+                setVendorPlan(planKey);
+                toast.success(`Subscription successfully updated to ${planKey.toUpperCase()} plan!`);
+              }
+            });
         },
         onClose: function() {
           toast.error("Transaction cancelled.");
@@ -399,10 +508,31 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   };
 
   const handleGenerateShop = () => {
-    if (vendorPlan !== "premium") {
-      setShowPremiumModal(true);
-    } else {
-      setView("shop");
+    toast.success("Opening Storefront Preview (Free Trial mode) — upgrade to Pro/Brand to enable custom domain mapping and premium widgets!");
+    sessionStorage.setItem("active_shop_slug", shopSlug);
+    sessionStorage.setItem("active_scan_slug", shopSlug);
+    sessionStorage.setItem("shop_preview_mode", "true");
+    sessionStorage.setItem("active_shop_snapshot", JSON.stringify({
+      name: brandName,
+      tagline,
+      location,
+      since,
+      is_verified: isVerified,
+      plan: vendorPlan,
+    }));
+    setView("shop");
+  };
+
+  const saveStoreSettings = async (updates: any) => {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: updates
+      });
+      if (error) throw error;
+      toast.success("Storefront settings updated successfully!");
+    } catch (err: any) {
+      console.error("Failed to update store settings:", err);
+      toast.error("Failed to save storefront settings.");
     }
   };
 
@@ -473,7 +603,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             {/* Plan badge */}
             <div className="flex flex-wrap gap-1.5 mt-2">
               <span className="text-[9px] uppercase font-mono font-bold bg-[#008236]/10 text-[#008236] px-2 py-0.5 border border-[#008236]/20 rounded-full">
-                {vendorPlan} PLAN
+                {vendorPlan === "free" ? "FREE TRIAL" : `${vendorPlan.toUpperCase()} PLAN`}
               </span>
               <span className={cn(
                 "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-0.5",
@@ -483,6 +613,45 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               )}>
                 {isVerified ? "Verified" : "Pending"}
               </span>
+            </div>
+
+            {/* Segmented Switch Toggle for Role Simulation */}
+            <div className="mt-3.5 bg-[#FAF7F2] dark:bg-zinc-900 border border-border/80 rounded-xl p-2 shadow-2xs">
+              <div className="flex items-center justify-between mb-1.5 px-1">
+                <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Simulate Role View</span>
+                <button 
+                  onClick={() => {
+                    setSimulatedRoleInfo(teamRole);
+                    setShowRoleSimModal(true);
+                  }}
+                  className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors p-0.5 bg-transparent border-0 outline-none focus:outline-none flex items-center justify-center"
+                  title="View permissions breakdown matrix"
+                >
+                  <BookOpen className="w-3 h-3 text-[#008236]" />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-0.5 bg-secondary p-0.5 rounded-lg text-[9px] font-bold text-center border border-border/40">
+                {[
+                  { id: "Vendor" as const, label: "Vendor" },
+                  { id: "Manager" as const, label: "Manager" },
+                  { id: "Viewer" as const, label: "Viewer" }
+                ].map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      setSimulatedRoleInfo(r.id);
+                      setShowRoleSimModal(true);
+                    }}
+                    className={cn(
+                      "py-1 rounded text-[10px] font-semibold transition-all cursor-pointer border-0 bg-transparent outline-none focus:outline-none",
+                      teamRole === r.id ? "bg-white dark:bg-zinc-800 shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                    )}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="mt-3.5 bg-card border border-border/80 rounded-lg p-2 flex items-center justify-between gap-1.5 shadow-2xs">
@@ -558,7 +727,55 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
       {/* Right Viewport Content */}
       <div className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 bg-background relative">
-        {/* Dynamic Header */}
+        {trialExpired ? (
+          <div className="max-w-2xl mx-auto py-16 text-center">
+            <div className="bg-amber-50 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/30 rounded-3xl p-8 sm:p-12 shadow-md">
+              <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center mx-auto mb-6">
+                <Lock className="w-8 h-8 text-amber-700 dark:text-amber-400" />
+              </div>
+              <h2 className="text-3xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
+                Your 14-Day Free Trial Has Expired
+              </h2>
+              <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Your free trial of Anovra Skincare Partner has ended. To continue managing your safety-screened catalog, team accounts, custom domains, and viewing live customer scans, please select a plan below.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto text-left">
+                {[
+                  {
+                    key: "basic" as const,
+                    name: "Basic Plan",
+                    price: "₦12,500/mo",
+                    desc: "Up to 50 skin tests/month, 10 products in catalog, Anovra branding, shareable link, basic analytics."
+                  },
+                  {
+                    key: "premium" as const,
+                    name: "Vendor Pro",
+                    price: "₦25,000/mo",
+                    desc: "Unlimited tests, unlimited catalog, white-labeled results page, website embed widget, full analytics, priority support."
+                  }
+                ].map((p) => (
+                  <div key={p.key} className="border border-border rounded-2xl p-5 bg-card flex flex-col justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</p>
+                      <p className="text-xl font-bold text-foreground mt-1.5 font-mono">{p.price}</p>
+                      <p className="text-xs text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
+                    </div>
+                    <button
+                      onClick={() => payWithPaystack(p.key)}
+                      className="w-full mt-6 py-2.5 bg-[#008236] hover:bg-[#006c2c] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer text-center"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      Subscribe & Activate
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Dynamic Header */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
           <div>
             <h2 className="text-3xl font-light text-foreground uppercase tracking-wide" style={{ fontFamily: "'Fraunces', serif" }}>
@@ -585,12 +802,37 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         </div>
 
         {tab === "catalog" && (
-          <CatalogView />
+          <CatalogView role={teamRole} />
         )}
 
       {/* ── OVERVIEW ── */}
       {tab === "overview" && (
         <div className="space-y-6">
+          {/* Setup Profile Warning Banner */}
+          {(!tagline || tagline === "Science-backed skincare for African skin" || !location || location === "Lagos, Nigeria") && (
+            <div className="bg-[#008236]/10 border border-[#008236]/15 p-4 rounded-2xl flex items-center justify-between gap-4 flex-wrap animate-fade-in">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#008236]/15 flex items-center justify-center shrink-0">
+                  <Settings className="w-4 h-4 text-[#008236]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Complete your Store Profile Settings
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Add your custom brand tagline, store location, and year founded to complete your live storefront preview.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setTab("settings")}
+                className="text-xs font-bold text-white bg-[#008236] hover:bg-[#006c2c] px-4 py-2.5 rounded-lg transition-colors cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                Configure profile settings →
+              </button>
+            </div>
+          )}
           {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {statsList.map((s, i) => {
@@ -720,7 +962,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
           {/* Embed widget / Code Snippet Section */}
           <div className="bg-card border border-border rounded-2xl p-6 shadow-xs relative overflow-hidden">
-            {vendorPlan === "premium" ? (
+            {(vendorPlan === "premium" || vendorPlan === "brand") ? (
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold text-foreground text-sm uppercase tracking-wider animate-fade-in" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Website Embed Widget</h3>
@@ -894,11 +1136,15 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
                   <div>
                     <button
-                      onClick={() => payWithPaystack("premium")}
+                      onClick={() => {
+                        setUpgradeTargetFeature("Website Embed Widget");
+                        setUpgradeTargetPlan("premium");
+                        setShowPremiumModal(true);
+                      }}
                       className="w-full sm:w-auto text-xs bg-[#008236] text-white font-bold px-5 py-2.5 rounded-xl hover:bg-[#006c2c] transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
-                      <span>Upgrade to Premium Plan</span>
+                      <span>Upgrade Plan Options</span>
                       <ArrowRight className="w-3.5 h-3.5 text-white" />
                     </button>
                   </div>
@@ -909,38 +1155,167 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         </div>
       )}
 
-      {/* Premium Feature Gate Modal for Generate My Shop */}
+      {/* Premium Plan Selector Modal */}
       {showPremiumModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card rounded-2xl max-w-md w-full p-6 sm:p-8 text-center border border-border shadow-2xl relative">
-            <div className="w-14 h-14 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
-              <Lock className="w-7 h-7 text-emerald-600" />
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card rounded-3xl max-w-4xl w-full p-6 sm:p-8 border border-border shadow-2xl relative">
+            <button 
+              onClick={() => setShowPremiumModal(false)}
+              className="absolute top-5 right-5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors p-1.5 hover:bg-secondary rounded-full"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="text-center mb-8 max-w-xl mx-auto">
+              <span className="text-[10px] bg-[#008236]/10 text-[#008236] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">Subscription Plans</span>
+              <h3 className="text-3xl font-light text-foreground mt-2" style={{ fontFamily: "'Fraunces', serif" }}>
+                Select Your Subscription Plan
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Choose the best path to scale your business. Unlock white-labeled results, custom domains, widgets, and dedicated support.
+              </p>
             </div>
-            <h3 className="text-2xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Premium Feature
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              <strong>Generate My Shop</strong> is an exclusive feature for <strong>Premium Vendors</strong>. Upgrade your plan to generate and share custom branded shop links with your customers.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowPremiumModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-border text-foreground text-sm font-medium hover:bg-secondary transition-colors"
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setVendorPlan("premium");
-                  setShowPremiumModal(false);
-                  setView("shop");
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              >
-                Upgrade to Premium
-              </button>
+
+            {/* Target Feature Unlock Notification Banner */}
+            {upgradeTargetFeature && (
+              <div className="mb-6 p-4 bg-[#008236]/10 border border-[#008236]/25 rounded-2xl text-left text-xs leading-relaxed text-[#008236] flex items-start gap-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <Lock className="w-4 h-4 text-[#008236] mt-0.5 flex-shrink-0 animate-pulse" />
+                <div>
+                  <p className="font-bold text-foreground">You are unlocking: {upgradeTargetFeature}</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    This feature is exclusive to {upgradeTargetPlan === "basic" ? "Basic, Vendor Pro, or Brand" : upgradeTargetPlan === "premium" ? "Vendor Pro or Brand" : "the Brand Plan"}. We have highlighted the eligible plans below.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Plans Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+              {/* Basic */}
+              <div className={cn(
+                "border p-5 flex flex-col justify-between space-y-4 relative transition-all rounded-2xl",
+                (upgradeTargetPlan === "premium" || upgradeTargetPlan === "brand")
+                  ? "opacity-40 border-dashed border-border bg-muted/5 cursor-not-allowed"
+                  : "bg-muted/10 border-border/80 hover:border-border/100"
+              )}>
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Basic</span>
+                    <span className="text-[9px] bg-secondary text-muted-foreground border border-border/80 px-2 py-0.5 rounded-md font-mono uppercase font-bold">Standard</span>
+                  </div>
+                  <div className="mt-2.5">
+                    <span className="text-2xl font-light font-mono text-foreground">₦12,500</span>
+                    <span className="text-xs text-muted-foreground font-mono">/mo</span>
+                  </div>
+                  <ul className="mt-4 space-y-2 text-[10.5px] text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Up to 50 skin tests/month</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> 10 products in catalog</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Shareable storefront link</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Basic analytics reports</li>
+                  </ul>
+                </div>
+                <button
+                  disabled={upgradeTargetPlan === "premium" || upgradeTargetPlan === "brand"}
+                  onClick={() => {
+                    setShowPremiumModal(false);
+                    payWithPaystack("basic");
+                  }}
+                  className={cn(
+                    "w-full py-2.5 rounded-xl border font-bold text-xs transition-colors cursor-pointer",
+                    (upgradeTargetPlan === "premium" || upgradeTargetPlan === "brand")
+                      ? "border-border/40 text-muted-foreground cursor-not-allowed bg-transparent"
+                      : "border-border text-foreground hover:bg-secondary"
+                  )}
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {(upgradeTargetPlan === "premium" || upgradeTargetPlan === "brand") ? "Lacks Access" : "Subscribe Basic"}
+                </button>
+              </div>
+
+              {/* Vendor Pro */}
+              <div className={cn(
+                "border p-5 flex flex-col justify-between space-y-4 relative transition-all rounded-2xl shadow-xs",
+                upgradeTargetPlan === "premium"
+                  ? "border-2 border-emerald-600 ring-2 ring-emerald-500/10 scale-102 bg-card"
+                  : upgradeTargetPlan === "brand"
+                    ? "opacity-40 border-dashed border-border bg-muted/5 cursor-not-allowed"
+                    : "border-[#008236] border-2 bg-card"
+              )}>
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[9px] bg-[#008236] text-white px-3 py-0.5 rounded-full font-bold uppercase tracking-wider">Most Popular</span>
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs font-bold text-[#008236]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Vendor Pro</span>
+                    <span className="text-[9px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 px-2 py-0.5 rounded-md font-mono uppercase font-bold">Best Value</span>
+                  </div>
+                  <div className="mt-2.5">
+                    <span className="text-2xl font-semibold font-mono text-foreground">₦25,000</span>
+                    <span className="text-xs text-muted-foreground font-mono">/mo</span>
+                  </div>
+                  <ul className="mt-4 space-y-2 text-[10.5px] text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Unlimited skin tests</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Unlimited catalog capacity</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> White-labeled results page</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Website embed widget</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Full analytics dashboard</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Priority WhatsApp support</li>
+                  </ul>
+                </div>
+                <button
+                  disabled={upgradeTargetPlan === "brand"}
+                  onClick={() => {
+                    setShowPremiumModal(false);
+                    payWithPaystack("premium");
+                  }}
+                  className={cn(
+                    "w-full py-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer",
+                    upgradeTargetPlan === "brand"
+                      ? "bg-zinc-200 dark:bg-zinc-800 text-muted-foreground cursor-not-allowed"
+                      : "bg-[#008236] text-white hover:bg-[#006c2c] shadow-xs"
+                  )}
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {upgradeTargetPlan === "brand" ? "Lacks Access" : "Subscribe Pro"}
+                </button>
+              </div>
+
+              {/* Brand */}
+              <div className={cn(
+                "border p-5 flex flex-col justify-between space-y-4 relative transition-all rounded-2xl",
+                upgradeTargetPlan === "brand"
+                  ? "border-2 border-amber-500 ring-2 ring-amber-500/10 scale-102 bg-card"
+                  : "bg-muted/10 border-border/80 hover:border-border/100"
+              )}>
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Brand</span>
+                    <span className="text-[9px] bg-secondary text-muted-foreground border border-border/80 px-2 py-0.5 rounded-md font-mono uppercase font-bold">Enterprise</span>
+                  </div>
+                  <div className="mt-2.5">
+                    <span className="text-2xl font-light font-mono text-foreground">₦75,000</span>
+                    <span className="text-xs text-muted-foreground font-mono">/mo</span>
+                  </div>
+                  <ul className="mt-4 space-y-2 text-[10.5px] text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Everything in Vendor Pro</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Full developer REST API</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Custom domain mapping</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Multi-user team accounts</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Contractual uptime SLA</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Dedicated onboarding guide</li>
+                  </ul>
+                </div>
+                <a
+                  href="mailto:sales@anovra.africa?subject=Anovra Brand Tier Inquiry"
+                  className={cn(
+                    "w-full text-center py-2.5 rounded-xl font-bold text-xs transition-colors decoration-none block",
+                    upgradeTargetPlan === "brand"
+                      ? "bg-amber-500 hover:bg-amber-600 text-white shadow-xs"
+                      : "bg-secondary hover:bg-muted text-foreground"
+                  )}
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Contact Sales
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -1146,9 +1521,12 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       {/* ── SETTINGS ── */}
       {tab === "settings" && (
         <div className="space-y-6 w-full">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Branding */}
-            <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            
+            {/* Left Column */}
+            <div className="space-y-6">
+              {/* Branding */}
+              <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
               <div>
                 <div className="px-5 py-4 border-b border-border">
                   <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Branding on results page</h3>
@@ -1185,9 +1563,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     </div>
                     <button
                       onClick={async () => {
-                        if (vendorPlan !== "premium") {
-                          toast.error("White-labeling is only available on the Vendor Premium plan.");
-                          document.getElementById("billing-section")?.scrollIntoView({ behavior: "smooth" });
+                        if (vendorPlan !== "premium" && vendorPlan !== "brand") {
+                          setUpgradeTargetFeature("White-labeled results page");
+                          setUpgradeTargetPlan("premium");
+                          setShowPremiumModal(true);
+                          toast.warning("White-labeling requires Vendor Pro or Brand tier. Upgrade to unlock!");
                           return;
                         }
                         const nextVal = !whiteLabelEnabled;
@@ -1221,8 +1601,90 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 </div>
               </div>
             </div>
+              {/* Storefront Customization */}
+              <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="px-5 py-4 border-b border-border">
+                    <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Storefront Customization</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Customize your storefront preview tagline, location, and metadata details.</p>
+                  </div>
+                  <div className="p-5 space-y-4">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Business / Brand Name</label>
+                      <input
+                        value={brandName}
+                        onChange={(e) => setBrandName(e.target.value)}
+                        placeholder="e.g. Vintage"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Store Tagline</label>
+                      <input
+                        value={tagline}
+                        onChange={(e) => setTagline(e.target.value)}
+                        placeholder="e.g. Science-backed skincare for African skin"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Store Location</label>
+                        <input
+                          value={location}
+                          onChange={(e) => setLocation(e.target.value)}
+                          placeholder="e.g. Lagos, Nigeria"
+                          className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Year Founded</label>
+                        <input
+                          type="number"
+                          value={since}
+                          onChange={(e) => setSince(e.target.value)}
+                          placeholder="e.g. 2023"
+                          className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Footer Save Button */}
+                <div className="px-5 py-3.5 bg-muted/30 border-t border-border flex justify-end">
+                  <button
+                    onClick={async () => {
+                      setIsSavingStore(true);
+                      // 1. Update public profiles table business_name
+                      await saveSettings({ business_name: brandName });
+                      // 2. Update auth user metadata business_name, tagline, location, since
+                      await saveStoreSettings({
+                        business_name: brandName,
+                        tagline,
+                        location,
+                        since
+                      });
+                      setIsSavingStore(false);
+                      setStoreSaved(true);
+                      setTimeout(() => setStoreSaved(false), 2000);
+                    }}
+                    className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    {isSavingStore ? "Saving..." : storeSaved ? "Changes Saved ✓" : "Save Changes"}
+                  </button>
+                </div>
+              </div>
 
-            {/* Custom domain */}
+            </div>
+
+            {/* Right Column */}
+            <div className="space-y-6">
+              {/* Custom domain */}
             <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
               <div>
                 <div className="px-5 py-4 border-b border-border">
@@ -1245,9 +1707,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       />
                       <button
                         onClick={async () => {
-                          if (vendorPlan === "free") {
-                            toast.error("Custom domains are only available on the Basic or Premium plans.");
-                            document.getElementById("billing-section")?.scrollIntoView({ behavior: "smooth" });
+                          if (vendorPlan !== "brand") {
+                            setUpgradeTargetFeature("Custom domain mapping");
+                            setUpgradeTargetPlan("brand");
+                            setShowPremiumModal(true);
+                            toast.warning("Custom domain setup is a Brand plan feature. Upgrade to unlock!");
                             return;
                           }
                           setDomainSaved(true);
@@ -1274,6 +1738,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               </div>
             </div>
           </div>
+        </div>
 
           {/* Shareable links */}
           <div className="bg-card border border-border rounded-xl p-5 shadow-xs">
@@ -1298,13 +1763,31 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { key: "free", name: "Free Tier", price: "₦0", desc: "Basic diagnostic matching. Showcases Anovra branding." },
-                { key: "basic", name: "Vendor Basic", price: "₦10,000/mo", desc: "Custom domain linking, dynamic analytics, and webhook listeners." },
-                { key: "premium", name: "Vendor Premium", price: "₦25,000/mo", desc: "100% white-labeled portal, priority WhatsApp support, and full team access." },
+                { 
+                  key: "basic", 
+                  name: "Basic Plan", 
+                  price: "₦12,500/mo", 
+                  desc: "Up to 50 skin tests/month, 10 products in catalog, Anovra branding, shareable link, basic analytics.",
+                  isContact: false
+                },
+                { 
+                  key: "premium", 
+                  name: "Vendor Pro", 
+                  price: "₦25,000/mo", 
+                  desc: "Unlimited tests, unlimited catalog, white-labeled results page, website embed widget, full analytics, priority support.",
+                  isContact: false
+                },
+                { 
+                  key: "brand", 
+                  name: "Brand Tier", 
+                  price: "₦75,000/mo", 
+                  desc: "Everything in Pro, plus REST API access, custom domain for test link, multi-user team accounts, SLA support, onboarding.",
+                  isContact: true
+                },
               ].map((p) => {
                 const isActive = vendorPlan === p.key;
                 return (
-                  <div key={p.key} className={cn("border rounded-xl p-4 flex flex-col justify-between space-y-3 bg-muted/5", isActive ? "border-[#008236] ring-1 ring-[#008236]/10" : "border-border")}>
+                  <div key={p.name} className={cn("border rounded-xl p-4 flex flex-col justify-between space-y-3 bg-muted/5", isActive ? "border-[#008236] ring-1 ring-[#008236]/10" : "border-border")}>
                     <div>
                       <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</p>
                       <p className="text-lg font-light text-foreground font-mono mt-1">{p.price}</p>
@@ -1314,17 +1797,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <span className="w-full text-center py-1.5 text-[10px] bg-green-50 text-green-700 font-bold rounded-lg border border-green-200">
                         Active Plan
                       </span>
-                    ) : p.key === "free" ? (
-                      <button
-                        onClick={async () => {
-                          setVendorPlan("free");
-                          await saveSettings({ plan: "free" } as any);
-                        }}
-                        className="w-full text-center py-1.5 text-[10px] bg-secondary text-foreground hover:bg-muted font-bold rounded-lg transition-colors cursor-pointer"
+                    ) : p.isContact ? (
+                      <a
+                        href="mailto:sales@anovra.africa?subject=Anovra Brand Tier Inquiry"
+                        className="w-full text-center py-1.5 text-[10px] bg-secondary text-foreground hover:bg-muted font-bold rounded-lg transition-colors block decoration-none"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
-                        Downgrade
-                      </button>
+                        Contact Sales
+                      </a>
                     ) : (
                       <button
                         onClick={() => payWithPaystack(p.key as any)}
@@ -1357,13 +1837,24 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Add up to 5 team members with different access levels.</p>
                   </div>
-                  <button
-                    onClick={() => setShowInvite((v) => !v)}
-                    className="flex items-center gap-1.5 text-xs px-3.5 py-2 bg-[#008236] text-white rounded-lg hover:bg-[#006c2c] transition-colors font-medium shadow-xs cursor-pointer"
-                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Invite member
-                  </button>
+                  {teamRole === "Vendor" ? (
+                    <button
+                      onClick={() => setShowInvite((v) => !v)}
+                      className="flex items-center gap-1.5 text-xs px-3.5 py-2 bg-[#008236] text-white rounded-lg hover:bg-[#006c2c] transition-colors font-medium shadow-xs cursor-pointer"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Invite member
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      className="flex items-center gap-1.5 text-xs px-3.5 py-2 bg-muted text-muted-foreground border border-border rounded-lg font-medium cursor-not-allowed"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      title="Only the Brand Owner can invite team members"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-muted-foreground" /> Invite member (Locked)
+                    </button>
+                  )}
                 </div>
 
                 {showInvite && (
@@ -1398,20 +1889,16 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                             { name: mName, email: inviteEmail, role: inviteRole, status: "invited", joined: "—" }
                           ]);
 
-                          // Dispatch invitation email via Supabase Edge Function
+                          // Dispatch invitation email securely via Supabase client invoke wrapper
                           try {
-                            fetch("https://ejpdrcbgqelxlopivwld.supabase.co/functions/v1/send-onboarding-email", {
-                              method: "POST",
-                              headers: {
-                                "Content-Type": "application/json",
-                              },
-                              body: JSON.stringify({
+                            await supabase.functions.invoke("send-onboarding-email", {
+                              body: {
                                 email: inviteEmail,
                                 name: mName,
                                 action: "invite",
                                 inviter: brandName,
                                 role: inviteRole
-                              })
+                              }
                             });
                           } catch (e) {
                             console.error("Failed to trigger edge function for invitation email:", e);
@@ -1445,9 +1932,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${m.role === "Owner" ? "bg-foreground text-primary-foreground" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.role}</span>
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${m.role === "Vendor" ? "bg-foreground text-primary-foreground" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.role}</span>
                           <span className={`text-xs px-2.5 py-0.5 rounded-full ${m.status === "active" ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400" : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.status}</span>
-                          {m.role !== "Owner" && (
+                          {m.role !== "Vendor" && teamRole === "Vendor" && (
                             <button
                               onClick={() => {
                                 setTeamMembers((prev) => prev.filter((member) => member.email !== m.email));
@@ -1503,14 +1990,18 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   ) : (
                     <div className="bg-muted/30 border border-dashed border-border rounded-lg p-4 text-center space-y-3">
                       <p className="text-xs text-muted-foreground leading-normal font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        REST API key access is a Premium feature. Please upgrade to the Premium plan to access endpoint authentication keys.
+                        REST API key access is a Brand feature. Please upgrade to see plans and access endpoint authentication keys.
                       </p>
                       <button
-                        onClick={() => payWithPaystack("premium")}
+                        onClick={() => {
+                          setUpgradeTargetFeature("Developer REST API Access");
+                          setUpgradeTargetPlan("brand");
+                          setShowPremiumModal(true);
+                        }}
                         className="mx-auto text-xs bg-[#008236] text-white font-bold px-4 py-2 rounded-lg hover:bg-[#006c2c] transition-colors cursor-pointer"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
-                        Upgrade to Premium
+                        Upgrade Plan Options
                       </button>
                     </div>
                   )}
@@ -1531,9 +2022,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       </div>
                     ))}
                   </div>
-                  <a className="inline-flex items-center gap-1.5 mt-2 text-xs text-emerald-600 hover:text-emerald-700 transition-colors font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <button
+                    onClick={() => setShowApiDocs(true)}
+                    className="inline-flex items-center gap-1.5 mt-2 text-xs text-emerald-600 hover:text-emerald-700 transition-colors font-medium cursor-pointer"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
                     <BookOpen className="w-3.5 h-3.5" /> Full API documentation →
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1546,7 +2041,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Get notified in real time when a customer completes a scan or makes a purchase.</p>
                 </div>
                 <div className="p-5 space-y-4">
-                  {vendorPlan === "basic" || vendorPlan === "premium" ? (
+                  {vendorPlan !== "free" ? (
                     <div>
                       <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide font-mono">Webhook endpoint URL</label>
                       <div className="flex flex-col sm:flex-row gap-2">
@@ -1572,14 +2067,18 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   ) : (
                     <div className="bg-muted/30 border border-dashed border-border rounded-lg p-4 text-center space-y-3">
                       <p className="text-xs text-muted-foreground leading-normal font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Webhook endpoints are only available on the Vendor Basic or Premium plan.
+                        Webhook endpoints are available on the Vendor Basic, Pro, or Brand plans.
                       </p>
                       <button
-                        onClick={() => payWithPaystack("basic")}
+                        onClick={() => {
+                          setUpgradeTargetFeature("Real-time Webhook integrations");
+                          setUpgradeTargetPlan("basic");
+                          setShowPremiumModal(true);
+                        }}
                         className="mx-auto text-xs bg-[#008236] text-white font-bold px-4 py-2 rounded-lg hover:bg-[#006c2c] transition-colors cursor-pointer"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
-                        Upgrade to Basic
+                        Upgrade Plan Options
                       </button>
                     </div>
                   )}
@@ -1624,15 +2123,28 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         <p className="text-xs text-green-700 dark:text-green-400 font-semibold font-mono">+2349167664619</p>
                       </div>
                     </div>
-                    <a
-                      href="https://wa.me/2349167664619?text=Hi%2C%20I%27m%20a%20Vendor%20Pro%20subscriber%20and%20need%20help%20with%20my%20Anovra%20account."
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-center gap-1.5 px-4 py-2 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-colors shrink-0 shadow-xs cursor-pointer"
-                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                    >
-                      Open WhatsApp →
-                    </a>
+                    {(vendorPlan === "premium" || vendorPlan === "brand") ? (
+                      <a
+                        href="https://wa.me/2349167664619?text=Hi%2C%20I%27m%20a%20Vendor%20Pro%20subscriber%20and%20need%20help%20with%20my%20Anovra%20account."
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-1.5 px-4 py-2 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-colors shrink-0 shadow-xs cursor-pointer"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
+                        Open WhatsApp →
+                      </a>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setShowPremiumModal(true);
+                          toast.warning("Priority WhatsApp support requires Vendor Pro or Brand tier. Upgrade to unlock!");
+                        }}
+                        className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zinc-400 text-white text-xs font-bold rounded-lg hover:bg-zinc-500 transition-colors shrink-0 shadow-xs cursor-pointer"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
+                        Upgrade to unlock →
+                      </button>
+                    )}
                   </div>
                   <div className="space-y-2 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     <p className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Response guaranteed within 4 hours during business hours.</p>
@@ -1667,6 +2179,20 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <span className="text-xs sm:text-sm font-medium text-foreground font-mono shrink-0 ml-2">{s.value}</span>
                     </div>
                   ))}
+                  {vendorPlan !== "brand" && (
+                    <button
+                      onClick={() => {
+                        setUpgradeTargetFeature("Uptime SLA guarantees");
+                        setUpgradeTargetPlan("brand");
+                        setShowPremiumModal(true);
+                        toast.info("Uptime SLA guarantees are exclusive to the Brand Plan. Upgrade to unlock.");
+                      }}
+                      className="w-full text-center mt-3 text-xs text-accent hover:text-accent/80 font-bold cursor-pointer border-t border-border/40 pt-2 bg-transparent border-0 outline-none focus:outline-none flex items-center justify-center gap-1.5"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      <Lock className="w-3 h-3 text-accent" /> Upgrade to Brand to activate SLA contract
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1701,9 +2227,28 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
                 ))}
               </div>
-              <button className="flex items-center gap-1.5 text-xs sm:text-sm text-emerald-600 hover:text-emerald-700 font-bold transition-colors mt-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                <LifeBuoy className="w-4 h-4" /> Book next onboarding session →
-              </button>
+              {vendorPlan === "brand" ? (
+                <a 
+                  href="mailto:onboarding@anovra.africa?subject=Book%20Brand%20Onboarding%20Session&body=Hi%20Anovra%20team%2C%20we%20are%20ready%20to%20schedule%20our%20next%20onboarding%20milestone."
+                  className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-emerald-600 hover:text-emerald-700 font-bold transition-colors mt-2" 
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  <LifeBuoy className="w-4 h-4" /> Book next onboarding session →
+                </a>
+              ) : (
+                <button
+                  onClick={() => {
+                    setUpgradeTargetFeature("Dedicated 1-on-1 onboarding support");
+                    setUpgradeTargetPlan("brand");
+                    setShowPremiumModal(true);
+                    toast.warning("Dedicated 1-on-1 onboarding requires the Brand plan. Upgrade to unlock!");
+                  }}
+                  className="flex items-center gap-1.5 text-xs sm:text-sm text-accent hover:text-accent/80 font-bold transition-colors mt-2 bg-transparent border-0 outline-none cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  <LifeBuoy className="w-4 h-4 text-accent" /> Upgrade to Brand to book session →
+                </button>
+              )}
             </div>
           </div>
 
@@ -1719,7 +2264,281 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
         </div>
       )}
+          </>
+        )}
       </div>
+
+      {showApiDocs && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card rounded-2xl max-w-2xl w-full p-6 sm:p-8 border border-border shadow-2xl relative my-8">
+            <button 
+              onClick={() => setShowApiDocs(false)} 
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-emerald-500/15 rounded-xl flex items-center justify-center text-emerald-600">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-foreground leading-none" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Anovra REST API Documentation
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Integrate skin analysis and recommendations into your backend or mobile app
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-6 text-sm overflow-y-auto max-h-[60vh] pr-2 scrollbar-thin">
+              {/* Authentication */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-foreground text-xs uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Authentication</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  All API requests must include your live secret token in the header of the request:
+                </p>
+                <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 select-all leading-normal">
+                  Authorization: Bearer sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c
+                </div>
+              </div>
+
+              {/* Scans API */}
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-bold rounded text-[10px] font-mono">GET</span>
+                  <span className="text-xs font-mono font-bold text-foreground">/v1/scans</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Retrieve a list of skin test reports completed by your customers.
+                </p>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Example Request Payload (cURL):</p>
+                <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 select-all overflow-x-auto whitespace-pre">
+{`curl -X GET "https://api.anovra.africa/v1/scans" \\
+  -H "Authorization: Bearer sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c" \\
+  -H "Content-Type: application/json"`}
+                </div>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Success Response JSON (200 OK):</p>
+                <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 overflow-x-auto whitespace-pre">
+{`{
+  "status": "success",
+  "data": [
+    {
+      "id": "SC-8F2D1",
+      "concern": "Hyperpigmentation",
+      "result": "Moderate melanin dispersion detected in cheek area.",
+      "score": 76,
+      "city": "Lagos",
+      "created_at": "2026-07-22T19:21:58.123Z"
+    }
+  ]
+}`}
+                </div>
+              </div>
+
+              {/* Recommendations API */}
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 bg-blue-500/15 text-blue-800 dark:text-blue-300 font-bold rounded text-[10px] font-mono">POST</span>
+                  <span className="text-xs font-mono font-bold text-foreground">/v1/recommendations</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Pass skin attributes to Anovra's AI engine to return safety-screened product matching recommendations.
+                </p>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Example Request Payload (cURL):</p>
+                <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 select-all overflow-x-auto whitespace-pre">
+{`curl -X POST "https://api.anovra.africa/v1/recommendations" \\
+  -H "Authorization: Bearer sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "skin_type": "oily",
+    "concern": "acne",
+    "sensitivities": ["fragrance"]
+  }'`}
+                </div>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Success Response JSON (200 OK):</p>
+                <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 overflow-x-auto whitespace-pre">
+{`{
+  "status": "success",
+  "recommendations": [
+    {
+      "id": "prod_1",
+      "name": "Niacinamide Hydrating Serum",
+      "suitability": "96%",
+      "reasoning": "Niacinamide regulates sebum production without sensitizing skin."
+    }
+  ]
+}`}
+                </div>
+              </div>
+
+              {/* Catalog API */}
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-bold rounded text-[10px] font-mono">GET</span>
+                  <span className="text-xs font-mono font-bold text-foreground">/v1/catalog</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Retrieve your safety-screened product catalog, including automated NAFDAC compliance status.
+                </p>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Example Request Payload (cURL):</p>
+                <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 select-all overflow-x-auto whitespace-pre">
+{`curl -X GET "https://api.anovra.africa/v1/catalog" \\
+  -H "Authorization: Bearer sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c" \\
+  -H "Content-Type: application/json"`}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 border-t border-border pt-4 text-center">
+              <button 
+                onClick={() => setShowApiDocs(false)} 
+                className="px-6 py-2.5 bg-secondary hover:bg-muted text-foreground text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                Close Documentation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showRoleSimModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-card rounded-3xl max-w-lg w-full p-6 sm:p-8 border border-border shadow-2xl relative">
+            <button 
+              onClick={() => setShowRoleSimModal(false)}
+              className="absolute top-5 right-5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors p-1.5 hover:bg-secondary rounded-full"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3.5 mb-6 text-left">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600">
+                <Shield className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-light text-foreground leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                  {simulatedRoleInfo} View Simulation
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Testing Role-Based Access Controls (RBAC) live in the editor
+                </p>
+              </div>
+            </div>
+
+            {/* Dynamic Role explanation callout */}
+            <div className="mb-5 p-3.5 bg-secondary/80 border border-border/50 rounded-2xl text-left text-[11px] leading-relaxed text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <p className="font-bold text-foreground mb-1">
+                {simulatedRoleInfo === "Vendor" ? "About the Vendor (Owner) role:" : "Why invite team members under this role?"}
+              </p>
+              {simulatedRoleInfo === "Vendor" && (
+                <p>As the primary Vendor, you are the direct partner of Anovra who registered this organization. You hold full ownership access and can invite other team members (like Managers or Viewers) to collaborate.</p>
+              )}
+              {simulatedRoleInfo === "Manager" && (
+                <p>Invite managers (like store supervisors or product catalog leads) to actively curate your brand catalog and review customer skin scans. Their access excludes changing billing or developer settings.</p>
+              )}
+              {simulatedRoleInfo === "Viewer" && (
+                <p>Invite viewers (like point-of-sale staff or retail consultants) to search matching products and look up skin logs. They are completely locked out of edits or settings.</p>
+              )}
+            </div>
+
+            {/* Sim Permissions breakdown */}
+            <div className="mb-6">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5 font-mono text-left">Capabilities Matrix</p>
+              <div className="border border-border/80 rounded-2xl overflow-hidden bg-muted/20">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-muted/40 border-b border-border/60">
+                      <th className="px-4 py-2 font-semibold text-muted-foreground text-[10px] uppercase font-mono">Permission Scope</th>
+                      <th className="px-4 py-2 font-semibold text-muted-foreground text-[10px] text-right uppercase font-mono">Access Level</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40 font-medium text-foreground">
+                    {simulatedRoleInfo === "Vendor" && (
+                      <>
+                        <tr>
+                          <td className="px-4 py-2.5">Catalog & Diagnostics</td>
+                          <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">Full Control</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-2.5">Billing & Subscriptions</td>
+                          <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">Full Control</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-2.5">Custom Domains & Webhooks</td>
+                          <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">Full Control</td>
+                        </tr>
+                      </>
+                    )}
+                    {simulatedRoleInfo === "Manager" && (
+                      <>
+                        <tr>
+                          <td className="px-4 py-2.5">Add & Edit Products</td>
+                          <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">Allowed</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-2.5">View Scan Diagnostics</td>
+                          <td className="px-4 py-2.5 text-right text-foreground/80">Read Only</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-2.5">Billing, Domains & Webhooks</td>
+                          <td className="px-4 py-2.5 text-right text-red-600 font-bold">Locked</td>
+                        </tr>
+                      </>
+                    )}
+                    {simulatedRoleInfo === "Viewer" && (
+                      <>
+                        <tr>
+                          <td className="px-4 py-2.5">Browse Catalog & Products</td>
+                          <td className="px-4 py-2.5 text-right text-foreground/80">Read Only</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-2.5">View Customer Scans</td>
+                          <td className="px-4 py-2.5 text-right text-foreground/80">Read Only</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-2.5">Add Products & Edit Settings</td>
+                          <td className="px-4 py-2.5 text-right text-red-600 font-bold">Locked</td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Login flow graphic representation */}
+            <div className="border-t border-border/60 pt-4 mb-8 text-left">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3.5 font-mono">Team Login Sequence</p>
+              <div className="grid grid-cols-3 gap-2.5 text-center">
+                {[
+                  { label: "1. Invite Code", desc: "Sent via email invitation" },
+                  { label: "2. Team Portal", desc: "Inputs email & unique code" },
+                  { label: "3. Workspace", desc: "Access limited by role" }
+                ].map((s) => (
+                  <div key={s.label} className="p-2.5 bg-muted/40 border border-border/50 rounded-xl flex flex-col justify-between">
+                    <p className="text-[10.5px] font-bold text-foreground leading-snug">{s.label}</p>
+                    <p className="text-[9px] text-muted-foreground leading-normal mt-1">{s.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setTeamRole(simulatedRoleInfo);
+                setShowRoleSimModal(false);
+                toast.info(`Simulation switched to ${simulatedRoleInfo} mode.`);
+              }}
+              className="w-full py-3.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white font-bold text-xs transition-colors shadow-sm cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              Continue Simulation
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
