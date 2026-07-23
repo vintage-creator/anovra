@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Camera, Upload, Shield, Package, ChevronDown, ChevronUp, X, Check,
   CheckCircle, AlertTriangle, Eye, ExternalLink, FlaskConical,
-  Plus,
+  Plus, Clock,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -933,6 +933,8 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
   const [productsList, setProductsList] = useState<any[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [expandedActiveImgIdx, setExpandedActiveImgIdx] = useState<number>(0);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -1148,16 +1150,24 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
       const descriptionText = savedData.description || "";
       const imagesMatch = descriptionText.match(/<!--IMAGES:([\s\S]*?)-->/);
       let parsedImages: string[] = [];
-      let cleanDescription = descriptionText;
       if (imagesMatch) {
         try {
           parsedImages = JSON.parse(imagesMatch[1]);
-          cleanDescription = descriptionText.replace(/<!--IMAGES:([\s\S]*?)-->/g, "").trim();
         } catch (e) {}
       }
       if (parsedImages.length === 0 && savedData.image_url) {
         parsedImages = [savedData.image_url];
       }
+
+      const cleanDescription = descriptionText
+        .replace(/<!--IMAGES:([\s\S]*?)-->/g, "")
+        .replace(/<!--BENEFITS:([\s\S]*?)-->/g, "")
+        .replace(/<!--USAGE:([\s\S]*?)-->/g, "")
+        .replace(/<!--PRECAUTIONS:([\s\S]*?)-->/g, "")
+        .replace(/<!--SKINTYPES:([\s\S]*?)-->/g, "")
+        .replace(/<!--KEY_INGREDIENTS:([\s\S]*?)-->/g, "")
+        .replace(/<!--ACTIVE_INGREDIENTS:([\s\S]*?)-->/g, "")
+        .trim();
 
       const formattedProduct = {
         id: savedData.id,
@@ -1170,20 +1180,36 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
         description: cleanDescription,
         image: savedData.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
         images: parsedImages,
-        ingredients: newProd.keyIngredients || [],
-        concerns: newProd.concerns || [],
+        benefits: newProd.benefits || "",
+        usageInstructions: newProd.usageInstructions || "",
+        precautions: newProd.precautions || "",
+        skinTypes: newProd.skinTypes || [],
+        keyIngredients: newProd.keyIngredients || [],
+        activeIngredients: newProd.activeIngredients || [],
+        ingredients: [...(newProd.keyIngredients || []), ...(newProd.activeIngredients || [])],
+        concerns: [savedData.category || "General"],
         safety: {
           rating: savedData.nafdac_status === "approved" ? "A+" : "Review",
           label: savedData.nafdac_status === "approved" ? "Verified Safe" : "Pending Safety Review"
-        }
+        },
+        views: savedData.views || 0,
+        clicks: savedData.clicks || 0,
       };
 
       if (newProd.id) {
-        setProductsList((prev) => prev.map((p) => p.id === newProd.id ? formattedProduct : p));
-        toast.success(savedData.nafdac_status === "approved" ? "Product successfully updated!" : "Product updated and sent for safety review.");
+        setProductsList((prev) => {
+          const updated = prev.map((p) => p.id === newProd.id ? formattedProduct : p);
+          sessionStorage.setItem("cached_vendor_products", JSON.stringify(updated));
+          return updated;
+        });
+        toast.success(savedData.nafdac_status === "approved" ? "Product successfully updated!" : "Product updated and sent for safety review. It will show up on your live storefront once approved.");
       } else {
-        setProductsList((prev) => [formattedProduct, ...prev]);
-        toast.success("Product added and submitted for NAFDAC safety review.");
+        setProductsList((prev) => {
+          const updated = [formattedProduct, ...prev];
+          sessionStorage.setItem("cached_vendor_products", JSON.stringify(updated));
+          return updated;
+        });
+        toast.success("Product added and submitted for NAFDAC safety review. It will show up on your live storefront once approved.");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to save product.");
@@ -1210,7 +1236,11 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
 
       if (error) throw error;
 
-      setProductsList((prev) => prev.filter((p) => p.id !== id));
+      setProductsList((prev) => {
+        const updated = prev.filter((p) => p.id !== id);
+        sessionStorage.setItem("cached_vendor_products", JSON.stringify(updated));
+        return updated;
+      });
       toast.success("Product successfully removed from catalogue!");
     } catch (err: any) {
       toast.error(err.message || "Failed to delete product.");
@@ -1361,11 +1391,13 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
               )}
             >
               <div className="p-4 flex items-start gap-4">
-                <img
-                  src={p.photo || p.image}
-                  alt={p.name}
-                  className="w-16 h-16 rounded-lg object-cover flex-shrink-0 bg-secondary"
-                />
+                <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-secondary border border-border">
+                  <img
+                    src={p.photo || p.image}
+                    alt={p.name}
+                    className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
+                  />
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -1384,6 +1416,12 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
                             Active
                           </span>
                         )}
+                        {p.status === "pending" && (
+                          <span className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
+                            <Clock className="w-2.5 h-2.5" />
+                            Pending Safety Review
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                         {p.brand} · {p.price}
@@ -1395,6 +1433,20 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
                         <span className="flex items-center gap-1"><ExternalLink className="w-3 h-3" />{p.clicks || 0}</span>
                       </div>
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (expandedProduct === p.id) {
+                              setExpandedProduct(null);
+                            } else {
+                              setExpandedProduct(p.id);
+                              setExpandedActiveImgIdx(0);
+                            }
+                          }}
+                          className="text-xs text-emerald-600 hover:underline font-semibold cursor-pointer flex items-center gap-0.5"
+                        >
+                          {expandedProduct === p.id ? "Hide Details" : "Show Details"}
+                        </button>
+                        <span className="text-border">|</span>
                         <button
                           onClick={() => setEditingProduct(p)}
                           className="text-xs text-accent hover:underline font-semibold cursor-pointer"
@@ -1443,6 +1495,133 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
                   </div>
                 </div>
               </div>
+
+              {/* Expanded details view */}
+              {expandedProduct === p.id && (
+                <div className="border-t border-border bg-muted/20 p-4 space-y-4 animate-fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                    {/* Left side: Image Gallery */}
+                    <div className="md:col-span-4 space-y-2">
+                      <div className="aspect-square bg-muted rounded-xl overflow-hidden border border-border">
+                        <img 
+                          src={p.images?.[expandedActiveImgIdx] || p.photo || p.image} 
+                          alt={p.name} 
+                          className="w-full h-full object-cover transition-transform duration-300 hover:scale-105" 
+                        />
+                      </div>
+                      {p.images && p.images.length > 1 && (
+                        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                          {p.images.map((imgUrl: string, idx: number) => (
+                            <button
+                              key={idx}
+                              onClick={() => setExpandedActiveImgIdx(idx)}
+                              className={cn(
+                                "w-10 h-10 rounded-md overflow-hidden border-2 shrink-0 transition-colors cursor-pointer",
+                                expandedActiveImgIdx === idx ? "border-accent" : "border-transparent"
+                              )}
+                            >
+                              <img src={imgUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="md:col-span-8 space-y-4">
+                      {/* Pending review warning banner */}
+                      {p.status === "pending" && (
+                        <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-xl flex items-start gap-2.5">
+                          <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-semibold text-amber-800" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Pending Administrator Approval</p>
+                            <p className="text-[11px] text-amber-700/90 mt-0.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              This product is undergoing safety validation. It will not show up on your live storefront or customer recommendations until approved in the Admin Dashboard.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Description */}
+                      <div>
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Description</h4>
+                        <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {p.description || "No description provided."}
+                        </p>
+                      </div>
+
+                      {/* Benefits & How to Use grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Benefits</h4>
+                          {p.benefits ? (
+                            <ul className="list-disc pl-4 space-y-1">
+                              {p.benefits.split("\n").filter(Boolean).map((b: string, index: number) => (
+                                <li key={index} className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                                  {b.replace(/^[•\-\*]\s*/, "").trim()}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">No benefits listed.</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>How to Use</h4>
+                          <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {p.usageInstructions || "No instructions provided."}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Precautions */}
+                      {p.precautions && (
+                        <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-xl">
+                          <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1 flex items-center gap-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> Precautions & Warnings
+                          </h4>
+                          <p className="text-xs text-amber-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {p.precautions}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Skin Compatibility & Ingredients */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border/60">
+                        <div>
+                          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Suitable Skin Types</h4>
+                          <div className="flex flex-wrap gap-1">
+                            {p.skinTypes && p.skinTypes.length > 0 ? (
+                              p.skinTypes.map((t: string) => (
+                                <span key={t} className="text-[10px] bg-secondary text-foreground px-2 py-0.5 rounded font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                                  {t}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">All skin types</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Active Ingredients</h4>
+                          <div className="flex flex-wrap gap-1">
+                            {p.activeIngredients && p.activeIngredients.length > 0 ? (
+                              p.activeIngredients.map((ing: string) => (
+                                <span key={ing} className="text-[10px] bg-emerald-500/10 text-[#008236] border border-emerald-500/20 px-2 py-0.5 rounded-full font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>
+                                  {ing}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">None listed</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {p.safetyFlag && (
                 <div className="border-t border-amber-200 bg-amber-50">

@@ -55,8 +55,12 @@ const ingredientGlossary = [
 ];
 
 export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
-  const [tab, setTab] = useState<UserTab>("overview");
+  const [tab, setTab] = useState<UserTab>(() => (sessionStorage.getItem("active_user_tab") as UserTab) || "overview");
   const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    sessionStorage.setItem("active_user_tab", tab);
+  }, [tab]);
   const [showAddFamily, setShowAddFamily] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMsg, setChatMsg] = useState("");

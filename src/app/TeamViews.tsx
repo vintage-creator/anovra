@@ -121,8 +121,12 @@ export function TeamLoginView({ setView }: { setView: (v: View) => void }) {
 type TeamDashTab = "overview" | "referrals" | "resources" | "leaderboard";
 
 export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
-  const [tab, setTab] = useState<TeamDashTab>("overview");
+  const [tab, setTab] = useState<TeamDashTab>(() => (sessionStorage.getItem("active_team_tab") as TeamDashTab) || "overview");
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    sessionStorage.setItem("active_team_tab", tab);
+  }, [tab]);
   const member = { name: "Team Member", role: "Marketing" as const, id: "TM-001" };
   const referralLink = "https://anovra.africa/#/scan";
 

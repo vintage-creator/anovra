@@ -52,7 +52,12 @@ function generateCredentials(name: string) {
 }
 
 export function AdminView({ setView }: { setView?: (v: View) => void }) {
-  const [tab, setTab] = useState<AdminTab>("overview");
+  const [tab, setTab] = useState<AdminTab>(() => (sessionStorage.getItem("active_admin_tab") as AdminTab) || "overview");
+
+  useEffect(() => {
+    sessionStorage.setItem("active_admin_tab", tab);
+  }, [tab]);
+
   const [expandedFlag, setExpandedFlag] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [flagStatuses, setFlagStatuses] = useState<Record<string, string>>({});

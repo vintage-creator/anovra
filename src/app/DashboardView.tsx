@@ -20,8 +20,12 @@ import { toast } from "sonner";
 type DashTab = "overview" | "catalog" | "analytics" | "settings" | "team" | "api" | "support";
 
 export function DashboardView({ setView }: { setView: (v: View) => void }) {
-  const [tab, setTab] = useState<DashTab>("overview");
+  const [tab, setTab] = useState<DashTab>(() => (sessionStorage.getItem("active_vendor_tab") as DashTab) || "overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    sessionStorage.setItem("active_vendor_tab", tab);
+  }, [tab]);
   const [analyticsRange, setAnalyticsRange] = useState<"7d" | "30d" | "90d">("7d");
   const [copied, setCopied] = useState<string | null>(null);
   const [whiteLabelEnabled, setWhiteLabelEnabled] = useState(false);

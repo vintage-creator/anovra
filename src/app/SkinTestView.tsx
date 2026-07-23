@@ -1041,7 +1041,13 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   onClick={() => setExpandedCard(expandedCard === i ? null : i)}
                 >
                   {rec.photo ? (
-                    <img src={rec.photo} alt={rec.name} className="w-16 h-16 rounded-2xl object-cover flex-shrink-0 bg-secondary border border-border" />
+                    <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-secondary border border-border">
+                      <img
+                        src={rec.photo}
+                        alt={rec.name}
+                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
+                      />
+                    </div>
                   ) : (
                     <div className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 bg-secondary border border-border text-muted-foreground">
                       <Package className="w-6 h-6" />

@@ -624,7 +624,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
                     <img 
                       src={selectedProduct.images?.[activeImgIdx] || selectedProduct.photo} 
                       alt={selectedProduct.name} 
-                      className="w-full h-full object-cover" 
+                      className="w-full h-full object-cover transition-transform duration-300 hover:scale-105" 
                     />
                   </div>
                   {/* Thumbnail slider */}
