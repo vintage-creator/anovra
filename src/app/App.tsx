@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { type View, cn } from "./types";
 import { Toaster } from "./components/ui/sonner";
+import { toast } from "sonner";
 import { LandingView } from "./LandingView";
 import { ShopView } from "./ShopView";
 import { DashboardView } from "./DashboardView";
@@ -327,7 +328,7 @@ export default function App() {
           await supabase.auth.signOut();
           setViewState("landing");
           window.location.hash = "";
-          alert("Your session has expired due to 30 minutes of inactivity. Please sign in again.");
+          toast.error("Your session has expired due to 30 minutes of inactivity. Please sign in again.");
         }
       }, 30 * 60 * 1000); // 30 minutes
     };
