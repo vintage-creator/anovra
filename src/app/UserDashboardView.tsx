@@ -233,9 +233,15 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       
       const amount = prices[planKey] * 100; // in kobo
 
+      const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+      if (!paystackPublicKey) {
+        toast.error("Paystack public key is not configured.");
+        return;
+      }
+
       // Initialize Paystack Inline popup
       const handler = (window as any).PaystackPop.setup({
-        key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_9fe0017d4e9d4499269c7f9b05b178b7e8e1c6be",
+        key: paystackPublicKey,
         email: email,
         amount: amount,
         currency: "NGN",

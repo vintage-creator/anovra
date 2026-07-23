@@ -2,13 +2,6 @@ import { useState } from "react";
 import { Eye, AlertCircle, ChevronRight, Check, ExternalLink, MessageCircle, TrendingUp, Users, Activity, Store } from "lucide-react";
 import type { View } from "./types";
 
-// ---- TEAM MOCK CREDENTIALS ----
-const TEAM_CREDENTIALS: Record<string, { name: string; role: "Marketing" | "Sales" | "Support"; id: string }> = {
-  "chiamaka.obi@anovra.africa": { name: "Chiamaka Obi", role: "Marketing", id: "TM-001" },
-  "emeka.nwosu@anovra.africa": { name: "Emeka Nwosu", role: "Sales", id: "TM-002" },
-};
-const TEAM_PASSWORD = "TeamDemo@2025!";
-
 // ---- TEAM LOGIN ----
 export function TeamLoginView({ setView }: { setView: (v: View) => void }) {
   const [email, setEmail] = useState("");
@@ -130,9 +123,8 @@ type TeamDashTab = "overview" | "referrals" | "resources" | "leaderboard";
 export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
   const [tab, setTab] = useState<TeamDashTab>("overview");
   const [copied, setCopied] = useState(false);
-  // Simulating logged-in user as Chiamaka for the demo
-  const member = { name: "Chiamaka Obi", role: "Marketing" as const, id: "TM-001" };
-  const referralLink = `https://anovra.africa/scan?ref=chiamaka-obi-mk01`;
+  const member = { name: "Team Member", role: "Marketing" as const, id: "TM-001" };
+  const referralLink = "https://anovra.africa/#/scan";
 
   function copyLink() {
     setCopied(true);
@@ -140,25 +132,19 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
   }
 
   const kpis = [
-    { label: "Link clicks", value: "1,284", delta: "+12% this week", up: true, icon: "🔗" },
-    { label: "Scans via your link", value: "743", delta: "+8% this week", up: true, icon: "🧴" },
-    { label: "Vendors onboarded", value: "18", delta: "+3 this month", up: true, icon: "🏪" },
-    { label: "Conversions", value: "₦284,000", delta: "+21% this month", up: true, icon: "💰" },
+    { label: "Link clicks", value: "0", delta: "No tracked clicks yet", up: false, icon: "link" },
+    { label: "Scans via your link", value: "0", delta: "No referred scans yet", up: false, icon: "scan" },
+    { label: "Vendors onboarded", value: "0", delta: "No onboarded vendors yet", up: false, icon: "store" },
+    { label: "Conversions", value: "₦0", delta: "No tracked revenue yet", up: false, icon: "revenue" },
   ];
 
-  const leaderboard = [
-    { rank: 1, name: "Emeka Nwosu", role: "Sales", scans: 2104, vendors: 31, revenue: "₦620,000", badge: "🥇" },
-    { rank: 2, name: "Chiamaka Obi", role: "Marketing", scans: 1284, vendors: 18, revenue: "₦284,000", badge: "🥈", isMe: true },
-    { rank: 3, name: "Fatima Bello", role: "Sales", scans: 998, vendors: 14, revenue: "₦210,500", badge: "🥉" },
-    { rank: 4, name: "Adaeze Ike", role: "Support", scans: 701, vendors: 9, revenue: "₦148,000", badge: "" },
-    { rank: 5, name: "Seun Adeyemi", role: "Marketing", scans: 514, vendors: 7, revenue: "₦102,300", badge: "" },
-  ];
+  const leaderboard: any[] = [];
 
   const dailyScans = [
-    { day: "Mon", scans: 89 }, { day: "Tue", scans: 124 }, { day: "Wed", scans: 107 },
-    { day: "Thu", scans: 156 }, { day: "Fri", scans: 143 }, { day: "Sat", scans: 78 }, { day: "Sun", scans: 46 },
+    { day: "Mon", scans: 0 }, { day: "Tue", scans: 0 }, { day: "Wed", scans: 0 },
+    { day: "Thu", scans: 0 }, { day: "Fri", scans: 0 }, { day: "Sat", scans: 0 }, { day: "Sun", scans: 0 },
   ];
-  const maxScans = Math.max(...dailyScans.map((d) => d.scans));
+  const maxScans = Math.max(...dailyScans.map((d) => d.scans)) || 1;
 
   const resources = [
     { title: "Vendor Pitch Deck", desc: "Full slide deck for onboarding new skin-care vendors", type: "PDF", size: "3.2 MB", icon: "📊" },
@@ -169,13 +155,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
     { title: "Commission Structure 2025", desc: "Breakdown of commission tiers and bonus targets", type: "PDF", size: "240 KB", icon: "💵" },
   ];
 
-  const recentActivity = [
-    { time: "2 min ago", text: "New scan via your referral link", city: "Lagos" },
-    { time: "18 min ago", text: "Vendor 'SkinGlow Lagos' signed up via your link", city: "Lagos" },
-    { time: "1 hr ago", text: "New scan via your referral link", city: "Abuja" },
-    { time: "3 hrs ago", text: "Vendor 'ClearFace PH' signed up via your link", city: "Port Harcourt" },
-    { time: "Yesterday", text: "New scan via your referral link", city: "Ibadan" },
-  ];
+  const recentActivity: any[] = [];
 
   const tabs: { id: TeamDashTab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -205,7 +185,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-full bg-accent/15 flex items-center justify-center">
-                <span className="text-xs font-semibold text-accent">CO</span>
+                <span className="text-xs font-semibold text-accent">TM</span>
               </div>
               <div className="hidden sm:block">
                 <p className="text-xs font-medium text-foreground leading-none">{member.name}</p>
@@ -226,7 +206,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
         {/* Welcome */}
         <div className="mb-6">
           <h1 className="text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-            Good morning, {member.name.split(" ")[0]} 👋
+            Good morning, {member.name.split(" ")[0]}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Here's what's happening with your referrals today.

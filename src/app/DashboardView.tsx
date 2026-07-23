@@ -473,8 +473,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         return;
       }
 
+      const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+      if (!paystackPublicKey) {
+        toast.error("Paystack public key is not configured.");
+        return;
+      }
+
       const handler = (window as any).PaystackPop.setup({
-        key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_9fe0017d4e9d4499269c7f9b05b178b7e8e1c6be",
+        key: paystackPublicKey,
         email: email,
         amount: amount,
         currency: "NGN",
@@ -485,11 +491,26 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             .from("profiles")
             .update({ plan: planKey })
             .eq("id", user.id)
-            .then(({ error }) => {
+            .then(async ({ error }) => {
               toast.dismiss(tid);
               if (error) {
                 toast.error("Payment successful, but failed to update subscription. Please contact support.");
               } else {
+                const { error: paymentError } = await supabase
+                  .from("payments")
+                  .insert([{
+                    vendor_id: user.id,
+                    amount: prices[planKey],
+                    currency: "NGN",
+                    plan: planKey,
+                    status: "success",
+                    provider: "paystack",
+                    reference: response?.reference || response?.trxref || `paystack-${Date.now()}`,
+                  }]);
+                if (paymentError) {
+                  console.warn("Payment was successful but could not be recorded for admin analytics:", paymentError.message);
+                  toast.warning("Subscription updated. Admin payment tracking needs a schema update.");
+                }
                 setVendorPlan(planKey);
                 toast.success(`Subscription successfully updated to ${planKey.toUpperCase()} plan!`);
               }

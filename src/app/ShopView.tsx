@@ -125,11 +125,6 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             if (user.user_metadata.tagline) taglineVal = user.user_metadata.tagline;
             if (user.user_metadata.location) locationVal = user.user_metadata.location;
             if (user.user_metadata.since) sinceVal = user.user_metadata.since;
-          } else if (targetProfile.business_name === "Vintage") {
-            // Fallback for demo storefront matching the default name
-            taglineVal = "Science-backed skincare for African skin";
-            locationVal = "Lagos, Nigeria";
-            sinceVal = "2023";
           }
 
           const displayName = isPlaceholderName(targetProfile.business_name)

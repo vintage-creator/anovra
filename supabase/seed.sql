@@ -7,8 +7,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   nafdac_number TEXT,
   cac_number TEXT,
   cac_document_url TEXT,
-  plan TEXT DEFAULT 'free' CHECK (plan IN ('free', 'basic', 'premium')),
+  plan TEXT DEFAULT 'free' CHECK (plan IN ('free', 'basic', 'premium', 'brand')),
   is_verified BOOLEAN DEFAULT false,
+  verification_status TEXT DEFAULT 'pending' CHECK (verification_status IN ('pending', 'approved', 'suspended', 'banned')),
   custom_domain TEXT,
   white_label BOOLEAN DEFAULT false,
   webhook_url TEXT,
@@ -37,7 +38,7 @@ CREATE TABLE IF NOT EXISTS public.products (
   price NUMERIC DEFAULT 0,
   description TEXT DEFAULT '',
   image_url TEXT,
-  nafdac_status TEXT DEFAULT 'approved' CHECK (nafdac_status IN ('approved', 'pending', 'flagged')),
+  nafdac_status TEXT DEFAULT 'pending' CHECK (nafdac_status IN ('approved', 'pending', 'flagged')),
   category TEXT DEFAULT 'Skincare',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -103,8 +104,37 @@ CREATE POLICY "Allow select on cart items" ON public.cart_items
 CREATE POLICY "Allow insert on cart items" ON public.cart_items
   FOR INSERT WITH CHECK (true);
 
+-- 5. Create Payments Table
+CREATE TABLE IF NOT EXISTS public.payments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  vendor_id UUID REFERENCES auth.users ON DELETE SET NULL,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  currency TEXT DEFAULT 'NGN',
+  plan TEXT CHECK (plan IN ('basic', 'premium', 'brand')),
+  status TEXT DEFAULT 'success' CHECK (status IN ('success', 'pending', 'failed')),
+  provider TEXT DEFAULT 'paystack',
+  reference TEXT UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- 5. Auto-Create Profile Row on Signup Trigger
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow admins to read payments" ON public.payments
+  FOR SELECT USING (
+    (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid()) = 'admin'
+    OR auth.uid() = vendor_id
+  );
+
+CREATE POLICY "Allow vendors to create own payment records" ON public.payments
+  FOR INSERT WITH CHECK (auth.uid() = vendor_id);
+
+CREATE POLICY "Allow admins to manage payments" ON public.payments
+  FOR ALL USING (
+    (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid()) = 'admin'
+  );
+
+
+-- 6. Auto-Create Profile Row on Signup Trigger
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -117,7 +147,8 @@ BEGIN
     cac_number, 
     cac_document_url, 
     plan, 
-    is_verified
+    is_verified,
+    verification_status
   )
   VALUES (
     new.id,
@@ -128,7 +159,8 @@ BEGIN
     new.raw_user_meta_data->>'cac_number',
     new.raw_user_meta_data->>'cac_document_url',
     'free',
-    false
+    false,
+    'pending'
   )
   ON CONFLICT (id) DO UPDATE SET
     business_name = EXCLUDED.business_name,
@@ -201,8 +233,18 @@ CREATE POLICY "Allow admin to manage vendor-documents" ON storage.objects
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS custom_domain TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS white_label BOOLEAN DEFAULT false;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS webhook_url TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'pending';
+ALTER TABLE public.products ALTER COLUMN nafdac_status SET DEFAULT 'pending';
 
--- 6. Seed Admin User
+DO $$
+BEGIN
+  ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_plan_check;
+  ALTER TABLE public.profiles ADD CONSTRAINT profiles_plan_check CHECK (plan IN ('free', 'basic', 'premium', 'brand'));
+  ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_verification_status_check;
+  ALTER TABLE public.profiles ADD CONSTRAINT profiles_verification_status_check CHECK (verification_status IN ('pending', 'approved', 'suspended', 'banned'));
+END $$;
+
+-- 7. Seed Admin User
 -- Email: hello@anovra.africa | Password: @Skin_ana1
 INSERT INTO auth.users (
   instance_id,
@@ -244,5 +286,5 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Ensure admin profile is marked verified and set to premium plan
 UPDATE public.profiles
-SET plan = 'premium', is_verified = true
+SET plan = 'premium', is_verified = true, verification_status = 'approved'
 WHERE id = 'a0e0a0e0-a0e0-a0e0-a0e0-a0e0a0e0a0e0';

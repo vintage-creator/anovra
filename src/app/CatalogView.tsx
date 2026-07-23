@@ -342,12 +342,18 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
                     className="sr-only"
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []);
-                      if (files.length > 0) {
-                        const urls = files.map(file => URL.createObjectURL(file));
+                      const validFiles = files.filter((file) => {
+                        const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type);
+                        if (!allowed) toast.error(`${file.name} is not a supported image type.`);
+                        if (file.size > 5 * 1024 * 1024) toast.error(`${file.name} is larger than 5MB.`);
+                        return allowed && file.size <= 5 * 1024 * 1024;
+                      });
+                      if (validFiles.length > 0) {
+                        const urls = validFiles.map(file => URL.createObjectURL(file));
                         setImagePreviews(prev => [...prev, ...urls]);
                         setForm(f => ({
                           ...f,
-                          photoFiles: [...(f.photoFiles || []), ...files]
+                          photoFiles: [...(f.photoFiles || []), ...validFiles]
                         }));
                       }
                     }}
@@ -361,7 +367,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
                   <p className="text-sm text-muted-foreground text-center">
                     Drop images here or <span className="text-accent font-medium">browse</span>
                   </p>
-                  <p className="text-xs text-muted-foreground">Select multiple images (PNG, JPG, WEBP up to 10MB)</p>
+                  <p className="text-xs text-muted-foreground">Select multiple images (PNG, JPG, WEBP up to 5MB each)</p>
                 </div>
                 <input
                   type="file"
@@ -370,12 +376,18 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
                   className="sr-only"
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
-                    if (files.length > 0) {
-                      const urls = files.map(file => URL.createObjectURL(file));
+                    const validFiles = files.filter((file) => {
+                      const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type);
+                      if (!allowed) toast.error(`${file.name} is not a supported image type.`);
+                      if (file.size > 5 * 1024 * 1024) toast.error(`${file.name} is larger than 5MB.`);
+                      return allowed && file.size <= 5 * 1024 * 1024;
+                    });
+                    if (validFiles.length > 0) {
+                      const urls = validFiles.map(file => URL.createObjectURL(file));
                       setImagePreviews(urls);
                       setForm(f => ({
                         ...f,
-                        photoFiles: files
+                        photoFiles: validFiles
                       }));
                     }
                   }}
@@ -836,7 +848,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border flex items-center justify-between gap-3 flex-shrink-0 bg-background">
-          <p className="text-xs text-muted-foreground">Ingredients will be automatically checked for NAFDAC compliance on save.</p>
+          <p className="text-xs text-muted-foreground">Products are submitted for NAFDAC safety review before appearing as approved.</p>
           <div className="flex gap-2 flex-shrink-0">
             <button
               type="button"
@@ -1102,7 +1114,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
         price: isNaN(rawPrice) ? 0 : rawPrice,
         description: finalDesc,
         image_url: finalImageUrl,
-        nafdac_status: "approved",
+        nafdac_status: "pending",
         category: newProd.category || "Skincare",
       };
 
@@ -1157,15 +1169,18 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
         images: parsedImages,
         ingredients: newProd.keyIngredients || [],
         concerns: newProd.concerns || [],
-        safety: { rating: "A+", label: "Verified Safe" }
+        safety: {
+          rating: savedData.nafdac_status === "approved" ? "A+" : "Review",
+          label: savedData.nafdac_status === "approved" ? "Verified Safe" : "Pending Safety Review"
+        }
       };
 
       if (newProd.id) {
         setProductsList((prev) => prev.map((p) => p.id === newProd.id ? formattedProduct : p));
-        toast.success("Product successfully updated!");
+        toast.success(savedData.nafdac_status === "approved" ? "Product successfully updated!" : "Product updated and sent for safety review.");
       } else {
         setProductsList((prev) => [formattedProduct, ...prev]);
-        toast.success("Product successfully added to catalog & live store!");
+        toast.success("Product added and submitted for NAFDAC safety review.");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to save product.");

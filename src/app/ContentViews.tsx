@@ -569,7 +569,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
                       type="text"
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="Chiamaka Obi"
+                      placeholder="Team member"
                       required
                       className="w-full bg-card border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-accent transition-colors"
                     />

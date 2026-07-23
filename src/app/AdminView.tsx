@@ -3,7 +3,7 @@ import {
   Store, AlertCircle, CreditCard, Calendar, Ban, Search, RefreshCw,
   Users, Package, Shield, BarChart2, CheckCircle, X, Check, Eye,
   ChevronDown, ChevronUp, AlertTriangle, Info, Activity, TrendingUp,
-  ExternalLink, Upload, MapPin, Scan,
+  ExternalLink, Upload, MapPin, Scan, FileText,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -63,6 +63,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [vendorsList, setVendorsList] = useState<any[]>([]);
   const [scansList, setScansList] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
+  const [paymentsList, setPaymentsList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -85,6 +86,17 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           .from("products")
           .select("*");
         setProductsList(products || []);
+
+        const { data: payments, error: paymentsError } = await supabase
+          .from("payments")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (paymentsError) {
+          console.warn("Payment telemetry is not available yet:", paymentsError.message);
+          setPaymentsList([]);
+        } else {
+          setPaymentsList(payments || []);
+        }
       } catch (err) {
         console.error("Failed to fetch admin dashboard telemetry:", err);
       } finally {
@@ -93,10 +105,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     };
     fetchAdminData();
   }, []);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
-    { id: "TM-001", name: "Chiamaka Obi", phone: "+234 803 456 7890", email: "chiamaka.obi@example.com", role: "Marketing", idFileName: "nin_chiamaka.pdf", headshotUrl: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=80&h=80&fit=crop&auto=format", username: "chiamaka.obi@anovra.africa", password: "••••••••••••", createdAt: "12 May 2025", status: "active" },
-    { id: "TM-002", name: "Emeka Nwosu", phone: "+234 812 345 6789", email: "emeka.nwosu@example.com", role: "Sales", idFileName: "drivers_emeka.jpg", headshotUrl: "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=80&h=80&fit=crop&auto=format", username: "emeka.nwosu@anovra.africa", password: "••••••••••••", createdAt: "3 Jun 2025", status: "active" },
-  ]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [teamForm, setTeamForm] = useState({ name: "", phone: "", email: "", role: "Marketing" as TeamRole, idFileName: "", headshotUrl: "" });
   const [newCredentials, setNewCredentials] = useState<{ username: string; password: string; name: string } | null>(null);
@@ -107,7 +116,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     if (!teamForm.name || !teamForm.email || !teamForm.phone) return;
     const creds = generateCredentials(teamForm.name);
     const member: TeamMember = {
-      id: `TM-${String(teamMembers.length + 3).padStart(3, "0")}`,
+      id: `TM-${String(teamMembers.length + 1).padStart(3, "0")}`,
       name: teamForm.name,
       phone: teamForm.phone,
       email: teamForm.email,
@@ -140,21 +149,36 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const premiumCount = vendorsList.filter(v => v.plan === "premium").length;
   const brandCount = vendorsList.filter(v => v.plan === "brand").length;
   const freeCount = vendorsList.filter(v => v.plan === "free" || !v.plan).length;
-  const mrrVal = basicCount * 12500 + premiumCount * 25000 + brandCount * 75000;
+  const successfulPayments = paymentsList.filter((p) => p.status === "success");
+  const currentMonthPayments = successfulPayments.filter((p) => {
+    const paidAt = new Date(p.created_at || Date.now());
+    const now = new Date();
+    return paidAt.getFullYear() === now.getFullYear() && paidAt.getMonth() === now.getMonth();
+  });
+  const actualRevenueVal = currentMonthPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const expectedMrrVal = basicCount * 12500 + premiumCount * 25000 + brandCount * 75000;
+  const mrrVal = actualRevenueVal || expectedMrrVal;
   const formattedMrr = `₦${mrrVal.toLocaleString()}`;
+  const revenueDelta = actualRevenueVal
+    ? `${currentMonthPayments.length} successful Paystack payment${currentMonthPayments.length === 1 ? "" : "s"} this month`
+    : "No tracked payments this month; showing plan estimate";
 
   const dynamicStats = [
     { label: "Total vendors", value: String(totalVendors), delta: `+${vendorsList.filter(v => new Date(v.created_at || Date.now()).getMonth() === new Date().getMonth()).length} this month`, icon: <Store className="w-4 h-4" />, warn: false },
     { label: "Scans platform-wide", value: String(scansPlatformWide), delta: `Across all vendors`, icon: <Scan className="w-4 h-4" />, warn: false },
     { label: "Products pending safety review", value: String(productsPending), delta: productsPending > 0 ? "Requires action" : "All cleared", icon: <AlertCircle className="w-4 h-4" />, warn: productsPending > 0 },
-    { label: "MRR (₦)", value: formattedMrr, delta: `${basicCount} basic · ${premiumCount} pro · ${brandCount} brand`, icon: <CreditCard className="w-4 h-4" />, warn: false },
+    { label: "MRR (₦)", value: formattedMrr, delta: revenueDelta, icon: <CreditCard className="w-4 h-4" />, warn: false },
   ];
 
   // Dynamic mapped vendor representations
   const dynamicVendors = vendorsList.map(v => {
     const vendorProds = productsList.filter(p => p.vendor_id === v.id);
     const vendorScans = scansList.filter(s => s.vendor_id === v.id).length;
-    const vendorMrr = v.plan === "brand" ? "₦75,000" : (v.plan === "premium" ? "₦25,000" : v.plan === "basic" ? "₦12,500" : "₦0");
+    const vendorPayments = successfulPayments.filter((p) => p.vendor_id === v.id);
+    const latestPayment = vendorPayments[0];
+    const vendorMrr = latestPayment
+      ? `₦${Number(latestPayment.amount || 0).toLocaleString()}`
+      : v.plan === "brand" ? "₦75,000" : (v.plan === "premium" ? "₦25,000" : v.plan === "basic" ? "₦12,500" : "₦0");
     const joinedDate = new Date(v.created_at || Date.now()).toLocaleDateString("en-GB", {
       day: "numeric",
       month: "short",
@@ -174,7 +198,10 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       scans: vendorScans,
       joined: joinedDate,
       status: status,
-      mrr: vendorMrr
+      mrr: vendorMrr,
+      cacNumber: v.cac_number,
+      cacDocumentUrl: v.cac_document_url,
+      paymentReference: latestPayment?.reference,
     };
   });
 
@@ -230,14 +257,15 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         toast.success("Vendor account removed successfully!");
       } else {
         const nextVerified = action === "active";
+        const verificationStatus = action === "active" ? "approved" : action;
         const { error } = await supabase
           .from("profiles")
-          .update({ is_verified: nextVerified })
+          .update({ is_verified: nextVerified, verification_status: verificationStatus })
           .eq("id", vendorId);
         if (error) throw error;
 
         setVendorsList((prev) =>
-          prev.map((v) => (v.id === vendorId ? { ...v, is_verified: nextVerified } : v))
+          prev.map((v) => (v.id === vendorId ? { ...v, is_verified: nextVerified, verification_status: verificationStatus } : v))
         );
         toast.success(`Vendor status updated to ${action}!`);
       }
@@ -385,11 +413,11 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     Subscribed vendors by plan
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Active paying subscriptions · updated daily
+                    Active plans and Paystack payment records
                   </p>
                 </div>
                 <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full font-medium" style={{ fontFamily: "'DM Mono', monospace" }}>
-                  {basicCount + premiumCount} total paying
+                  {successfulPayments.length} tracked payments
                 </span>
               </div>
 
@@ -500,19 +528,26 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   Monthly Recurring Revenue
                 </h3>
                 <p className="text-xs text-muted-foreground mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Jan–Jun 2025 · Nigerian Naira (₦)
+                  Successful vendor payments · Nigerian Naira (₦)
                 </p>
                 {/* SVG MRR line chart */}
                 {(() => {
                   const w = 480, h = 150, padL = 52, padR = 12, padT = 8, padB = 28;
-                  const dynamicRevenueData = [
-                    { month: "Jan", mrr: 1800000 },
-                    { month: "Feb", mrr: 2100000 },
-                    { month: "Mar", mrr: 2450000 },
-                    { month: "Apr", mrr: 2900000 },
-                    { month: "May", mrr: 3600000 },
-                    { month: "Jun", mrr: mrrVal || 4200000 },
-                  ];
+                  const now = new Date();
+                  const dynamicRevenueData = Array.from({ length: 6 }, (_, idx) => {
+                    const cursor = new Date(now.getFullYear(), now.getMonth() - (5 - idx), 1);
+                    const monthPayments = successfulPayments.filter((p) => {
+                      const paidAt = new Date(p.created_at || Date.now());
+                      return paidAt.getFullYear() === cursor.getFullYear() && paidAt.getMonth() === cursor.getMonth();
+                    });
+                    return {
+                      month: cursor.toLocaleDateString("en-US", { month: "short" }),
+                      mrr: monthPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0),
+                    };
+                  });
+                  if (dynamicRevenueData.every((d) => d.mrr === 0)) {
+                    dynamicRevenueData[dynamicRevenueData.length - 1].mrr = expectedMrrVal;
+                  }
                   const vals = dynamicRevenueData.map((d) => d.mrr);
                   const minV = Math.min(...vals), maxV = Math.max(...vals) || 1;
                   const xStep = (w - padL - padR) / (vals.length - 1);
@@ -549,6 +584,48 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     </svg>
                   );
                 })()}
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-5">
+                <h3 className="font-medium text-foreground mb-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Recent payments
+                </h3>
+                <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Latest successful Paystack subscriptions
+                </p>
+                <div className="space-y-3">
+                  {successfulPayments.slice(0, 5).map((payment) => {
+                    const vendor = vendorsList.find((v) => v.id === payment.vendor_id);
+                    return (
+                      <div key={payment.id || payment.reference} className="flex items-start justify-between gap-3 border-b border-border last:border-0 pb-3 last:pb-0">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {vendor?.business_name || "Unknown vendor"}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate" style={{ fontFamily: "'DM Mono', monospace" }}>
+                            {payment.plan || "plan"} · {payment.reference || "no reference"}
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
+                            ₦{Number(payment.amount || 0).toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {new Date(payment.created_at || Date.now()).toLocaleDateString("en-GB")}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {successfulPayments.length === 0 && (
+                    <div className="border border-dashed border-border rounded-lg p-4 text-center">
+                      <CreditCard className="w-6 h-6 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        No payment records yet. New Paystack callbacks will appear here.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Tier breakdown */}
@@ -960,6 +1037,30 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       <div className="col-span-3">
                         <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{v.name}</p>
                         <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{v.owner}</p>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {v.cacNumber && (
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              CAC {v.cacNumber}
+                            </span>
+                          )}
+                          {v.cacDocumentUrl ? (
+                            <a
+                              href={v.cacDocumentUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[10px] text-accent hover:underline font-medium"
+                              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                            >
+                              <FileText className="w-3 h-3" />
+                              View CAC document
+                            </a>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              <AlertTriangle className="w-3 h-3" />
+                              CAC document missing
+                            </span>
+                          )}
+                        </div>
                         {isApproved && (
                           <p className="text-xs text-accent mt-0.5 font-mono truncate">
                             anovra.africa/shop/{v.name.toLowerCase().replace(/\s+/g, "-")}
@@ -977,7 +1078,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       </div>
                       <p className="col-span-1 text-sm text-right font-mono text-foreground">{v.products}</p>
                       <p className="col-span-1 text-sm text-right font-mono text-foreground">{v.scans.toLocaleString()}</p>
-                      <p className="col-span-1 text-sm text-right font-mono text-foreground">{v.mrr}</p>
+                      <div className="col-span-1 text-right">
+                        <p className="text-sm font-mono text-foreground">{v.mrr}</p>
+                        {v.paymentReference && (
+                          <p className="text-[10px] font-mono text-muted-foreground truncate" title={v.paymentReference}>
+                            paid
+                          </p>
+                        )}
+                      </div>
                       <div className="col-span-1 flex items-center gap-1 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                         <Calendar className="w-3 h-3" />
                         {v.joined}
@@ -1164,7 +1272,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Chiamaka Obi"
+                      placeholder="e.g. Team member"
                       value={teamForm.name}
                       onChange={(e) => setTeamForm((f) => ({ ...f, name: e.target.value }))}
                       className="w-full bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
