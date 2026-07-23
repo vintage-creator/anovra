@@ -40,7 +40,7 @@ BEGIN
   ) THEN
     CREATE POLICY "Allow admins to read payments" ON public.payments
       FOR SELECT USING (
-        (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid()) = 'admin'
+        (auth.jwt()->'user_metadata'->>'role') = 'admin'
         OR auth.uid() = vendor_id
       );
   END IF;
@@ -63,7 +63,7 @@ BEGIN
   ) THEN
     CREATE POLICY "Allow admins to manage payments" ON public.payments
       FOR ALL USING (
-        (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid()) = 'admin'
+        (auth.jwt()->'user_metadata'->>'role') = 'admin'
       );
   END IF;
 END $$;

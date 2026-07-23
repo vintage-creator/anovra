@@ -87,15 +87,21 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           .select("*");
         setProductsList(products || []);
 
-        const { data: payments, error: paymentsError } = await supabase
-          .from("payments")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (paymentsError) {
-          console.warn("Payment telemetry is not available yet:", paymentsError.message);
-          setPaymentsList([]);
+        const { data: authData } = await supabase.auth.getUser();
+        const isAdminUser = authData.user?.user_metadata?.role === "admin";
+        if (isAdminUser) {
+          const { data: payments, error: paymentsError } = await supabase
+            .from("payments")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (paymentsError) {
+            console.warn("Payment telemetry is not available yet:", paymentsError.message);
+            setPaymentsList([]);
+          } else {
+            setPaymentsList(payments || []);
+          }
         } else {
-          setPaymentsList(payments || []);
+          setPaymentsList([]);
         }
       } catch (err) {
         console.error("Failed to fetch admin dashboard telemetry:", err);

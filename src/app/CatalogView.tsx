@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Camera, Upload, Shield, Package, ChevronDown, ChevronUp, X, Check,
   CheckCircle, AlertTriangle, Eye, ExternalLink, FlaskConical,
+  Plus,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
