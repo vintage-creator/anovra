@@ -42,6 +42,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [vendorPlan, setVendorPlan] = useState<VendorPlan>("free");
   const [trialActive, setTrialActive] = useState(true);
   const [trialDaysRemaining, setTrialDaysRemaining] = useState(14);
+  const [trialEndsAt, setTrialEndsAt] = useState<Date | null>(null);
+  const [trialMsRemaining, setTrialMsRemaining] = useState(14 * 24 * 60 * 60 * 1000);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [upgradeTargetFeature, setUpgradeTargetFeature] = useState<string | null>(null);
   const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<"basic" | "premium" | "brand" | null>(null);
@@ -127,6 +129,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const isApexDomain = domainParts.length === 2;
   const dnsHostName = isApexDomain ? "@" : domainParts.slice(0, -2).join(".") || "skin";
   const suggestedSubdomain = isApexDomain ? `skin.${normalizeDomain(customDomain)}` : normalizeDomain(customDomain);
+  const trialTime = {
+    days: Math.max(0, Math.floor(trialMsRemaining / (1000 * 60 * 60 * 24))),
+    hours: Math.max(0, Math.floor((trialMsRemaining / (1000 * 60 * 60)) % 24)),
+    minutes: Math.max(0, Math.floor((trialMsRemaining / (1000 * 60)) % 60)),
+  };
 
   useEffect(() => {
     if (sessionStorage.getItem("show_welcome") === "true") {
@@ -252,9 +259,12 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
           // Enforce 14-day trial check
           const createdDate = user.created_at ? new Date(user.created_at) : new Date();
+          const trialEndDate = new Date(createdDate.getTime() + 14 * 24 * 60 * 60 * 1000);
           const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
           const planVal = (profile.plan || "free") as VendorPlan;
           const freeTrialDaysRemaining = Math.max(0, Math.ceil(14 - daysDiff));
+          setTrialEndsAt(trialEndDate);
+          setTrialMsRemaining(Math.max(0, trialEndDate.getTime() - Date.now()));
           setTrialDaysRemaining(freeTrialDaysRemaining);
           setTrialActive(planVal === "free" && daysDiff <= 14);
           if (planVal === "free" && daysDiff > 14) {
@@ -354,6 +364,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!trialEndsAt) return;
+    const tick = () => setTrialMsRemaining(Math.max(0, trialEndsAt.getTime() - Date.now()));
+    tick();
+    const timer = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(timer);
+  }, [trialEndsAt]);
 
   useEffect(() => {
 
@@ -2102,15 +2120,53 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
           {/* Billing & Subscription Card */}
           <div className="bg-card border border-border rounded-xl p-5 shadow-xs space-y-5">
-            <div>
-              <h3 className="font-semibold text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
-              <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Paid tiers unlock premium capabilities such as white-labeled results, custom domains, webhooks, and priority WhatsApp support.
-              </p>
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+              <div>
+                <h3 className="font-semibold text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
+                <p className="text-xs text-muted-foreground mt-1 max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Start on Free, try all premium features for 14 days, then choose a paid tier to keep advanced tools such as white-labeled results, custom domains, webhooks, and priority WhatsApp support.
+                </p>
+              </div>
+              {vendorPlan === "free" && (
+                <div className={cn(
+                  "rounded-2xl border px-4 py-3 min-w-[230px] shadow-sm",
+                  trialActive
+                    ? "bg-gradient-to-br from-emerald-50 via-amber-50 to-sky-50 border-emerald-200"
+                    : "bg-red-50 border-red-200"
+                )}>
+                  <p className={cn("text-[10px] font-bold uppercase tracking-wider font-mono", trialActive ? "text-emerald-700" : "text-red-700")}>
+                    {trialActive ? "Free trial countdown" : "Free trial ended"}
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    {[
+                      { label: "Days", value: trialTime.days },
+                      { label: "Hours", value: trialTime.hours },
+                      { label: "Minutes", value: trialTime.minutes },
+                    ].map((item) => (
+                      <div key={item.label} className="bg-white/80 border border-white rounded-xl px-2 py-2 text-center shadow-xs">
+                        <p className="text-lg font-bold text-foreground font-mono leading-none">{String(item.value).padStart(2, "0")}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wide mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {trialActive ? "Premium trial access is revoked when this timer reaches zero." : "Your account remains on Free. Upgrade to unlock premium features again."}
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               {[
+                {
+                  key: "free",
+                  name: "Free Tier",
+                  price: "₦0/mo",
+                  desc: trialActive
+                    ? "14-day premium feature trial, storefront preview, product catalog setup, scan testing, and basic workspace access."
+                    : "Basic workspace access after trial. Premium storefront, API, webhooks, custom domain, and team features require an upgrade.",
+                  isContact: false
+                },
                 { 
                   key: "basic", 
                   name: "Basic Plan", 
@@ -2143,7 +2199,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     </div>
                     {isActive ? (
                       <span className="w-full text-center py-1.5 text-[10px] bg-green-50 text-green-700 font-bold rounded-lg border border-green-200">
-                        Active Plan
+                        Current plan
+                      </span>
+                    ) : p.key === "free" ? (
+                      <span className="w-full text-center py-1.5 text-[10px] bg-secondary text-muted-foreground font-bold rounded-lg border border-border">
+                        Included
                       </span>
                     ) : p.isContact ? (
                       <a
