@@ -41,7 +41,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [isVerified, setIsVerified] = useState(false);
   const [vendorPlan, setVendorPlan] = useState<VendorPlan>("free");
   const [trialActive, setTrialActive] = useState(true);
-  const [trialDaysRemaining, setTrialDaysRemaining] = useState(14);
   const [trialEndsAt, setTrialEndsAt] = useState<Date | null>(null);
   const [trialMsRemaining, setTrialMsRemaining] = useState(14 * 24 * 60 * 60 * 1000);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
@@ -112,7 +111,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
   const planRank: Record<VendorPlan, number> = { free: 0, basic: 1, premium: 2, brand: 3 };
   const hasFeatureAccess = (required: Exclude<VendorPlan, "free">) => trialActive || planRank[vendorPlan] >= planRank[required];
-  const featureBadgeText = trialActive ? `Trial active · ${trialDaysRemaining} day${trialDaysRemaining === 1 ? "" : "s"} left` : "Feature Active";
   const apiDocsKey = apiKey || `${apiKeyPrefix || "ak_live_new_key"} (generate a key to copy the full token)`;
   const apiBaseUrl = `${import.meta.env.VITE_SUPABASE_URL || "https://ejpdrcbgqelxlopivwld.supabase.co"}/functions/v1/vendor-api`;
   const isValidWebhookUrl = (value: string) => {
@@ -134,6 +132,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     hours: Math.max(0, Math.floor((trialMsRemaining / (1000 * 60 * 60)) % 24)),
     minutes: Math.max(0, Math.floor((trialMsRemaining / (1000 * 60)) % 60)),
   };
+  const trialCountdownLabel = `${trialTime.days}D ${trialTime.hours}H LEFT`;
+  const featureBadgeText = trialActive ? `Trial active · ${trialCountdownLabel}` : "Feature Active";
 
   useEffect(() => {
     if (sessionStorage.getItem("show_welcome") === "true") {
@@ -262,10 +262,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           const trialEndDate = new Date(createdDate.getTime() + 14 * 24 * 60 * 60 * 1000);
           const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
           const planVal = (profile.plan || "free") as VendorPlan;
-          const freeTrialDaysRemaining = Math.max(0, Math.ceil(14 - daysDiff));
           setTrialEndsAt(trialEndDate);
           setTrialMsRemaining(Math.max(0, trialEndDate.getTime() - Date.now()));
-          setTrialDaysRemaining(freeTrialDaysRemaining);
           setTrialActive(planVal === "free" && daysDiff <= 14);
           if (planVal === "free" && daysDiff > 14) {
             setTrialExpired(true);
@@ -864,7 +862,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             {/* Plan badge */}
             <div className="flex flex-wrap gap-1.5 mt-2">
               <span className="text-[9px] uppercase font-mono font-bold bg-[#008236]/10 text-[#008236] px-2 py-0.5 border border-[#008236]/20 rounded-full">
-                {trialActive ? `FREE TRIAL · ${trialDaysRemaining}D LEFT` : vendorPlan === "free" ? "FREE PLAN" : `${vendorPlan.toUpperCase()} PLAN`}
+                {trialActive ? `FREE TRIAL · ${trialCountdownLabel}` : vendorPlan === "free" ? "FREE PLAN" : `${vendorPlan.toUpperCase()} PLAN`}
               </span>
               <span className={cn(
                 "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-0.5",
