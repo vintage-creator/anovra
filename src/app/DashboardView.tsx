@@ -422,7 +422,15 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     setTimeout(() => setCopied(null), 2000);
   }
 
-  const saveSettings = async (updates: { custom_domain?: string; white_label?: boolean; webhook_url?: string; business_name?: string }) => {
+  const saveSettings = async (updates: {
+    custom_domain?: string;
+    white_label?: boolean;
+    webhook_url?: string;
+    business_name?: string;
+    tagline?: string;
+    location?: string;
+    since?: string;
+  }) => {
     if (teamRole !== "Vendor") {
       const msg = teamRole === "Viewer" 
         ? "Viewer role is read-only. You cannot save settings."
@@ -1680,8 +1688,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <button
                     onClick={async () => {
                       setIsSavingStore(true);
-                      // 1. Update public profiles table business_name
-                      await saveSettings({ business_name: brandName });
+                      // 1. Update public profiles table business_name, tagline, location, since
+                      await saveSettings({
+                        business_name: brandName,
+                        tagline,
+                        location,
+                        since
+                      });
                       // 2. Update auth user metadata business_name, tagline, location, since
                       await saveStoreSettings({
                         business_name: brandName,

@@ -117,9 +117,9 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           query = query.eq("vendor_id", targetProfile.id);
           
           const joinedYear = targetProfile.created_at ? new Date(targetProfile.created_at).getFullYear() : 2023;
-          let taglineVal = "Science-backed skincare for African skin";
-          let locationVal = "Lagos, Nigeria";
-          let sinceVal = String(joinedYear);
+          let taglineVal = targetProfile.tagline || "Science-backed skincare for African skin";
+          let locationVal = targetProfile.location || "Lagos, Nigeria";
+          let sinceVal = targetProfile.since || String(joinedYear);
           
           if (user && user.id === targetProfile.id && user.user_metadata) {
             if (user.user_metadata.tagline) taglineVal = user.user_metadata.tagline;

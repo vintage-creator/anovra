@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   custom_domain TEXT,
   white_label BOOLEAN DEFAULT false,
   webhook_url TEXT,
+  tagline TEXT,
+  location TEXT,
+  since TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
