@@ -123,6 +123,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   };
   const normalizeDomain = (value: string) => value.trim().replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
   const isValidDomain = (value: string) => /^(?!-)([a-z0-9-]{1,63}\.)+[a-z]{2,}$/i.test(normalizeDomain(value));
+  const domainParts = normalizeDomain(customDomain).split(".").filter(Boolean);
+  const isApexDomain = domainParts.length === 2;
+  const dnsHostName = isApexDomain ? "@" : domainParts.slice(0, -2).join(".") || "skin";
+  const suggestedSubdomain = isApexDomain ? `skin.${normalizeDomain(customDomain)}` : normalizeDomain(customDomain);
 
   useEffect(() => {
     if (sessionStorage.getItem("show_welcome") === "true") {
@@ -595,8 +599,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       await saveSettings({ custom_domain: domain });
       setDomainSaved(true);
       setDomainStatus(data.status === "verified" ? "verified" : "pending");
-      setDomainMessage(data.message || "Domain saved.");
-      toast.success(data.status === "verified" ? "Domain verified and saved." : "Domain saved. DNS setup is still pending.");
+      setDomainMessage(data.message || "Domain checked.");
+      toast.success(data.status === "verified" ? "Domain verified and saved." : "Domain is valid. DNS setup is still pending.");
     } catch (err: any) {
       setDomainStatus("pending");
       setDomainMessage(err.message || "Could not verify DNS yet. Save the DNS records below and check again.");
@@ -1992,7 +1996,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
-                        {domainStatus === "checking" ? "Checking..." : domainSaved ? "Checked ✓" : "Check setup"}
+                        {domainStatus === "checking" ? "Checking..." : domainStatus === "verified" ? "Verified ✓" : domainStatus === "pending" ? "Needs DNS setup" : "Check setup"}
                       </button>
                     </div>
                   </div>
@@ -2003,6 +2007,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       domainStatus === "invalid" ? "bg-red-50 border-red-200 text-red-700" :
                       "bg-amber-50 border-amber-200 text-amber-800"
                     )} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      <strong className="block mb-1">
+                        {domainStatus === "verified" ? "Domain verified" : domainStatus === "invalid" ? "Invalid domain" : "Valid domain, DNS setup needed"}
+                      </strong>
                       {domainMessage}
                     </div>
                   )}
@@ -2010,14 +2017,22 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     <div className="bg-slate-50 dark:bg-slate-900/60 border border-border rounded-xl p-4.5 space-y-3.5">
                       <div>
                         <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>DNS setup instructions</p>
-                        <p className="text-[10.5px] text-muted-foreground mt-1 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Add one of these records at your domain registrar, then click Check setup again after DNS propagates.</p>
+                        <p className="text-[10.5px] text-muted-foreground mt-1 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          Go to the website where you bought your domain, open DNS settings, add one record below, save it, then return here and click Check setup again.
+                        </p>
                       </div>
+
+                      {isApexDomain && (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          For easiest setup, use a subdomain like <strong className="font-mono">{suggestedSubdomain}</strong>. If you want to use <strong className="font-mono">{normalizeDomain(customDomain)}</strong> directly, use the A record option below.
+                        </div>
+                      )}
 
                       <div className="space-y-3">
                         {/* Option 1: CNAME */}
-                        <div className="border border-border/60 rounded-lg bg-background p-3">
+                        <div className={cn("border border-border/60 rounded-lg bg-background p-3", isApexDomain && "opacity-70")}>
                           <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-[9.5px] font-bold text-[#008236] bg-[#008236]/10 px-2 py-0.5 rounded font-mono">OPTION 1: CNAME (Recommended)</span>
+                            <span className="text-[9.5px] font-bold text-[#008236] bg-[#008236]/10 px-2 py-0.5 rounded font-mono">{isApexDomain ? "OPTION 1: CNAME FOR SUBDOMAIN" : "OPTION 1: CNAME (Recommended)"}</span>
                           </div>
                           <div className="grid grid-cols-3 gap-2 text-[10.5px] font-mono mt-2 pt-2 border-t border-border/30">
                             <div>
@@ -2026,13 +2041,18 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                             </div>
                             <div>
                               <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Host/Name</span>
-                              <strong>{customDomain.split('.')[0] || "skin"}</strong>
+                              <strong>{isApexDomain ? "skin" : dnsHostName}</strong>
                             </div>
                             <div>
                               <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Target/Value</span>
                               <strong className="break-all">anovra.africa</strong>
                             </div>
                           </div>
+                          {isApexDomain && (
+                            <p className="text-[10.5px] text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              This creates <strong className="font-mono">{suggestedSubdomain}</strong>. Update the field above to that subdomain before checking again.
+                            </p>
+                          )}
                         </div>
 
                         {/* Option 2: A Record */}
@@ -2047,7 +2067,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                             </div>
                             <div>
                               <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Host/Name</span>
-                              <strong>{customDomain.split('.')[0] || "skin"}</strong>
+                              <strong>{dnsHostName}</strong>
                             </div>
                             <div>
                               <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Target/Value</span>

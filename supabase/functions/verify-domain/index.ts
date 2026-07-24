@@ -21,6 +21,17 @@ function normalizeDomain(value: string) {
     .toLowerCase();
 }
 
+function getRecordHost(domain: string) {
+  const parts = domain.split(".");
+  return parts.length <= 2 ? "@" : parts.slice(0, -2).join(".");
+}
+
+function getRecommendedDomain(domain: string) {
+  const parts = domain.split(".");
+  if (parts.length <= 2) return `skin.${domain}`;
+  return domain;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -54,10 +65,11 @@ serve(async (req) => {
     return json({
       status: "pending",
       domain: normalized,
-      message: "DNS is not pointing to Anovra yet. Add the recommended record and check again after propagation.",
+      message: "Domain format is valid, but DNS is not pointing to Anovra yet.",
       expected: {
-        cname: { type: "CNAME", host: normalized.split(".")[0], value: "anovra.africa" },
-        a: { type: "A", host: normalized.split(".")[0], value: "198.54.115.240" },
+        cname: { type: "CNAME", host: getRecordHost(normalized), value: "anovra.africa" },
+        a: { type: "A", host: getRecordHost(normalized), value: "198.54.115.240" },
+        recommended_domain: getRecommendedDomain(normalized),
       },
     });
   } catch (error: any) {
