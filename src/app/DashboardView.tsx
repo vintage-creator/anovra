@@ -797,10 +797,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     { id: "overview", label: "Overview", icon: Activity },
     { id: "catalog", label: "Product Catalog", icon: Package },
     { id: "analytics", label: "Analytics", icon: TrendingUp },
-    { id: "settings", label: "Settings", icon: Settings },
     { id: "team", label: "Team", icon: Users },
     { id: "api", label: "API & Dev", icon: Key },
     { id: "support", label: "Support", icon: LifeBuoy },
+    { id: "settings", label: "Settings", icon: Settings },
   ];
 
   return (
