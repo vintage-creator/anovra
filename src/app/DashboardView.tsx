@@ -34,6 +34,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [brandName, setBrandName] = useState("");
   const [customDomain, setCustomDomain] = useState("");
   const [domainSaved, setDomainSaved] = useState(false);
+  const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "pending" | "invalid">("idle");
+  const [domainMessage, setDomainMessage] = useState("");
 
   // Vendor plan & verification state
   const [isVerified, setIsVerified] = useState(false);
@@ -110,6 +112,16 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const featureBadgeText = trialActive ? `Trial active · ${trialDaysRemaining} day${trialDaysRemaining === 1 ? "" : "s"} left` : "Feature Active";
   const apiDocsKey = apiKey || `${apiKeyPrefix || "ak_live_new_key"} (generate a key to copy the full token)`;
   const apiBaseUrl = `${import.meta.env.VITE_SUPABASE_URL || "https://ejpdrcbgqelxlopivwld.supabase.co"}/functions/v1/vendor-api`;
+  const isValidWebhookUrl = (value: string) => {
+    try {
+      const url = new URL(value);
+      return ["http:", "https:"].includes(url.protocol);
+    } catch {
+      return false;
+    }
+  };
+  const normalizeDomain = (value: string) => value.trim().replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
+  const isValidDomain = (value: string) => /^(?!-)([a-z0-9-]{1,63}\.)+[a-z]{2,}$/i.test(normalizeDomain(value));
 
   useEffect(() => {
     if (sessionStorage.getItem("show_welcome") === "true") {
@@ -230,7 +242,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           }
           if (profile.webhook_url) {
             setWebhookUrl(profile.webhook_url);
-            setWebhookSaved(true);
+            setWebhookSaved(isValidWebhookUrl(profile.webhook_url));
           }
 
           // Enforce 14-day trial check
@@ -553,6 +565,41 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       toast.error(err.message || "Could not send onboarding request.");
     } finally {
       setIsSubmittingOnboarding(false);
+    }
+  };
+
+  const checkAndSaveCustomDomain = async () => {
+    if (!hasFeatureAccess("brand")) {
+      setUpgradeTargetFeature("Custom domain mapping");
+      setUpgradeTargetPlan("brand");
+      setShowPremiumModal(true);
+      toast.warning("Custom domain setup is a Brand plan feature. Upgrade to unlock.");
+      return;
+    }
+    const domain = normalizeDomain(customDomain);
+    if (!isValidDomain(domain)) {
+      setDomainStatus("invalid");
+      setDomainMessage("Enter a valid domain such as skin.yourbrand.com.");
+      toast.error("Enter a valid custom domain.");
+      return;
+    }
+    setCustomDomain(domain);
+    setDomainStatus("checking");
+    setDomainMessage("Checking DNS records...");
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-domain", {
+        body: { domain },
+      });
+      if (error) throw error;
+      await saveSettings({ custom_domain: domain });
+      setDomainSaved(true);
+      setDomainStatus(data.status === "verified" ? "verified" : "pending");
+      setDomainMessage(data.message || "Domain saved.");
+      toast.success(data.status === "verified" ? "Domain verified and saved." : "Domain saved. DNS setup is still pending.");
+    } catch (err: any) {
+      setDomainStatus("pending");
+      setDomainMessage(err.message || "Could not verify DNS yet. Save the DNS records below and check again.");
+      toast.error("Could not verify domain DNS yet.");
     }
   };
 
@@ -1879,35 +1926,36 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     <div className="flex flex-col sm:flex-row gap-2">
                       <input
                         value={customDomain}
-                        onChange={(e) => { setCustomDomain(e.target.value); setDomainSaved(false); }}
+                        onChange={(e) => { setCustomDomain(e.target.value); setDomainSaved(false); setDomainStatus("idle"); setDomainMessage(""); }}
                         placeholder="skin.yourbrand.com"
                         className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] transition-colors"
                         style={{ fontFamily: "'DM Mono', monospace" }}
                       />
                       <button
-                        onClick={async () => {
-                          if (!hasFeatureAccess("brand")) {
-                            setUpgradeTargetFeature("Custom domain mapping");
-                            setUpgradeTargetPlan("brand");
-                            setShowPremiumModal(true);
-                            toast.warning("Custom domain setup is a Brand plan feature. Upgrade to unlock!");
-                            return;
-                          }
-                          setDomainSaved(true);
-                          await saveSettings({ custom_domain: customDomain });
-                        }}
+                        onClick={checkAndSaveCustomDomain}
+                        disabled={domainStatus === "checking"}
                         className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
-                        {domainSaved ? "Saved ✓" : "Save"}
+                        {domainStatus === "checking" ? "Checking..." : domainSaved ? "Checked ✓" : "Check setup"}
                       </button>
                     </div>
                   </div>
+                  {domainMessage && (
+                    <div className={cn(
+                      "border rounded-lg p-3 text-xs leading-relaxed",
+                      domainStatus === "verified" ? "bg-green-50 border-green-200 text-green-800" :
+                      domainStatus === "invalid" ? "bg-red-50 border-red-200 text-red-700" :
+                      "bg-amber-50 border-amber-200 text-amber-800"
+                    )} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {domainMessage}
+                    </div>
+                  )}
                   {domainSaved && customDomain && (
                     <div className="bg-slate-50 dark:bg-slate-900/60 border border-border rounded-xl p-4.5 space-y-3.5">
                       <div>
-                        <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>DNS Configuration Required</p>
-                        <p className="text-[10.5px] text-muted-foreground mt-1 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>To activate your custom domain, log in to your domain registrar (e.g. GoDaddy, Namecheap) and create one of the following records:</p>
+                        <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>DNS setup instructions</p>
+                        <p className="text-[10.5px] text-muted-foreground mt-1 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Add one of these records at your domain registrar, then click Check setup again after DNS propagates.</p>
                       </div>
 
                       <div className="space-y-3">
@@ -2138,7 +2186,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                               }
                             });
                           } catch (e) {
-                            console.error("Failed to trigger edge function for invitation email:", e);
+                            console.error("Failed to send invitation email:", e);
                           }
 
                           setShowInvite(false);
@@ -2232,7 +2280,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         <Key className="w-3.5 h-3.5" /> {isGeneratingApiKey ? "Generating..." : apiKeyPrefix ? "Rotate API key" : "Generate API key"}
                       </button>
                       <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        API keys are generated by Anovra's edge function and stored as hashes. The full key is shown only once after generation.
+                        Keep this key private. For security, the full key is shown only once after generation.
                       </p>
                     </div>
                   ) : (
@@ -2302,8 +2350,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         />
                         <button
                           onClick={async () => {
-                            setWebhookSaved(true);
+                            if (!isValidWebhookUrl(webhookUrl)) {
+                              setWebhookSaved(false);
+                              toast.error("Enter a valid webhook URL starting with https:// or http://.");
+                              return;
+                            }
                             await saveSettings({ webhook_url: webhookUrl });
+                            setWebhookSaved(true);
                           }}
                           className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
                           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -2311,11 +2364,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                           {webhookSaved ? "Saved ✓" : "Save"}
                         </button>
                       </div>
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                        <p className="text-xs text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          Webhook delivery is active after the dispatcher edge function is deployed. Delivery attempts are logged for admin review.
-                        </p>
-                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Enter a live HTTPS endpoint. Anovra will send event payloads to this URL and track delivery attempts for support.
+                      </p>
                     </div>
                   ) : (
                     <div className="bg-muted/30 border border-dashed border-border rounded-lg p-4 text-center space-y-3">
