@@ -44,6 +44,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [upgradeTargetFeature, setUpgradeTargetFeature] = useState<string | null>(null);
   const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<"basic" | "premium" | "brand" | null>(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [isSubmittingOnboarding, setIsSubmittingOnboarding] = useState(false);
+  const [onboardingArea, setOnboardingArea] = useState("Catalog setup");
+  const [onboardingContact, setOnboardingContact] = useState("Email");
+  const [onboardingPreferredTime, setOnboardingPreferredTime] = useState("");
+  const [onboardingUrgency, setOnboardingUrgency] = useState("Normal");
+  const [onboardingNotes, setOnboardingNotes] = useState("");
   const [showApiDocs, setShowApiDocs] = useState(false);
   const [showRoleSimModal, setShowRoleSimModal] = useState(false);
   const [simulatedRoleInfo, setSimulatedRoleInfo] = useState<"Vendor" | "Manager" | "Viewer">("Vendor");
@@ -509,23 +516,43 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   };
 
   const requestOnboardingSession = async () => {
+    if (!onboardingNotes.trim()) {
+      toast.error("Please add a short note so Anovra knows what to prepare for.");
+      return;
+    }
+    setIsSubmittingOnboarding(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Please sign in first.");
+      const requestDetails = {
+        area: onboardingArea,
+        preferred_contact: onboardingContact,
+        preferred_time: onboardingPreferredTime || "Not specified",
+        urgency: onboardingUrgency,
+        notes: onboardingNotes.trim(),
+        brand: brandName || "Unnamed brand",
+        vendor_email: user.email,
+      };
       const { error } = await supabase.from("onboarding_requests").insert([{
         vendor_id: user.id,
         requested_by: user.id,
         request_type: "brand_onboarding",
-        notes: "Vendor requested dedicated onboarding from the dashboard.",
+        notes: JSON.stringify(requestDetails),
       }]);
       if (error) throw error;
       await sendEmailNotification("admin_onboarding_request", {
-        message: `${brandName || user.email || "A vendor"} requested dedicated onboarding.`,
-        metadata: { vendor_id: user.id, brand: brandName, email: user.email },
+        message: `${brandName || user.email || "A vendor"} requested onboarding help with ${onboardingArea}.`,
+        metadata: { vendor_id: user.id, ...requestDetails },
       });
+      setShowOnboardingModal(false);
+      setOnboardingPreferredTime("");
+      setOnboardingUrgency("Normal");
+      setOnboardingNotes("");
       toast.success("Onboarding request sent. Anovra will follow up.");
     } catch (err: any) {
       toast.error(err.message || "Could not send onboarding request.");
+    } finally {
+      setIsSubmittingOnboarding(false);
     }
   };
 
@@ -2464,7 +2491,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               </div>
               {hasFeatureAccess("brand") ? (
                 <button 
-                  onClick={requestOnboardingSession}
+                  onClick={() => setShowOnboardingModal(true)}
                   className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-emerald-600 hover:text-emerald-700 font-bold transition-colors mt-2 bg-transparent border-0 outline-none cursor-pointer" 
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
@@ -2633,6 +2660,114 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 Close Documentation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showOnboardingModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-card rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-border shadow-2xl relative max-h-[92vh] overflow-y-auto">
+            <button
+              onClick={() => setShowOnboardingModal(false)}
+              className="absolute top-5 right-5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors p-1.5 hover:bg-secondary rounded-full"
+              aria-label="Close onboarding request"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3.5 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600">
+                <LifeBuoy className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-light text-foreground leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Request onboarding support
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Tell Anovra what your team needs help with before we follow up.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide font-mono">Area</span>
+                <select
+                  value={onboardingArea}
+                  onChange={(e) => setOnboardingArea(e.target.value)}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#008236]"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {["Catalog setup", "Custom domain", "Team training", "API and webhooks", "Launch QA", "Billing", "Other"].map((area) => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide font-mono">Contact method</span>
+                <select
+                  value={onboardingContact}
+                  onChange={(e) => setOnboardingContact(e.target.value)}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#008236]"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {["Email", "WhatsApp", "Phone call"].map((method) => (
+                    <option key={method} value={method}>{method}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide font-mono">Preferred time</span>
+                <input
+                  value={onboardingPreferredTime}
+                  onChange={(e) => setOnboardingPreferredTime(e.target.value)}
+                  placeholder="e.g. Tuesday, 11am WAT"
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236]"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide font-mono">Urgency</span>
+                <select
+                  value={onboardingUrgency}
+                  onChange={(e) => setOnboardingUrgency(e.target.value)}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#008236]"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {["Normal", "Urgent launch blocker"].map((urgency) => (
+                    <option key={urgency} value={urgency}>{urgency}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="block mt-4 space-y-1.5">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide font-mono">What do you need help with?</span>
+              <textarea
+                value={onboardingNotes}
+                onChange={(e) => setOnboardingNotes(e.target.value)}
+                rows={5}
+                placeholder="Share the setup goal, blocker, or launch support you want Anovra to prepare for."
+                className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] resize-none"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              />
+            </label>
+
+            <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border pt-5">
+              <p className="text-xs text-muted-foreground leading-relaxed max-w-md" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                This creates an onboarding request and emails Anovra admin with the details.
+              </p>
+              <button
+                onClick={requestOnboardingSession}
+                disabled={isSubmittingOnboarding}
+                className="inline-flex items-center justify-center gap-1.5 px-5 py-3 bg-[#008236] text-white rounded-xl text-xs font-bold hover:bg-[#006c2c] disabled:opacity-60 transition-colors"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {isSubmittingOnboarding ? "Sending..." : "Send request"}
               </button>
             </div>
           </div>
