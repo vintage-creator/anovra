@@ -7,7 +7,7 @@ import {
   Package, TrendingUp, Scan, Activity, Eye, Store, ExternalLink,
   Globe, Copy, Check, MessageCircle, Shield, Key, Users, Zap,
   ChevronRight, AlertTriangle, RefreshCw, CheckCircle, Lock, Plus,
-  LifeBuoy, BookOpen, Webhook, ArrowRight, Settings, Menu, X, LogOut
+  LifeBuoy, BookOpen, Webhook, ArrowRight, Settings, Menu, X, LogOut, Pencil, Save
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -76,6 +76,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [since, setSince] = useState("");
   const [isSavingStore, setIsSavingStore] = useState(false);
   const [storeSaved, setStoreSaved] = useState(false);
+  const [isEditingStorefront, setIsEditingStorefront] = useState(false);
 
   const shopSlug = (brandName || "your-brand").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "your-brand";
   const shopLink = `https://anovra.africa/#/shop/${shopSlug}`;
@@ -759,6 +760,26 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       console.error("Failed to update store settings:", err);
       toast.error("Failed to save storefront settings.");
     }
+  };
+
+  const saveStorefrontProfile = async () => {
+    setIsSavingStore(true);
+    await saveSettings({
+      business_name: brandName,
+      tagline,
+      location,
+      since
+    });
+    await saveStoreSettings({
+      business_name: brandName,
+      tagline,
+      location,
+      since
+    });
+    setIsSavingStore(false);
+    setIsEditingStorefront(false);
+    setStoreSaved(true);
+    setTimeout(() => setStoreSaved(false), 2000);
   };
 
   const handleSignOut = async () => {
@@ -1825,9 +1846,41 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               {/* Storefront Customization */}
               <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
                 <div>
-                  <div className="px-5 py-4 border-b border-border">
-                    <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Storefront Customization</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Customize your storefront preview tagline, location, and metadata details.</p>
+                  <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Storefront Customization</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Customize your storefront preview tagline, location, and metadata details.</p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!isEditingStorefront) {
+                          setStoreSaved(false);
+                          setIsEditingStorefront(true);
+                          return;
+                        }
+                        await saveStorefrontProfile();
+                      }}
+                      disabled={isSavingStore}
+                      className={cn(
+                        "inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors shrink-0",
+                        isEditingStorefront
+                          ? "bg-[#008236] text-white hover:bg-[#006c2c] disabled:opacity-60"
+                          : "bg-secondary text-foreground border border-border hover:border-[#008236]/40 hover:text-[#008236]"
+                      )}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      {isEditingStorefront ? (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          {isSavingStore ? "Saving..." : storeSaved ? "Saved" : "Save Changes"}
+                        </>
+                      ) : (
+                        <>
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit
+                        </>
+                      )}
+                    </button>
                   </div>
                   <div className="p-5 space-y-4">
                     <div>
@@ -1835,8 +1888,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <input
                         value={brandName}
                         onChange={(e) => setBrandName(e.target.value)}
+                        readOnly={!isEditingStorefront}
                         placeholder="e.g. Vintage"
-                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
+                        className={cn(
+                          "w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors",
+                          isEditingStorefront
+                            ? "bg-background border-border text-foreground focus:border-[#008236]"
+                            : "bg-muted/30 border-border/50 text-muted-foreground cursor-default"
+                        )}
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       />
                     </div>
@@ -1845,8 +1904,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <input
                         value={tagline}
                         onChange={(e) => setTagline(e.target.value)}
+                        readOnly={!isEditingStorefront}
                         placeholder="e.g. Science-backed skincare for African skin"
-                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
+                        className={cn(
+                          "w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors",
+                          isEditingStorefront
+                            ? "bg-background border-border text-foreground focus:border-[#008236]"
+                            : "bg-muted/30 border-border/50 text-muted-foreground cursor-default"
+                        )}
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       />
                     </div>
@@ -1856,8 +1921,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         <input
                           value={location}
                           onChange={(e) => setLocation(e.target.value)}
+                          readOnly={!isEditingStorefront}
                           placeholder="e.g. Lagos, Nigeria"
-                          className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
+                          className={cn(
+                            "w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors",
+                            isEditingStorefront
+                              ? "bg-background border-border text-foreground focus:border-[#008236]"
+                              : "bg-muted/30 border-border/50 text-muted-foreground cursor-default"
+                          )}
                           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                         />
                       </div>
@@ -1867,43 +1938,27 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                           type="number"
                           value={since}
                           onChange={(e) => setSince(e.target.value)}
+                          readOnly={!isEditingStorefront}
                           placeholder="e.g. 2023"
-                          className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
+                          className={cn(
+                            "w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors",
+                            isEditingStorefront
+                              ? "bg-background border-border text-foreground focus:border-[#008236]"
+                              : "bg-muted/30 border-border/50 text-muted-foreground cursor-default"
+                          )}
                           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                         />
                       </div>
                     </div>
                   </div>
                 </div>
-                {/* Footer Save Button */}
-                <div className="px-5 py-3.5 bg-muted/30 border-t border-border flex justify-end">
-                  <button
-                    onClick={async () => {
-                      setIsSavingStore(true);
-                      // 1. Update public profiles table business_name, tagline, location, since
-                      await saveSettings({
-                        business_name: brandName,
-                        tagline,
-                        location,
-                        since
-                      });
-                      // 2. Update auth user metadata business_name, tagline, location, since
-                      await saveStoreSettings({
-                        business_name: brandName,
-                        tagline,
-                        location,
-                        since
-                      });
-                      setIsSavingStore(false);
-                      setStoreSaved(true);
-                      setTimeout(() => setStoreSaved(false), 2000);
-                    }}
-                    className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
-                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  >
-                    {isSavingStore ? "Saving..." : storeSaved ? "Changes Saved ✓" : "Save Changes"}
-                  </button>
-                </div>
+                {storeSaved && !isEditingStorefront && (
+                  <div className="px-5 py-3 bg-green-50 dark:bg-green-950/30 border-t border-green-100 dark:border-green-900/40">
+                    <p className="text-xs text-green-700 dark:text-green-300 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      Storefront details saved.
+                    </p>
+                  </div>
+                )}
               </div>
 
             </div>
