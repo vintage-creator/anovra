@@ -8,6 +8,7 @@ import {
 import type { View } from "./types";
 import { cn } from "./types";
 import { supabase } from "./utils/supabase";
+import { dispatchVendorWebhook, sendEmailNotification } from "./utils/notifications";
 import { toast } from "sonner";
 
 // ---- SKIN TEST DATA ----
@@ -149,6 +150,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const [vendorProfile, setVendorProfile] = useState<any | null>(null);
   const [matchedProducts, setMatchedProducts] = useState<MatchedProduct[]>([]);
   const [matchingProducts, setMatchingProducts] = useState(false);
+  const [trialExpired, setTrialExpired] = useState(false);
 
   // Gemini scan state
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -200,31 +202,60 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
   useEffect(() => {
     const slug = activeScanSlug;
-    if (slug) {
-      sessionStorage.setItem("active_scan_slug", slug);
+    const hostname = window.location.hostname;
+    const isSystemDomain = [
+      "anovra.africa",
+      "www.anovra.africa",
+      "localhost",
+      "127.0.0.1"
+    ].includes(hostname) || 
+    hostname.endsWith(".local") || 
+    hostname.includes("webcontainer") || 
+    hostname.includes("stackblitz");
+
+    if (slug || !isSystemDomain) {
+      if (slug) {
+        sessionStorage.setItem("active_scan_slug", slug);
+      }
       const fetchVendor = async () => {
         try {
-          const { data, error } = await supabase
-            .from("profiles")
-            .select("id, name, business_name, white_label, plan, phone")
-            .ilike("business_name", slug.replace(/-/g, " "))
-            .maybeSingle();
+          let query = supabase.from("profiles").select("id, name, business_name, white_label, plan, phone, created_at");
+          
+          if (!isSystemDomain) {
+            query = query.eq("custom_domain", hostname);
+          } else {
+            query = query.ilike("business_name", slug.replace(/-/g, " "));
+          }
+
+          const { data, error } = await query.maybeSingle();
             
           if (error && error.message.includes("white_label")) {
             // Fallback: Query base columns only if settings columns do not exist
-            const { data: baseData } = await supabase
-              .from("profiles")
-              .select("id, name, business_name, plan, phone")
-              .ilike("business_name", slug.replace(/-/g, " "))
-              .maybeSingle();
+            let fallbackQuery = supabase.from("profiles").select("id, name, business_name, plan, phone, created_at");
+            if (!isSystemDomain) {
+              fallbackQuery = fallbackQuery.eq("custom_domain", hostname);
+            } else {
+              fallbackQuery = fallbackQuery.ilike("business_name", slug.replace(/-/g, " "));
+            }
+            const { data: baseData } = await fallbackQuery.maybeSingle();
             if (baseData) {
               setVendorProfile({
                 ...baseData,
                 white_label: false
               });
+              const joinedYear = baseData.created_at ? new Date(baseData.created_at) : new Date();
+              const daysDiff = (Date.now() - joinedYear.getTime()) / (1000 * 60 * 60 * 24);
+              if ((baseData.plan || "free") === "free" && daysDiff > 14) {
+                setTrialExpired(true);
+              }
             }
           } else if (data) {
             setVendorProfile(data);
+            const joinedYear = data.created_at ? new Date(data.created_at) : new Date();
+            const daysDiff = (Date.now() - joinedYear.getTime()) / (1000 * 60 * 60 * 24);
+            if ((data.plan || "free") === "free" && daysDiff > 14) {
+              setTrialExpired(true);
+            }
           }
         } catch (e) {
           console.error("Failed to fetch white-label status:", e);
@@ -419,13 +450,27 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
         if (user) {
           try {
             const vendorId = vendorProfile?.id || null;
-            await supabase.from("scans").insert([{
+            const { data: scanRow } = await supabase.from("scans").insert([{
               customer_id: user.id,
               vendor_id: vendorId,
               concern: resultData.concern,
               result: resultData.result,
               city: filters.city || "Lagos"
-            }]);
+            }]).select().maybeSingle();
+            await dispatchVendorWebhook(vendorId, "scan.completed", {
+              scan_id: scanRow?.id,
+              concern: resultData.concern,
+              result: resultData.result,
+              skin_area: selectedArea || "Face",
+              city: filters.city || "Lagos",
+            });
+            if (user.email) {
+              await sendEmailNotification("customer_scan_completed", {
+                name: user.user_metadata?.full_name || "there",
+                email: user.email,
+                link: "https://anovra.africa/#/userdashboard",
+              });
+            }
           } catch (dbErr) {
             console.warn("Could not insert scan into database history:", dbErr);
           }
@@ -485,6 +530,31 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     const categoryOk = !filters.category || product.category === filters.category;
     return vendorOk && categoryOk;
   });
+
+  if (trialExpired) {
+    return (
+      <div className="min-h-screen bg-[#FAF7F2] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mb-5 border border-amber-500/20">
+          <Lock className="w-8 h-8 text-amber-600 animate-pulse" />
+        </div>
+        <h2 className="text-2xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+          Diagnostic Tool Locked
+        </h2>
+        <p className="text-sm text-muted-foreground max-w-sm mb-6 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          The trial period for this partner's website diagnostic widget has ended. Please upgrade the subscription plan to reactivate this tool.
+        </p>
+        {setView && (
+          <button
+            onClick={() => setView("landing")}
+            className="px-5 py-2.5 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors cursor-pointer shadow-xs"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            Go back home
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

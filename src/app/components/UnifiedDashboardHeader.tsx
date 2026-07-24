@@ -32,7 +32,7 @@ export function UnifiedDashboardHeader({
   onToggleVerify,
 }: UnifiedDashboardHeaderProps) {
   const [copied, setCopied] = useState(false);
-  const [brandSlug, setBrandSlug] = useState("my-brand");
+  const [brandSlug, setBrandSlug] = useState("your-brand");
 
   useEffect(() => {
     const fetchUserSlug = async () => {

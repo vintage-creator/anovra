@@ -41,7 +41,7 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
             <img src="/logo.png" alt="Anovra Logo" className="h-12 sm:h-14 md:h-16 w-auto object-contain" />
           </button>
           <h1 className="text-3xl font-light text-foreground mb-1.5" style={{ fontFamily: "'Fraunces', serif" }}>
-            Anovra Admin
+            Admin Portal
           </h1>
           <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Restricted access — authorised personnel only

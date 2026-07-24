@@ -541,7 +541,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
         "SLA support",
         "Dedicated onboarding",
       ],
-      cta: "Contact sales",
+      cta: "Start 14-day free trial",
       highlight: false,
     },
   ];

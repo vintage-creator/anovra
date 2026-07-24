@@ -3,6 +3,7 @@ import { Eye, Check, CheckCircle, AlertCircle, Globe, Upload, ChevronDown, Scan,
 import type { View } from "./types";
 import { toast } from "sonner";
 import { supabase } from "./utils/supabase";
+import { sendEmailNotification } from "./utils/notifications";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -191,6 +192,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
         options: {
           data: {
             full_name: form.fullName,
+            email: form.email,
             role: selectedRole,
             cac_number: selectedRole === "vendor" ? form.cac : null,
             cac_document_url: selectedRole === "vendor" ? documentUrl : null,
@@ -207,8 +209,20 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
       // 3. Trigger onboarding email Edge Function for vendors
       if (selectedRole === "vendor") {
         try {
-          await supabase.functions.invoke("send-onboarding-email", {
-            body: { name: form.fullName, email: form.email },
+          await sendEmailNotification("vendor_signup_trial_started", {
+            name: form.fullName,
+            email: form.email,
+            brand: form.businessName,
+          });
+          await sendEmailNotification("admin_cac_submitted", {
+            message: `${form.businessName || form.fullName} created a vendor account and submitted onboarding compliance details.`,
+            metadata: {
+              name: form.fullName,
+              email: form.email,
+              business_name: form.businessName,
+              cac_document_url: form.cacDoc || null,
+              nafdac_number: form.referralCode || null,
+            },
           });
         } catch (emailErr) {
           console.warn("Failed to dispatch onboarding email:", emailErr);
@@ -248,7 +262,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
               Vendor Registration
             </p>
             <h1 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Join Anovra
+              Join the Platform
             </h1>
             <p className="text-muted-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Already have an account?{" "}
@@ -1045,7 +1059,7 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
               Welcome back
             </h1>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Sign in to access your Anovra account
+              Sign in to access your account
             </p>
           </div>
         </div>

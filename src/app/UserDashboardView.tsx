@@ -134,7 +134,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             return {
               id: s.id.substring(0, 8).toUpperCase(),
               date: dateStr,
-              vendor: "Anovra Brand",
+              vendor: s.vendor_name || s.vendor_brand || "Recorded scan",
               concerns: [s.concern],
               skinType: s.result || "Normal",
               score: Math.max(50, 78 - (idx * 6)),
@@ -308,6 +308,10 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
 
   const latestAnalysis = analysesList[0] || null;
   const plan = userProfile?.plan || "glow";
+  const routineSteps = routineList;
+  const familyProfiles = familyMembers;
+  const discounts: any[] = [];
+  const earlyAccessFeatures: any[] = [];
 
   const tabs: { id: UserTab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -435,19 +439,21 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-muted rounded-xl p-1 w-full sm:w-fit overflow-x-auto scrollbar-none">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-all cursor-pointer ${tab === t.id ? "bg-card shadow-sm text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <div className="grid lg:grid-cols-[240px_1fr] gap-6 items-start">
+          <aside className="bg-card border border-border rounded-xl p-2 sticky top-24">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all cursor-pointer ${tab === t.id ? "bg-accent text-white shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </aside>
+
+          <main className="min-w-0">
 
       {/* ── OVERVIEW ── */}
       {tab === "overview" && (
@@ -716,9 +722,24 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
 
             <div className="border-t border-border pt-4 grid sm:grid-cols-3 gap-4">
               {[
-                { label: "Current score", value: "72 / 100", delta: "↑ 7 from last month", good: true },
-                { label: "Best score", value: "72 / 100", delta: "Reached this month", good: true },
-                { label: "Trend", value: "Improving", delta: "+21 pts over 7 months", good: true },
+                {
+                  label: "Current score",
+                  value: latestAnalysis ? `${latestAnalysis.score} / 100` : "—",
+                  delta: analysesList.length > 1 ? "Compared with previous scan" : "Run more scans to build trend data",
+                  good: true
+                },
+                {
+                  label: "Best score",
+                  value: analysesList.length ? `${Math.max(...analysesList.map((a) => a.score))} / 100` : "—",
+                  delta: analysesList.length ? "From your scan history" : "No scan history yet",
+                  good: true
+                },
+                {
+                  label: "Trend",
+                  value: analysesList.length > 1 ? (analysesList[0].score >= analysesList[1].score ? "Improving" : "Monitor") : "Not enough data",
+                  delta: analysesList.length > 1 ? `${analysesList[0].score - analysesList[1].score} pts vs previous scan` : "At least 2 scans required",
+                  good: analysesList.length <= 1 || analysesList[0].score >= analysesList[1].score
+                },
               ].map((s) => (
                 <div key={s.label} className="bg-muted/50 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.label}</p>
@@ -739,7 +760,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Personalized skincare routine</h2>
               <PlanBadge required="premium" current={plan} />
             </div>
-            <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Built for Combination skin · Hyperpigmentation · Lagos climate.</p>
+              <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {latestAnalysis ? `Built from your latest ${latestAnalysis.concerns.join(", ")} analysis.` : "Run a skin test to generate a routine."}
+              </p>
           </div>
           <div className="relative">
             {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
@@ -837,7 +860,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Discounts from Anovra partner vendors, available only to Premium Glow subscribers.</p>
             <div className="relative space-y-3">
               {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
-              {discounts.map((d) => (
+              {discounts.length > 0 ? discounts.map((d) => (
                 <div key={d.code} className={cn("bg-card border rounded-xl p-4 flex items-center gap-4", d.used ? "opacity-50" : "border-border")}>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-0.5">
@@ -856,7 +879,11 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                     )}
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
+                  No live vendor discounts are available yet.
+                </div>
+              )}
             </div>
           </div>
 
@@ -868,13 +895,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
             <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>You get first access to new Anovra AI features before they go public.</p>
             <div className="relative space-y-3">
-              {plan !== "premium" && <LockedOverlay label="Premium Glow" />}
-              {[
-                { name: "AI Skin Camera (Beta)", desc: "Live skin analysis via your phone camera — no photos required.", status: "Live for you", active: true },
-                { name: "Seasonal Routine Adjustments", desc: "AI adapts your routine for harmattan, rainy season, and humidity changes.", status: "Live for you", active: true },
-                { name: "Ingredient Conflict Checker", desc: "Upload your full skincare shelf and detect harmful combinations.", status: "Coming soon", active: false },
-                { name: "African Dermatologist Network", desc: "In-app referrals to verified dermatologists across major Nigerian cities.", status: "Q3 2026", active: false },
-              ].map((f) => (
+              {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
+              {earlyAccessFeatures.length > 0 ? earlyAccessFeatures.map((f) => (
                 <div key={f.name} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
                   <div className={`w-2 h-2 rounded-full flex-shrink-0 ${f.active ? "bg-green-500" : "bg-muted-foreground"}`} />
                   <div className="flex-1">
@@ -885,7 +907,11 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                     {f.status}
                   </span>
                 </div>
-              ))}
+              )) : (
+                <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
+                  No early-access releases are assigned to this account yet.
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -986,6 +1012,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
         </div>
       )}
+          </main>
+        </div>
           </>
         )}
       </div>

@@ -13,11 +13,13 @@ import type { View } from "./types";
 import { cn } from "./types";
 import { CatalogView } from "./CatalogView";
 import { supabase } from "./utils/supabase";
+import { sendEmailNotification } from "./utils/notifications";
 import { toast } from "sonner";
 
 // ---- DASHBOARD TAB TYPES ----
 
 type DashTab = "overview" | "catalog" | "analytics" | "settings" | "team" | "api" | "support";
+type VendorPlan = "free" | "basic" | "premium" | "brand";
 
 export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [tab, setTab] = useState<DashTab>(() => (sessionStorage.getItem("active_vendor_tab") as DashTab) || "overview");
@@ -29,13 +31,15 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [analyticsRange, setAnalyticsRange] = useState<"7d" | "30d" | "90d">("7d");
   const [copied, setCopied] = useState<string | null>(null);
   const [whiteLabelEnabled, setWhiteLabelEnabled] = useState(false);
-  const [brandName, setBrandName] = useState("Vintage");
+  const [brandName, setBrandName] = useState("");
   const [customDomain, setCustomDomain] = useState("");
   const [domainSaved, setDomainSaved] = useState(false);
 
   // Vendor plan & verification state
   const [isVerified, setIsVerified] = useState(false);
-  const [vendorPlan, setVendorPlan] = useState<"free" | "basic" | "premium">("free");
+  const [vendorPlan, setVendorPlan] = useState<VendorPlan>("free");
+  const [trialActive, setTrialActive] = useState(true);
+  const [trialDaysRemaining, setTrialDaysRemaining] = useState(14);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [upgradeTargetFeature, setUpgradeTargetFeature] = useState<string | null>(null);
   const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<"basic" | "premium" | "brand" | null>(null);
@@ -51,21 +55,23 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("Manager");
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const [apiKeyPrefix, setApiKeyPrefix] = useState("");
+  const [isGeneratingApiKey, setIsGeneratingApiKey] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [totalVisits, setTotalVisits] = useState(0);
   const [totalScans, setTotalScans] = useState(0);
   const [totalPurchases, setTotalPurchases] = useState(0);
   const [webhookSaved, setWebhookSaved] = useState(false);
-  const [tagline, setTagline] = useState("Science-backed skincare for African skin");
-  const [location, setLocation] = useState("Lagos, Nigeria");
-  const [since, setSince] = useState("2023");
+  const [tagline, setTagline] = useState("");
+  const [location, setLocation] = useState("");
+  const [since, setSince] = useState("");
   const [isSavingStore, setIsSavingStore] = useState(false);
   const [storeSaved, setStoreSaved] = useState(false);
 
-  const shopSlug = brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "my-brand";
+  const shopSlug = (brandName || "your-brand").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "your-brand";
   const shopLink = `https://anovra.africa/#/shop/${shopSlug}`;
   const testLink = `https://anovra.africa/#/scan/${shopSlug}`;
-  const [apiKey, setApiKey] = useState("sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c");
+  const [apiKey, setApiKey] = useState("");
 
   const [liveScans, setLiveScans] = useState<any[]>([]);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -92,6 +98,12 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     { label: "Made a purchase", count: 0, pct: 0, color: "bg-[#008236]" },
   ]);
 
+  const planRank: Record<VendorPlan, number> = { free: 0, basic: 1, premium: 2, brand: 3 };
+  const hasFeatureAccess = (required: Exclude<VendorPlan, "free">) => trialActive || planRank[vendorPlan] >= planRank[required];
+  const featureBadgeText = trialActive ? `Trial active · ${trialDaysRemaining} day${trialDaysRemaining === 1 ? "" : "s"} left` : "Feature Active";
+  const apiDocsKey = apiKey || `${apiKeyPrefix || "ak_live_new_key"} (generate a key to copy the full token)`;
+  const apiBaseUrl = `${import.meta.env.VITE_SUPABASE_URL || "https://ejpdrcbgqelxlopivwld.supabase.co"}/functions/v1/vendor-api`;
+
   useEffect(() => {
     if (sessionStorage.getItem("show_welcome") === "true") {
       setShowWelcomeModal(true);
@@ -106,7 +118,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           setView("signin");
           return;
         }
-        setApiKey(`sk_live_${user.id.replace(/-/g, "").substring(0, 16)}`);
+        const { data: keyRows } = await supabase
+          .from("vendor_api_keys")
+          .select("key_prefix, created_at")
+          .eq("vendor_id", user.id)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (keyRows?.[0]?.key_prefix) setApiKeyPrefix(keyRows[0].key_prefix);
         const normalizeName = (value?: string | null) => (value || "").trim().toLowerCase();
         const personalName = normalizeName(user.user_metadata?.full_name || user.user_metadata?.name);
         const isPlaceholderBusinessName = (value?: string | null) => {
@@ -115,8 +134,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         };
         if (user.user_metadata) {
           const rawBiz = user.user_metadata.business_name;
-          const initialBrandName = isPlaceholderBusinessName(rawBiz) ? "Vintage" : rawBiz;
-          setBrandName(initialBrandName);
+          const initialBrandName = isPlaceholderBusinessName(rawBiz) ? "" : rawBiz;
+          setBrandName(initialBrandName || "");
           if (user.user_metadata.tagline) setTagline(user.user_metadata.tagline);
           if (user.user_metadata.location) setLocation(user.user_metadata.location);
           if (user.user_metadata.since) setSince(user.user_metadata.since);
@@ -128,7 +147,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         try {
           const { data, error } = await supabase
             .from("profiles")
-            .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url")
+            .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url, tagline, location, since")
             .eq("id", user.id)
             .maybeSingle();
           if (error) {
@@ -167,7 +186,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             const { data } = await supabase
               .from("profiles")
               .insert([fallbackProfile])
-              .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url")
+              .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url, tagline, location, since")
               .maybeSingle();
             insertedData = data;
           } catch (e) {
@@ -188,10 +207,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           setIsVerified(profile.is_verified);
           setVendorPlan(profile.plan as any);
           if (isPlaceholderBusinessName(profile.business_name)) {
-            setBrandName("Vintage");
+            setBrandName("");
           } else {
-            setBrandName(profile.business_name);
+            setBrandName(profile.business_name || "");
           }
+          if (profile.tagline) setTagline(profile.tagline);
+          if (profile.location) setLocation(profile.location);
+          if (profile.since) setSince(profile.since);
           if (profile.custom_domain) {
             setCustomDomain(profile.custom_domain);
             setDomainSaved(true);
@@ -207,21 +229,46 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           // Enforce 14-day trial check
           const createdDate = user.created_at ? new Date(user.created_at) : new Date();
           const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
-          const planVal = profile.plan || "free";
+          const planVal = (profile.plan || "free") as VendorPlan;
+          const freeTrialDaysRemaining = Math.max(0, Math.ceil(14 - daysDiff));
+          setTrialDaysRemaining(freeTrialDaysRemaining);
+          setTrialActive(planVal === "free" && daysDiff <= 14);
           if (planVal === "free" && daysDiff > 14) {
             setTrialExpired(true);
+          } else {
+            setTrialExpired(false);
           }
 
           // Populate team members list with the actual logged-in vendor admin
+          const ownerMember = {
+            name: profile.name || user.user_metadata?.full_name || "Vendor",
+            email: user.email || "",
+            role: "Vendor",
+            status: "active",
+            joined: "Joined"
+          };
           setTeamMembers([
-            {
-              name: profile.name || user.user_metadata?.full_name || "Vendor",
-              email: user.email || "",
-              role: "Vendor",
-              status: "active",
-              joined: "Joined"
-            }
+            ownerMember
           ]);
+
+          const { data: savedTeamMembers } = await supabase
+            .from("team_members")
+            .select("name, email, role, status, created_at")
+            .eq("vendor_id", user.id)
+            .order("created_at", { ascending: false });
+
+          if (savedTeamMembers && savedTeamMembers.length > 0) {
+            setTeamMembers([
+              ownerMember,
+              ...savedTeamMembers.map((m) => ({
+                name: m.name || m.email,
+                email: m.email,
+                role: m.role,
+                status: m.status,
+                joined: m.created_at ? new Date(m.created_at).toLocaleDateString("en-GB") : "—"
+              }))
+            ]);
+          }
         }
 
         // 2. Fetch products list
@@ -339,31 +386,42 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         };
       });
       setLiveScans(formatted);
+    } else {
+      setLiveScans([]);
     }
 
-    // 2. Weekly Analytics
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    const weeklyDistribution = days.map((day, index) => {
-      const scansOnDay = filteredScans.filter(s => {
-        const d = new Date(s.created_at).getDay();
-        const jsDayIndex = d === 0 ? 6 : d - 1;
-        return jsDayIndex === index;
+    // 2. Range analytics buckets
+    const bucketCount = analyticsRange === "7d" ? 7 : analyticsRange === "30d" ? 6 : 6;
+    const bucketSize = Math.ceil(rangeDays / bucketCount);
+    const rangeDistribution = Array.from({ length: bucketCount }, (_, index) => {
+      const bucketStart = new Date(cutoffDate);
+      bucketStart.setDate(cutoffDate.getDate() + index * bucketSize);
+      bucketStart.setHours(0, 0, 0, 0);
+      const bucketEnd = new Date(bucketStart);
+      bucketEnd.setDate(bucketStart.getDate() + bucketSize);
+      const isLastBucket = index === bucketCount - 1;
+      const label = analyticsRange === "7d"
+        ? bucketStart.toLocaleDateString("en-US", { weekday: "short" })
+        : `${bucketStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+
+      const scansInBucket = filteredScans.filter((s) => {
+        const createdAt = new Date(s.created_at);
+        return createdAt >= bucketStart && (isLastBucket ? createdAt <= new Date() : createdAt < bucketEnd);
       }).length;
 
-      const cartOnDay = filteredCartItems.filter(c => {
-        const d = new Date(c.created_at).getDay();
-        const jsDayIndex = d === 0 ? 6 : d - 1;
-        return jsDayIndex === index;
+      const cartInBucket = filteredCartItems.filter((c) => {
+        const createdAt = new Date(c.created_at);
+        return createdAt >= bucketStart && (isLastBucket ? createdAt <= new Date() : createdAt < bucketEnd);
       }).length;
 
       return {
-        day,
-        visits: Math.round(scansOnDay * 1.3),
-        analyses: scansOnDay,
-        purchases: cartOnDay
+        day: label,
+        visits: Math.round(scansInBucket * 1.3),
+        analyses: scansInBucket,
+        purchases: cartInBucket
       };
     });
-    setLiveAnalytics(weeklyDistribution);
+    setLiveAnalytics(rangeDistribution);
 
     // 3. Funnel Steps
     const totalVisitsVal = Math.round(numScans * 1.3);
@@ -417,10 +475,59 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   }, [analyticsRange, allProducts, allScans, allCartItems]);
 
   function copy(text: string, key: string) {
+    if (!text) {
+      toast.info("Generate a new API key first. Existing keys cannot be revealed again.");
+      return;
+    }
     navigator.clipboard.writeText(text);
     setCopied(key);
     setTimeout(() => setCopied(null), 2000);
   }
+
+  const generateApiKey = async () => {
+    if (!hasFeatureAccess("brand")) {
+      setUpgradeTargetFeature("Developer REST API Access");
+      setUpgradeTargetPlan("brand");
+      setShowPremiumModal(true);
+      return;
+    }
+    setIsGeneratingApiKey(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-api-key", {
+        body: { action: "create", name: "Live API key" },
+      });
+      if (error) throw error;
+      setApiKey(data.key);
+      setApiKeyPrefix(data.key_prefix);
+      setApiKeyVisible(true);
+      toast.success("API key generated. Copy it now; it will only be shown once.");
+    } catch (err: any) {
+      toast.error(err.message || "Could not generate API key.");
+    } finally {
+      setIsGeneratingApiKey(false);
+    }
+  };
+
+  const requestOnboardingSession = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Please sign in first.");
+      const { error } = await supabase.from("onboarding_requests").insert([{
+        vendor_id: user.id,
+        requested_by: user.id,
+        request_type: "brand_onboarding",
+        notes: "Vendor requested dedicated onboarding from the dashboard.",
+      }]);
+      if (error) throw error;
+      await sendEmailNotification("admin_onboarding_request", {
+        message: `${brandName || user.email || "A vendor"} requested dedicated onboarding.`,
+        metadata: { vendor_id: user.id, brand: brandName, email: user.email },
+      });
+      toast.success("Onboarding request sent. Anovra will follow up.");
+    } catch (err: any) {
+      toast.error(err.message || "Could not send onboarding request.");
+    }
+  };
 
   const saveSettings = async (updates: {
     custom_domain?: string;
@@ -457,7 +564,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     }
   };
 
-  const payWithPaystack = async (planKey: "basic" | "premium") => {
+  const payWithPaystack = async (planKey: "basic" | "premium" | "brand") => {
     if (teamRole !== "Vendor") {
       toast.error("Only the Brand Owner can manage plan subscriptions and billing.");
       return;
@@ -473,6 +580,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       const prices = {
         basic: 12500,
         premium: 25000,
+        brand: 75000,
       };
       const amount = prices[planKey] * 100; // in kobo
 
@@ -519,6 +627,16 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   console.warn("Payment was successful but could not be recorded for admin analytics:", paymentError.message);
                   toast.warning("Subscription updated. Admin payment tracking needs a schema update.");
                 }
+                await sendEmailNotification("payment_success_receipt", {
+                  name: user.user_metadata?.full_name || brandName || "Partner",
+                  email: user.email,
+                  plan: planKey.toUpperCase(),
+                  amount: `₦${prices[planKey].toLocaleString()}`,
+                });
+                await sendEmailNotification("admin_payment_success", {
+                  message: `New ${planKey.toUpperCase()} subscription payment received.`,
+                  metadata: { vendor_id: user.id, email: user.email, amount: prices[planKey], reference: response?.reference || response?.trxref },
+                });
                 setVendorPlan(planKey);
                 toast.success(`Subscription successfully updated to ${planKey.toUpperCase()} plan!`);
               }
@@ -526,6 +644,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         },
         onClose: function() {
           toast.error("Transaction cancelled.");
+          sendEmailNotification("admin_payment_failed", {
+            message: "A vendor closed or failed to complete Paystack checkout.",
+            metadata: { vendor_id: user.id, email: user.email, plan: planKey, amount: prices[planKey] },
+          });
         }
       });
 
@@ -564,13 +686,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       toast.error("Failed to save storefront settings.");
     }
   };
-
-  const stats = [
-    { label: "Tests this month", value: "2,847", delta: "+18% vs last month", icon: <Scan className="w-4 h-4" /> },
-    { label: "Products in catalog", value: "24", delta: "1 flagged for review", icon: <Package className="w-4 h-4" />, warn: true },
-    { label: "Product link clicks", value: "1,204", delta: "+31% vs last month", icon: <TrendingUp className="w-4 h-4" /> },
-    { label: "Top concern detected", value: "Hyperpig.", delta: "29.7% of all scans", icon: <Activity className="w-4 h-4" /> },
-  ];
 
   const handleSignOut = async () => {
     try {
@@ -627,12 +742,12 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           {/* Brand Profile Pane */}
           <div className="p-5 border-b border-border bg-[#FAF7F2]/45">
             <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>ACTIVE PARTNER</p>
-            <h4 className="font-bold text-foreground text-sm leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{brandName}</h4>
+            <h4 className="font-bold text-foreground text-sm leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{brandName || "Store profile not named"}</h4>
             
             {/* Plan badge */}
             <div className="flex flex-wrap gap-1.5 mt-2">
               <span className="text-[9px] uppercase font-mono font-bold bg-[#008236]/10 text-[#008236] px-2 py-0.5 border border-[#008236]/20 rounded-full">
-                {vendorPlan === "free" ? "FREE TRIAL" : `${vendorPlan.toUpperCase()} PLAN`}
+                {trialActive ? `FREE TRIAL · ${trialDaysRemaining}D LEFT` : vendorPlan === "free" ? "FREE PLAN" : `${vendorPlan.toUpperCase()} PLAN`}
               </span>
               <span className={cn(
                 "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-0.5",
@@ -685,7 +800,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
             <div className="mt-3.5 bg-card border border-border/80 rounded-lg p-2 flex items-center justify-between gap-1.5 shadow-2xs">
               <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[130px]" title={shopLink}>
-                {brandName.toLowerCase().replace(/[^a-z0-9]/g, "-")}.anovra.africa
+                {shopSlug}.anovra.africa
               </span>
               <button
                 onClick={() => {
@@ -991,12 +1106,12 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
           {/* Embed widget / Code Snippet Section */}
           <div className="bg-card border border-border rounded-2xl p-6 shadow-xs relative overflow-hidden">
-            {(vendorPlan === "premium" || vendorPlan === "brand") ? (
+            {hasFeatureAccess("premium") ? (
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold text-foreground text-sm uppercase tracking-wider animate-fade-in" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Website Embed Widget</h3>
                   <span className="text-[10px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1.5">
-                    <Check className="w-3 h-3 text-emerald-600" /> Feature Active
+                    <Check className="w-3 h-3 text-emerald-600" /> {featureBadgeText}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mb-5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -1045,7 +1160,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     {embedPlatform === "html" && (
                       <pre className="text-gray-300">
                         <span className="text-cyan-400">&lt;script</span><br />
-                        {"  "}<span className="text-amber-400">src</span>=<span className="text-emerald-400">"https://cdn.anovra.africa/skin-widget.js"</span><br />
+                        {"  "}<span className="text-amber-400">src</span>=<span className="text-emerald-400">"https://anovra.africa/skin-widget.js"</span><br />
                         {"  "}<span className="text-amber-400">data-vendor</span>=<span className="text-emerald-400">"{shopSlug}"</span><br />
                         {"  "}<span className="text-amber-400">async</span><span className="text-cyan-400">&gt;</span><br />
                         <span className="text-cyan-400">&lt;/script&gt;</span>
@@ -1055,7 +1170,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <pre className="text-gray-300">
                         <span className="text-slate-500 font-medium font-sans">{`{% comment %} Paste inside layout/theme.liquid before </body> {% endcomment %}`}</span><br />
                         <span className="text-cyan-400">&lt;script</span><br />
-                        {"  "}<span className="text-amber-400">src</span>=<span className="text-emerald-400">"https://cdn.anovra.africa/skin-widget.js"</span><br />
+                        {"  "}<span className="text-amber-400">src</span>=<span className="text-emerald-400">"https://anovra.africa/skin-widget.js"</span><br />
                         {"  "}<span className="text-amber-400">data-vendor</span>=<span className="text-emerald-400">"{shopSlug}"</span><br />
                         {"  "}<span className="text-amber-400">async</span><span className="text-cyan-400">&gt;</span><br />
                         <span className="text-cyan-400">&lt;/script&gt;</span>
@@ -1065,7 +1180,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <pre className="text-gray-300">
                         <span className="text-slate-500 font-medium font-sans">{`// Add at the bottom of active theme's functions.php`}</span><br />
                         <span className="text-purple-400">add_action</span>(<span className="text-emerald-400">'wp_footer'</span>, <span className="text-blue-400">function</span>() &#123;<br />
-                        {"    "}<span className="text-blue-400">echo</span> <span className="text-emerald-400">{`'<script src="https://cdn.anovra.africa/skin-widget.js" data-vendor="${shopSlug}" async></script>'`}</span>;<br />
+                        {"    "}<span className="text-blue-400">echo</span> <span className="text-emerald-400">{`'<script src="https://anovra.africa/skin-widget.js" data-vendor="${shopSlug}" async></script>'`}</span>;<br />
                         &#125;);
                       </pre>
                     )}
@@ -1075,10 +1190,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 <button
                   onClick={() => {
                     const code = embedPlatform === "html"
-                      ? `<script\n  src="https://cdn.anovra.africa/skin-widget.js"\n  data-vendor="${shopSlug}"\n  async>\n</script>`
+                      ? `<script\n  src="https://anovra.africa/skin-widget.js"\n  data-vendor="${shopSlug}"\n  async>\n</script>`
                       : embedPlatform === "shopify"
-                      ? `{% comment %} Paste inside layout/theme.liquid before </body> {% endcomment %}\n<script\n  src="https://cdn.anovra.africa/skin-widget.js"\n  data-vendor="${shopSlug}"\n  async>\n</script>`
-                      : `// Add at the bottom of active theme's functions.php\nadd_action('wp_footer', function() {\n    echo '<script src="https://cdn.anovra.africa/skin-widget.js" data-vendor="${shopSlug}" async></script>';\n});`;
+                      ? `{% comment %} Paste inside layout/theme.liquid before </body> {% endcomment %}\n<script\n  src="https://anovra.africa/skin-widget.js"\n  data-vendor="${shopSlug}"\n  async>\n</script>`
+                      : `// Add at the bottom of active theme's functions.php\nadd_action('wp_footer', function() {\n    echo '<script src="https://anovra.africa/skin-widget.js" data-vendor="${shopSlug}" async></script>';\n});`;
                     copy(code, "embed");
                   }}
                   className="flex items-center gap-1.5 text-xs px-4 py-2 bg-background border border-border rounded-lg hover:bg-secondary hover:border-accent/40 transition-colors cursor-pointer"
@@ -1332,18 +1447,21 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Dedicated onboarding guide</li>
                   </ul>
                 </div>
-                <a
-                  href="mailto:sales@anovra.africa?subject=Anovra Brand Tier Inquiry"
+                <button
+                  onClick={() => {
+                    setShowPremiumModal(false);
+                    payWithPaystack("brand");
+                  }}
                   className={cn(
-                    "w-full text-center py-2.5 rounded-xl font-bold text-xs transition-colors decoration-none block",
+                    "w-full py-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer",
                     upgradeTargetPlan === "brand"
                       ? "bg-amber-500 hover:bg-amber-600 text-white shadow-xs"
-                      : "bg-secondary hover:bg-muted text-foreground"
+                      : "bg-[#008236] text-white hover:bg-[#006c2c] shadow-xs"
                   )}
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
-                  Contact Sales
-                </a>
+                  Subscribe Brand
+                </button>
               </div>
             </div>
           </div>
@@ -1410,10 +1528,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             {/* Individual Analytics Cards */}
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-b border-border bg-muted/5">
               {[
-                { label: "Link visits", value: totalVisits.toLocaleString(), delta: "+15%", deltaUp: true, sub: "Unique visitors clicked shop link", icon: <ExternalLink className="w-4 h-4" /> },
-                { label: "Skin tests run", value: totalScans.toLocaleString(), delta: "+10%", deltaUp: true, sub: `${totalVisits > 0 ? Math.round((totalScans / totalVisits) * 100) : 0}% of visitors took skin test`, icon: <Scan className="w-4 h-4" /> },
-                { label: "Purchases made", value: totalPurchases.toLocaleString(), delta: "+25%", deltaUp: true, sub: "Orders via matched recommendations", icon: <TrendingUp className="w-4 h-4" /> },
-                { label: "Conversion rate", value: totalVisits > 0 ? ((totalPurchases / totalVisits) * 100).toFixed(1) + "%" : "0.0%", delta: "+1.2pp", deltaUp: true, sub: "Visits resulting in purchases", icon: <Activity className="w-4 h-4" /> },
+                { label: "Link visits", value: totalVisits.toLocaleString(), delta: "Live", deltaUp: true, sub: "Estimated from recorded scan starts", icon: <ExternalLink className="w-4 h-4" /> },
+                { label: "Skin tests run", value: totalScans.toLocaleString(), delta: "Live", deltaUp: true, sub: `${totalVisits > 0 ? Math.round((totalScans / totalVisits) * 100) : 0}% of visitors took skin test`, icon: <Scan className="w-4 h-4" /> },
+                { label: "Purchases made", value: totalPurchases.toLocaleString(), delta: "Live", deltaUp: true, sub: "Orders via matched recommendations", icon: <TrendingUp className="w-4 h-4" /> },
+                { label: "Conversion rate", value: totalVisits > 0 ? ((totalPurchases / totalVisits) * 100).toFixed(1) + "%" : "0.0%", delta: "Live", deltaUp: true, sub: "Visits resulting in purchases", icon: <Activity className="w-4 h-4" /> },
               ].map((k, idx) => (
                 <div key={k.label} className="bg-background border border-border/80 rounded-xl p-4.5 hover:border-[#008236]/30 transition-all duration-200">
                   <div className="flex items-center justify-between mb-3 text-muted-foreground">
@@ -1431,7 +1549,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-2xl font-light text-foreground mb-1.5" style={{ fontFamily: "'Fraunces', serif" }}>{k.value}</p>
                   <div className="flex flex-col gap-1">
                     <span className={`text-[10px] w-fit font-bold font-mono px-1.5 py-0.5 rounded-full ${k.deltaUp ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
-                      {k.deltaUp ? "↑" : "↓"} {k.delta}
+                      {k.delta}
                     </span>
                     <span className="text-[10px] text-muted-foreground leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{k.sub}</span>
                   </div>
@@ -1592,7 +1710,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     </div>
                     <button
                       onClick={async () => {
-                        if (vendorPlan !== "premium" && vendorPlan !== "brand") {
+                        if (!hasFeatureAccess("premium")) {
                           setUpgradeTargetFeature("White-labeled results page");
                           setUpgradeTargetPlan("premium");
                           setShowPremiumModal(true);
@@ -1741,7 +1859,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       />
                       <button
                         onClick={async () => {
-                          if (vendorPlan !== "brand") {
+                          if (!hasFeatureAccess("brand")) {
                             setUpgradeTargetFeature("Custom domain mapping");
                             setUpgradeTargetPlan("brand");
                             setShowPremiumModal(true);
@@ -1759,9 +1877,55 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     </div>
                   </div>
                   {domainSaved && customDomain && (
-                    <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-                      <p className="text-xs text-amber-800 dark:text-amber-300 font-medium mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>DNS setup required</p>
-                      <p className="text-xs text-amber-800 dark:text-amber-300" style={{ fontFamily: "'DM Mono', monospace" }}>Add a CNAME record: <strong>{customDomain}</strong> → <strong>cname.anovra.africa</strong></p>
+                    <div className="bg-slate-50 dark:bg-slate-900/60 border border-border rounded-xl p-4.5 space-y-3.5">
+                      <div>
+                        <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>DNS Configuration Required</p>
+                        <p className="text-[10.5px] text-muted-foreground mt-1 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>To activate your custom domain, log in to your domain registrar (e.g. GoDaddy, Namecheap) and create one of the following records:</p>
+                      </div>
+
+                      <div className="space-y-3">
+                        {/* Option 1: CNAME */}
+                        <div className="border border-border/60 rounded-lg bg-background p-3">
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[9.5px] font-bold text-[#008236] bg-[#008236]/10 px-2 py-0.5 rounded font-mono">OPTION 1: CNAME (Recommended)</span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-[10.5px] font-mono mt-2 pt-2 border-t border-border/30">
+                            <div>
+                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Type</span>
+                              <strong>CNAME</strong>
+                            </div>
+                            <div>
+                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Host/Name</span>
+                              <strong>{customDomain.split('.')[0] || "skin"}</strong>
+                            </div>
+                            <div>
+                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Target/Value</span>
+                              <strong className="break-all">anovra.africa</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Option 2: A Record */}
+                        <div className="border border-border/60 rounded-lg bg-background p-3">
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[9.5px] font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded font-mono">OPTION 2: A RECORD (Alternative)</span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-[10.5px] font-mono mt-2 pt-2 border-t border-border/30">
+                            <div>
+                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Type</span>
+                              <strong>A</strong>
+                            </div>
+                            <div>
+                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Host/Name</span>
+                              <strong>{customDomain.split('.')[0] || "skin"}</strong>
+                            </div>
+                            <div>
+                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Target/Value</span>
+                              <strong>198.54.115.240</strong>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                   <div className="space-y-1.5 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -1816,7 +1980,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   name: "Brand Tier", 
                   price: "₦75,000/mo", 
                   desc: "Everything in Pro, plus REST API access, custom domain for test link, multi-user team accounts, SLA support, onboarding.",
-                  isContact: true
+                  isContact: false
                 },
               ].map((p) => {
                 const isActive = vendorPlan === p.key;
@@ -1925,6 +2089,18 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
                           // Dispatch invitation email securely via Supabase client invoke wrapper
                           try {
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (user) {
+                              await supabase
+                                .from("team_members")
+                                .upsert({
+                                  vendor_id: user.id,
+                                  name: mName,
+                                  email: inviteEmail,
+                                  role: inviteRole,
+                                  status: "invited",
+                                }, { onConflict: "vendor_id,email" });
+                            }
                             await supabase.functions.invoke("send-onboarding-email", {
                               body: {
                                 email: inviteEmail,
@@ -2006,20 +2182,31 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Use the Anovra API to pull scan results, product matches, and analytics into your own systems.</p>
                 </div>
                 <div className="p-5 space-y-4">
-                  {vendorPlan === "premium" ? (
-                    <div>
+                  {hasFeatureAccess("brand") ? (
+                    <div className="space-y-3">
                       <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide font-mono">Live API key</label>
                       <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2.5">
                         <p className="flex-1 text-sm font-mono text-foreground truncate">
-                          {apiKeyVisible ? apiKey : apiKey.slice(0, 12) + "•".repeat(28)}
+                          {apiKey ? (apiKeyVisible ? apiKey : apiKey.slice(0, 14) + "•".repeat(24)) : (apiKeyPrefix ? `${apiKeyPrefix} ${"•".repeat(20)}` : "No live key generated yet")}
                         </p>
-                        <button onClick={() => setApiKeyVisible((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {apiKey && <button onClick={() => setApiKeyVisible((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {apiKeyVisible ? "Hide" : "Reveal"}
-                        </button>
+                        </button>}
                         <button onClick={() => copy(apiKey, "api-key")} className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 transition-colors shrink-0 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {copied === "api-key" ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
                         </button>
                       </div>
+                      <button
+                        onClick={generateApiKey}
+                        disabled={isGeneratingApiKey}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#008236] text-white rounded-lg text-xs font-bold hover:bg-[#006c2c] disabled:opacity-60 transition-colors"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
+                        <Key className="w-3.5 h-3.5" /> {isGeneratingApiKey ? "Generating..." : apiKeyPrefix ? "Rotate API key" : "Generate API key"}
+                      </button>
+                      <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        API keys are generated by Anovra's edge function and stored as hashes. The full key is shown only once after generation.
+                      </p>
                     </div>
                   ) : (
                     <div className="bg-muted/30 border border-dashed border-border rounded-lg p-4 text-center space-y-3">
@@ -2041,7 +2228,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   )}
 
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Available REST Endpoints:</p>
+                    <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Available REST endpoints:</p>
                     {[
                       { method: "GET", path: "/v1/scans", desc: "Fetch recent skin test reports" },
                       { method: "POST", path: "/v1/recommendations", desc: "Trigger AI match engine" },
@@ -2075,8 +2262,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Get notified in real time when a customer completes a scan or makes a purchase.</p>
                 </div>
                 <div className="p-5 space-y-4">
-                  {vendorPlan !== "free" ? (
-                    <div>
+                  {hasFeatureAccess("basic") ? (
+                    <div className="space-y-3">
                       <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide font-mono">Webhook endpoint URL</label>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input
@@ -2096,6 +2283,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         >
                           {webhookSaved ? "Saved ✓" : "Save"}
                         </button>
+                      </div>
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p className="text-xs text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          Webhook delivery is active after the dispatcher edge function is deployed. Delivery attempts are logged for admin review.
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -2117,7 +2309,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Events sent to your endpoint:</p>
+                    <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Webhook event types:</p>
                     {["scan.completed", "purchase.created", "product.flagged", "catalog.updated"].map((e) => (
                       <div key={e} className="flex items-center gap-2 text-xs p-2 bg-muted/30 border border-border/60 rounded-lg">
                         <Webhook className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
@@ -2157,7 +2349,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         <p className="text-xs text-green-700 dark:text-green-400 font-semibold font-mono">+2349167664619</p>
                       </div>
                     </div>
-                    {(vendorPlan === "premium" || vendorPlan === "brand") ? (
+                    {hasFeatureAccess("premium") ? (
                       <a
                         href="https://wa.me/2349167664619?text=Hi%2C%20I%27m%20a%20Vendor%20Pro%20subscriber%20and%20need%20help%20with%20my%20Anovra%20account."
                         target="_blank"
@@ -2196,7 +2388,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>SLA support & guarantees</h3>
                     <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Brand</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Contractual uptime and support SLAs for enterprise-grade operations.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Preview enterprise support terms during trial. Contractual SLA activation starts on a paid Brand plan.
+                  </p>
                 </div>
                 <div className="p-5 space-y-3">
                   {[
@@ -2213,7 +2407,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <span className="text-xs sm:text-sm font-medium text-foreground font-mono shrink-0 ml-2">{s.value}</span>
                     </div>
                   ))}
-                  {vendorPlan !== "brand" && (
+                  {!hasFeatureAccess("brand") && (
                     <button
                       onClick={() => {
                         setUpgradeTargetFeature("Uptime SLA guarantees");
@@ -2227,6 +2421,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <Lock className="w-3 h-3 text-accent" /> Upgrade to Brand to activate SLA contract
                     </button>
                   )}
+                  {trialActive && hasFeatureAccess("brand") && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
+                      <p className="text-xs text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Trial access lets you preview SLA terms. The SLA contract becomes active only after upgrading to Brand.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2239,7 +2440,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Dedicated onboarding & launch support</h3>
                 <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Brand</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>A dedicated Anovra specialist will guide your team through setup and go-live.</p>
+              <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>A dedicated Anovra specialist can guide your team through setup and go-live.</p>
             </div>
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -2261,14 +2462,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
                 ))}
               </div>
-              {vendorPlan === "brand" ? (
-                <a 
-                  href="mailto:onboarding@anovra.africa?subject=Book%20Brand%20Onboarding%20Session&body=Hi%20Anovra%20team%2C%20we%20are%20ready%20to%20schedule%20our%20next%20onboarding%20milestone."
-                  className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-emerald-600 hover:text-emerald-700 font-bold transition-colors mt-2" 
+              {hasFeatureAccess("brand") ? (
+                <button 
+                  onClick={requestOnboardingSession}
+                  className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-emerald-600 hover:text-emerald-700 font-bold transition-colors mt-2 bg-transparent border-0 outline-none cursor-pointer" 
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
-                  <LifeBuoy className="w-4 h-4" /> Book next onboarding session →
-                </a>
+                  <LifeBuoy className="w-4 h-4" /> Request onboarding session →
+                </button>
               ) : (
                 <button
                   onClick={() => {
@@ -2334,7 +2535,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   All API requests must include your live secret token in the header of the request:
                 </p>
                 <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 select-all leading-normal">
-                  Authorization: Bearer sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c
+                  Authorization: Bearer {apiDocsKey}
                 </div>
               </div>
 
@@ -2349,8 +2550,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 </p>
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Example Request Payload (cURL):</p>
                 <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 select-all overflow-x-auto whitespace-pre">
-{`curl -X GET "https://api.anovra.africa/v1/scans" \\
-  -H "Authorization: Bearer sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c" \\
+{`curl -X GET "${apiBaseUrl}/scans" \\
+  -H "Authorization: Bearer ${apiDocsKey}" \\
   -H "Content-Type: application/json"`}
                 </div>
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Success Response JSON (200 OK):</p>
@@ -2382,8 +2583,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 </p>
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Example Request Payload (cURL):</p>
                 <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 select-all overflow-x-auto whitespace-pre">
-{`curl -X POST "https://api.anovra.africa/v1/recommendations" \\
-  -H "Authorization: Bearer sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c" \\
+{`curl -X POST "${apiBaseUrl}/recommendations" \\
+  -H "Authorization: Bearer ${apiDocsKey}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "skin_type": "oily",
@@ -2418,8 +2619,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 </p>
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Example Request Payload (cURL):</p>
                 <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 select-all overflow-x-auto whitespace-pre">
-{`curl -X GET "https://api.anovra.africa/v1/catalog" \\
-  -H "Authorization: Bearer sk_live_vsk_a9f2c84d1e3b7a0f5c2d9e6b4a1f8e3c" \\
+{`curl -X GET "${apiBaseUrl}/catalog" \\
+  -H "Authorization: Bearer ${apiDocsKey}" \\
   -H "Content-Type: application/json"`}
                 </div>
               </div>

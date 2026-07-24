@@ -171,7 +171,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                     className="text-base font-bold tracking-tight text-foreground text-left"
                     style={{ fontFamily: "'Fraunces', serif" }}
                   >
-                    Anovra Navigation
+                    Navigation
                   </SheetTitle>
                 </div>
               </SheetHeader>
@@ -258,6 +258,16 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
 
 export default function App() {
   const getViewFromHash = (): View => {
+    const isSystemDomain = [
+      "anovra.africa",
+      "www.anovra.africa",
+      "localhost",
+      "127.0.0.1"
+    ].includes(window.location.hostname) || 
+    window.location.hostname.endsWith(".local") || 
+    window.location.hostname.includes("webcontainer") || 
+    window.location.hostname.includes("stackblitz");
+
     // Client-side fallback redirect for direct non-hash URLs (handles server redirects/fallbacks)
     const path = window.location.pathname;
     if (path.startsWith("/shop/")) {
@@ -284,13 +294,24 @@ export default function App() {
       sessionStorage.setItem("active_scan_slug", slug);
       return "skintest";
     }
+    if (hash.startsWith("team/")) {
+      const slug = hash.replace("team/", "").split("?")[0];
+      sessionStorage.setItem("active_team_slug", slug);
+      return "teamlogin";
+    }
     const validViews: View[] = [
       "landing", "dashboard", "catalog", "skintest", "admin",
       "adminlogin", "shop", "signin", "signup", "customersignup", "forgotpassword",
       "resetpassword", "teamlogin", "teamdashboard", "about", "contact",
       "userdashboard"
     ];
-    return validViews.includes(hash as View) ? (hash as View) : "landing";
+    
+    if (validViews.includes(hash as View)) {
+      return hash as View;
+    }
+    
+    // If on a custom domain, default to storefront shop view instead of main Anovra landing page
+    return !isSystemDomain ? "shop" : "landing";
   };
 
   const [view, setViewState] = useState<View>(getViewFromHash);
@@ -379,6 +400,70 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const enforceRouteAccess = async () => {
+      const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard"];
+      if (!protectedViews.includes(view)) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please sign in to continue.");
+        setViewState(view === "teamdashboard" ? "teamlogin" : "signin");
+        window.location.hash = view === "teamdashboard" ? "#/teamlogin" : "#/signin";
+        return;
+      }
+
+      const role = user.user_metadata?.role;
+      const email = user.email?.toLowerCase();
+      const isAdmin = role === "admin" || email === "admin@anovra.africa" || email === "hello@anovra.africa";
+
+      if (view === "admin" && !isAdmin) {
+        toast.error("Admin access is required.");
+        const nextView = role === "vendor" ? "dashboard" : "userdashboard";
+        setViewState(nextView);
+        window.location.hash = `#/${nextView}`;
+        return;
+      }
+
+      if ((view === "dashboard" || view === "catalog") && role && role !== "vendor" && !isAdmin) {
+        toast.error("Vendor access is required.");
+        setViewState("userdashboard");
+        window.location.hash = "#/userdashboard";
+        return;
+      }
+
+      if (view === "userdashboard" && role === "vendor") {
+        setViewState("dashboard");
+        window.location.hash = "#/dashboard";
+        return;
+      }
+
+      if (view === "teamdashboard") {
+        const { data: membership } = await supabase
+          .from("team_members")
+          .select("id")
+          .eq("email", user.email)
+          .maybeSingle();
+        if (!membership && !isAdmin) {
+          toast.error("No team workspace is assigned to this account.");
+          setViewState("teamlogin");
+          window.location.hash = "#/teamlogin";
+        }
+      }
+    };
+    enforceRouteAccess();
+  }, [view]);
+
+  const isSystemDomain = [
+    "anovra.africa",
+    "www.anovra.africa",
+    "localhost",
+    "127.0.0.1"
+  ].includes(window.location.hostname) || 
+  window.location.hostname.endsWith(".local") || 
+  window.location.hostname.includes("webcontainer") || 
+  window.location.hostname.includes("stackblitz");
+
   const hideNav = [
     "skintest",
     "dashboard",
@@ -394,7 +479,7 @@ export default function App() {
     "adminlogin",
     "teamlogin",
     "teamdashboard",
-  ].includes(view);
+  ].includes(view) || !isSystemDomain;
 
   return (
     <div

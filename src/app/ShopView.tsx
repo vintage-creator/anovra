@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import {
   Star, ChevronRight, X, Check, CheckCircle, MessageCircle, ExternalLink,
-  Search, Store, Globe, MapPin, Shield, Zap, Lock, Package, Scan,
+  Search, Store, Globe, MapPin, Shield, Zap, Lock, Package, Scan, AlertCircle,
 } from "lucide-react";
 import type { View } from "./types";
 import { supabase } from "./utils/supabase";
+import { dispatchVendorWebhook, sendEmailNotification } from "./utils/notifications";
 import { toast } from "sonner";
 
 // ---- CATALOG PRODUCTS (shared data) ----
@@ -19,7 +20,7 @@ const titleFromSlug = (slug: string) =>
     .split("-")
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ") || "Vintage";
+    .join(" ") || "Storefront";
 
 const isPlaceholderName = (value?: string | null) =>
   !value || ["my brand", "israel abazie", "my skincare brand"].includes(value.trim().toLowerCase());
@@ -45,11 +46,11 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         const parsed = JSON.parse(snapshot);
         return {
           name: isPlaceholderName(parsed.name) ? titleFromSlug(activeSlug) : parsed.name,
-          tagline: parsed.tagline || "Science-backed skincare for African skin",
-          location: parsed.location || "Lagos, Nigeria",
-          rating: 4.8,
-          reviews: 312,
-          since: parsed.since || "2023",
+          tagline: parsed.tagline || "Personalized skincare recommendations from this vendor",
+          location: parsed.location || "Location not set",
+          rating: null,
+          reviews: 0,
+          since: parsed.since || "",
           is_verified: parsed.is_verified || false
         };
       } catch (e) {}
@@ -57,11 +58,11 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
 
     return {
       name: titleFromSlug(activeSlug),
-      tagline: "Science-backed skincare for African skin",
-      location: "Lagos, Nigeria",
-      rating: 4.8,
-      reviews: 312,
-      since: "2023",
+      tagline: "Personalized skincare recommendations from this vendor",
+      location: "Location not set",
+      rating: null,
+      reviews: 0,
+      since: "",
       is_verified: false
     };
   });
@@ -73,6 +74,11 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [activeImgIdx, setActiveImgIdx] = useState(0);
+  const [profileNotFound, setProfileNotFound] = useState(false);
+  const [vendorProfileId, setVendorProfileId] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
   const activeProducts = productsList.filter((p) => p.status === "active");
   const allConcerns = ["All", ...Array.from(new Set(activeProducts.flatMap((p) => p.concerns || [])))];
@@ -90,9 +96,22 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
       try {
         sessionStorage.setItem("active_shop_slug", activeSlug);
         
-        // 1. Fetch profiles to match by business name slug
+        const isSystemDomain = [
+          "anovra.africa",
+          "www.anovra.africa",
+          "localhost",
+          "127.0.0.1"
+        ].includes(window.location.hostname) || 
+        window.location.hostname.endsWith(".local") || 
+        window.location.hostname.includes("webcontainer") || 
+        window.location.hostname.includes("stackblitz");
+
+        // 1. Fetch profiles to match by business name slug or custom domain
         const { data: profiles } = await supabase.from("profiles").select("*");
         let targetProfile = profiles?.find((p) => {
+          if (!isSystemDomain && p.custom_domain === window.location.hostname) {
+            return true;
+          }
           const businessName = isPlaceholderName(p.business_name) ? "" : p.business_name || "";
           const fallbackName = isPlaceholderName(p.name) ? "" : p.name || "";
           return [businessName, fallbackName].some((name) => slugify(name) === activeSlug);
@@ -110,6 +129,14 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             targetProfile = loggedProfile;
           }
         }
+        if (!targetProfile) {
+          setProfileNotFound(true);
+          setVendorProfileId(null);
+          setGenerating(false);
+          return;
+        }
+        setProfileNotFound(false);
+        setVendorProfileId(targetProfile.id);
 
         let query = supabase.from("products").select("*").eq("nafdac_status", "approved");
         
@@ -117,8 +144,8 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           query = query.eq("vendor_id", targetProfile.id);
           
           const joinedYear = targetProfile.created_at ? new Date(targetProfile.created_at).getFullYear() : 2023;
-          let taglineVal = targetProfile.tagline || "Science-backed skincare for African skin";
-          let locationVal = targetProfile.location || "Lagos, Nigeria";
+          let taglineVal = targetProfile.tagline || "Personalized skincare recommendations from this vendor";
+          let locationVal = targetProfile.location || "Location not set";
           let sinceVal = targetProfile.since || String(joinedYear);
           
           if (user && user.id === targetProfile.id && user.user_metadata) {
@@ -131,12 +158,30 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             ? titleFromSlug(activeSlug)
             : targetProfile.business_name;
 
+          let ratingVal: number | null = null;
+          let reviewsVal = 0;
+          try {
+            const { data: reviewRows } = await supabase
+              .from("storefront_reviews")
+              .select("rating")
+              .eq("vendor_id", targetProfile.id)
+              .eq("status", "approved");
+            const ratings = (reviewRows || []).map((row) => Number(row.rating)).filter((rating) => rating > 0);
+            reviewsVal = ratings.length;
+            ratingVal = ratings.length
+              ? Number((ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length).toFixed(1))
+              : null;
+          } catch (reviewError) {
+            ratingVal = null;
+            reviewsVal = 0;
+          }
+
           setVendor({
             name: displayName || titleFromSlug(activeSlug),
             tagline: taglineVal,
             location: locationVal,
-            rating: 4.8,
-            reviews: 312,
+            rating: ratingVal,
+            reviews: reviewsVal,
             since: sinceVal,
             is_verified: targetProfile.is_verified || false
           });
@@ -267,11 +312,75 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         ]);
 
       if (error && typeof product.id === "string") throw error;
+      await dispatchVendorWebhook(vendorProfileId, "purchase.created", {
+        product_id: product.id,
+        product_name: product.name,
+        quantity: 1,
+        session_id: sessionId,
+      });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.email) {
+        await sendEmailNotification("customer_review_request", {
+          name: user.user_metadata?.full_name || "there",
+          email: user.email,
+          product: product.name,
+          brand: profile.name,
+        });
+      }
       toast.success(`${product.name} added to cart!`);
     } catch (err: any) {
       console.warn("Cart database insertion error:", err.message);
     } finally {
       setTimeout(() => setAddedToCart(null), 2000);
+    }
+  };
+
+  const submitStorefrontReview = async () => {
+    if (!vendorProfileId) {
+      toast.error("This storefront is not ready to receive reviews yet.");
+      return;
+    }
+    if (!reviewRating) {
+      toast.error("Please choose a star rating.");
+      return;
+    }
+    if (reviewText.trim().length < 10) {
+      toast.error("Please write a short review before submitting.");
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please sign in as a customer before leaving a review.");
+        return;
+      }
+      const { error } = await supabase
+        .from("storefront_reviews")
+        .insert([{
+          vendor_id: vendorProfileId,
+          customer_id: user.id,
+          rating: reviewRating,
+          review_text: reviewText.trim(),
+          status: "pending",
+        }]);
+      if (error) throw error;
+      await sendEmailNotification("review_submitted", {
+        name: user.user_metadata?.full_name || "there",
+        email: user.email,
+        brand: profile.name,
+      });
+      await sendEmailNotification("admin_review_submitted", {
+        message: `A storefront review was submitted for ${profile.name}.`,
+        metadata: { vendor_id: vendorProfileId, customer_id: user.id, rating: reviewRating },
+      });
+      setReviewRating(0);
+      setReviewText("");
+      toast.success("Review submitted. It will appear after Anovra review.");
+    } catch (err: any) {
+      toast.error(err.message || "Could not submit review.");
+    } finally {
+      setReviewSubmitting(false);
     }
   };
 
@@ -286,6 +395,29 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (profileNotFound) {
+    return (
+      <div className="min-h-screen bg-[#FAF7F2] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-5 border border-destructive/20">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+        </div>
+        <h2 className="text-2xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+          Storefront Not Found
+        </h2>
+        <p className="text-sm text-muted-foreground max-w-sm mb-6 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          The requested storefront does not exist or has not configured their setup.
+        </p>
+        <button
+          onClick={() => setView("landing")}
+          className="px-5 py-2.5 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors cursor-pointer shadow-xs"
+          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+        >
+          Go back home
+        </button>
+      </div>
+    );
+  }
 
   if (generating) {
     return (
@@ -401,11 +533,16 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
                 </p>
                 <div className="flex items-center gap-4 text-xs opacity-50 flex-wrap" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{vendor.location}</span>
-                  <span className="flex items-center gap-1">
-                    <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                    {vendor.rating} ({vendor.reviews} reviews)
+                  {vendor.rating && vendor.reviews > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                      {vendor.rating} ({vendor.reviews} reviews)
+                    </span>
+                  )}
+                  <span>
+                    {activeProducts.length} product{activeProducts.length !== 1 ? "s" : ""}
+                    {vendor.since ? ` · Since ${vendor.since}` : ""}
                   </span>
-                  <span>{activeProducts.length} product{activeProducts.length !== 1 ? "s" : ""} · Since {vendor.since}</span>
                 </div>
               </div>
             </div>
@@ -590,6 +727,52 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             </div>
           ))}
         </div>
+
+        {!isPreviewMode && (
+          <div className="mt-10 border border-border bg-card rounded-2xl p-5 sm:p-6">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
+              <div className="max-w-md">
+                <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Review this storefront
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Share a verified customer experience. Reviews are checked by Anovra before they appear publicly.
+                </p>
+              </div>
+              <div className="w-full md:max-w-lg space-y-3">
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setReviewRating(value)}
+                      className="p-1 rounded hover:bg-muted transition-colors cursor-pointer"
+                      aria-label={`Rate ${value} star${value === 1 ? "" : "s"}`}
+                    >
+                      <Star className={`w-5 h-5 ${reviewRating >= value ? "text-amber-400 fill-amber-400" : "text-muted-foreground"}`} />
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  rows={4}
+                  placeholder="Tell other customers about product quality, service, or recommendations..."
+                  className="w-full bg-input-background border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-accent/50 resize-none"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+                <button
+                  onClick={submitStorefrontReview}
+                  disabled={reviewSubmitting}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-accent text-white text-sm font-semibold rounded-xl hover:bg-accent/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {reviewSubmitting ? "Submitting..." : "Submit review"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Product Details Modal overlay */}

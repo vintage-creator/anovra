@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { Eye, AlertCircle, ChevronRight, Check, ExternalLink, MessageCircle, TrendingUp, Users, Activity, Store } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Eye, AlertCircle, ChevronRight, Check, ExternalLink, MessageCircle, Store, Link as LinkIcon, Scan, Wallet, FileText, Megaphone } from "lucide-react";
 import type { View } from "./types";
+import { supabase } from "./utils/supabase";
+import { toast } from "sonner";
 
 // ---- TEAM LOGIN ----
 export function TeamLoginView({ setView }: { setView: (v: View) => void }) {
@@ -10,14 +12,22 @@ export function TeamLoginView({ setView }: { setView: (v: View) => void }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) throw signInError;
       setView("teamdashboard");
-    }, 900);
+    } catch (err: any) {
+      setError(err.message || "Unable to sign in.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -26,9 +36,6 @@ export function TeamLoginView({ setView }: { setView: (v: View) => void }) {
         {/* Wordmark */}
         <div className="text-center mb-8">
           <img src="/logo.png" alt="Anovra Logo" className="h-12 w-auto mx-auto mb-3 object-contain" />
-          <p className="text-3xl font-light text-primary-foreground tracking-tight mb-1" style={{ fontFamily: "'Fraunces', serif" }}>
-            Anovra
-          </p>
           <p className="text-xs text-white/40 uppercase tracking-widest" style={{ fontFamily: "'DM Mono', monospace" }}>
             Team Portal
           </p>
@@ -123,43 +130,135 @@ type TeamDashTab = "overview" | "referrals" | "resources" | "leaderboard";
 export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
   const [tab, setTab] = useState<TeamDashTab>(() => (sessionStorage.getItem("active_team_tab") as TeamDashTab) || "overview");
   const [copied, setCopied] = useState(false);
+  const [member, setMember] = useState<any>({ name: "Team member", role: "Team", id: "" });
+  const [referralLink, setReferralLink] = useState("");
+  const [referralEvents, setReferralEvents] = useState<any[]>([]);
+  const [resources, setResources] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [monthlyTargets, setMonthlyTargets] = useState<any[]>([]);
 
   useEffect(() => {
     sessionStorage.setItem("active_team_tab", tab);
   }, [tab]);
-  const member = { name: "Team Member", role: "Marketing" as const, id: "TM-001" };
-  const referralLink = "https://anovra.africa/#/scan";
+
+  useEffect(() => {
+    const loadTeamDashboard = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        setView("teamlogin");
+        return;
+      }
+      const { data: membership, error: membershipError } = await supabase
+        .from("team_members")
+        .select("*")
+        .eq("email", user.email)
+        .maybeSingle();
+
+      if (membershipError) {
+        console.warn("Team membership lookup failed:", membershipError.message);
+      }
+      if (!membership) {
+        toast.error("No team workspace is assigned to this account.");
+        setView("teamlogin");
+        return;
+      }
+
+      setMember({
+        name: membership.name || user.email,
+        role: membership.role || "Team",
+        id: membership.referral_code || membership.id?.slice(0, 8).toUpperCase() || "",
+      });
+      setReferralLink(membership.referral_code ? `https://anovra.africa/#/scan?ref=${membership.referral_code}` : "");
+
+      const [{ data: events }, { data: resourceRows }, { data: announcementRows }, { data: targetRows }] = await Promise.all([
+        supabase.from("team_referral_events").select("*").eq("team_member_id", membership.id).order("created_at", { ascending: false }),
+        supabase.from("team_resources").select("*").eq("is_active", true).order("created_at", { ascending: false }),
+        supabase.from("team_announcements").select("*").eq("is_active", true).order("created_at", { ascending: false }),
+        supabase.from("team_targets").select("*").eq("team_member_id", membership.id),
+      ]);
+
+      setReferralEvents(events || []);
+      setResources(resourceRows || []);
+      setAnnouncements(announcementRows || []);
+      setMonthlyTargets((targetRows || []).map((target) => ({
+        label: target.metric === "vendors_onboarded" ? "Vendors onboarded" : target.metric === "scans_via_link" ? "Scans via link" : "Revenue generated",
+        current: 0,
+        target: Number(target.target || 0),
+        display: target.metric === "revenue_generated" ? `₦0 / ₦${Number(target.target || 0).toLocaleString()}` : undefined,
+        color: target.metric === "vendors_onboarded" ? "#C86B3A" : target.metric === "scans_via_link" ? "#D4854A" : "#B85A2E",
+      })));
+    };
+    loadTeamDashboard();
+  }, [setView]);
+
+  const countEvents = (type: string) => referralEvents.filter((event) => event.event_type === type).length;
+  const revenueGenerated = referralEvents
+    .filter((event) => event.event_type === "purchase")
+    .reduce((sum, event) => sum + Number(event.amount || 0), 0);
+  const linkClicks = countEvents("link_click");
+  const scanStarted = countEvents("scan_started");
+  const scansCompleted = countEvents("scan_completed");
+  const vendorsSignedUp = countEvents("vendor_signup");
+  const productClicks = countEvents("product_click");
+  const purchases = countEvents("purchase");
 
   function copyLink() {
+    if (!referralLink) return;
+    navigator.clipboard.writeText(referralLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
   const kpis = [
-    { label: "Link clicks", value: "0", delta: "No tracked clicks yet", up: false, icon: "link" },
-    { label: "Scans via your link", value: "0", delta: "No referred scans yet", up: false, icon: "scan" },
-    { label: "Vendors onboarded", value: "0", delta: "No onboarded vendors yet", up: false, icon: "store" },
-    { label: "Conversions", value: "₦0", delta: "No tracked revenue yet", up: false, icon: "revenue" },
+    { label: "Link clicks", value: String(linkClicks), delta: linkClicks ? "Live referral data" : "No live referrals yet", up: true, icon: <LinkIcon className="w-4 h-4" /> },
+    { label: "Scans via your link", value: String(scansCompleted), delta: scansCompleted ? "Live referral data" : "No live referrals yet", up: true, icon: <Scan className="w-4 h-4" /> },
+    { label: "Vendors onboarded", value: String(vendorsSignedUp), delta: vendorsSignedUp ? "Live referral data" : "No live referrals yet", up: true, icon: <Store className="w-4 h-4" /> },
+    { label: "Conversions", value: `₦${revenueGenerated.toLocaleString()}`, delta: revenueGenerated ? "Tracked payouts" : "No tracked payouts yet", up: true, icon: <Wallet className="w-4 h-4" /> },
   ];
 
-  const leaderboard: any[] = [];
+  const leaderboard = referralEvents.length ? [{
+    rank: 1,
+    name: member.name,
+    role: member.role,
+    scans: scansCompleted,
+    vendors: vendorsSignedUp,
+    revenue: `₦${revenueGenerated.toLocaleString()}`,
+    isMe: true,
+  }] : [];
 
-  const dailyScans = [
-    { day: "Mon", scans: 0 }, { day: "Tue", scans: 0 }, { day: "Wed", scans: 0 },
-    { day: "Thu", scans: 0 }, { day: "Fri", scans: 0 }, { day: "Sat", scans: 0 }, { day: "Sun", scans: 0 },
-  ];
+  const dailyScans = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, index) => ({
+    day,
+    scans: referralEvents.filter((event) => {
+      if (event.event_type !== "scan_completed") return false;
+      const jsDay = new Date(event.created_at).getDay();
+      const mondayIndex = jsDay === 0 ? 6 : jsDay - 1;
+      return mondayIndex === index;
+    }).length,
+  }));
   const maxScans = Math.max(...dailyScans.map((d) => d.scans)) || 1;
 
-  const resources = [
-    { title: "Vendor Pitch Deck", desc: "Full slide deck for onboarding new skin-care vendors", type: "PDF", size: "3.2 MB", icon: "📊" },
-    { title: "Anovra Product One-Pager", desc: "Concise platform overview for quick outreach", type: "PDF", size: "840 KB", icon: "📄" },
-    { title: "WhatsApp Script Templates", desc: "Copy-paste outreach messages for vendors & customers", type: "DOC", size: "120 KB", icon: "💬" },
-    { title: "Brand Assets Pack", desc: "Logos, banners, and social media templates", type: "ZIP", size: "18 MB", icon: "🎨" },
-    { title: "Objection Handling Guide", desc: "Common questions from vendors and how to respond", type: "PDF", size: "580 KB", icon: "🛡️" },
-    { title: "Commission Structure 2025", desc: "Breakdown of commission tiers and bonus targets", type: "PDF", size: "240 KB", icon: "💵" },
+  const recentActivity = referralEvents.slice(0, 5).map((event) => ({
+    text: event.event_type.replace(/_/g, " "),
+    time: new Date(event.created_at).toLocaleDateString("en-GB"),
+    city: event.city || "Online",
+  }));
+  const referredVendors = referralEvents.filter((event) => event.event_type === "vendor_signup");
+  const referralStats = [
+    { label: "Total link clicks", value: String(linkClicks), sub: "All time" },
+    { label: "Unique visitors", value: String(linkClicks), sub: "Tracked clicks" },
+    { label: "Scans conducted", value: String(scansCompleted), sub: "Via your link" },
+    { label: "Vendors signed up", value: String(vendorsSignedUp), sub: "Via your link" },
+    { label: "Customers converted", value: String(purchases), sub: "Purchased after scan" },
+    { label: "Commission earned", value: `₦${revenueGenerated.toLocaleString()}`, sub: "Pending payout" },
   ];
-
-  const recentActivity: any[] = [];
+  const funnelBase = Math.max(linkClicks, scanStarted, scansCompleted, productClicks, purchases, 1);
+  const referralFunnel = [
+    { stage: "Link clicked", count: linkClicks, pct: linkClicks ? 100 : 0, color: "#C86B3A" },
+    { stage: "Visited scan page", count: scanStarted, pct: Math.round((scanStarted / funnelBase) * 100), color: "#D4854A" },
+    { stage: "Completed skin test", count: scansCompleted, pct: Math.round((scansCompleted / funnelBase) * 100), color: "#B85A2E" },
+    { stage: "Viewed product", count: productClicks, pct: Math.round((productClicks / funnelBase) * 100), color: "#E09060" },
+    { stage: "Purchased", count: purchases, pct: Math.round((purchases / funnelBase) * 100), color: "#A04820" },
+  ];
 
   const tabs: { id: TeamDashTab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -223,39 +322,42 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
             <p className="text-xs text-white/40 uppercase tracking-widest mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
               Your referral link
             </p>
-            <p className="text-sm text-white/90 font-mono truncate">{referralLink}</p>
+            <p className="text-sm text-white/90 font-mono truncate">{referralLink || "No referral link assigned yet"}</p>
           </div>
           <div className="flex gap-2 flex-shrink-0">
             <button
               onClick={copyLink}
-              className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent/90 transition-colors"
+              disabled={!referralLink}
+              className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {copied ? <Check className="w-3.5 h-3.5" /> : <ExternalLink className="w-3.5 h-3.5" />}
               {copied ? "Copied!" : "Copy link"}
             </button>
-            <button className="flex items-center gap-1.5 px-4 py-2 bg-white/10 text-white/80 text-xs font-medium rounded-lg hover:bg-white/15 transition-colors">
+            <button disabled={!referralLink} className="flex items-center gap-1.5 px-4 py-2 bg-white/10 text-white/80 text-xs font-medium rounded-lg hover:bg-white/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               <MessageCircle className="w-3.5 h-3.5" />
               Share
             </button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-muted rounded-xl p-1 mb-6 w-fit">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-4 py-1.5 rounded-lg text-sm transition-all ${
-                tab === t.id
-                  ? "bg-card shadow-sm text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <div className="grid lg:grid-cols-[220px_1fr] gap-6 items-start">
+          <aside className="bg-card border border-border rounded-xl p-2 sticky top-24">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all ${
+                  tab === t.id
+                    ? "bg-accent text-white shadow-sm font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </aside>
+
+          <main className="min-w-0">
 
         {/* OVERVIEW */}
         {tab === "overview" && (
@@ -284,7 +386,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                 <h3 className="font-medium text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   Scans via your link — this week
                 </h3>
-                <p className="text-xs text-muted-foreground mb-5">Total: 743 scans</p>
+                <p className="text-xs text-muted-foreground mb-5">Total: 0 scans</p>
                 <div className="flex items-end gap-2 h-32">
                   {dailyScans.map((d) => (
                     <div key={d.day} className="flex-1 flex flex-col items-center gap-1.5">
@@ -311,7 +413,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                   Recent activity
                 </h3>
                 <div className="space-y-3">
-                  {recentActivity.map((a, i) => (
+                  {recentActivity.length > 0 ? recentActivity.map((a, i) => (
                     <div key={i} className="flex gap-3">
                       <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 flex-shrink-0" />
                       <div>
@@ -319,7 +421,11 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                         <p className="text-xs text-muted-foreground mt-0.5">{a.time} · {a.city}</p>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="border border-dashed border-border rounded-lg p-5 text-center text-xs text-muted-foreground">
+                      No referral activity has been recorded yet.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -330,14 +436,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
         {tab === "referrals" && (
           <div className="space-y-6">
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[
-                { label: "Total link clicks", value: "1,284", sub: "All time" },
-                { label: "Unique visitors", value: "918", sub: "All time" },
-                { label: "Scans conducted", value: "743", sub: "Via your link" },
-                { label: "Vendors signed up", value: "18", sub: "Via your link" },
-                { label: "Customers converted", value: "312", sub: "Purchased after scan" },
-                { label: "Commission earned", value: "₦142,000", sub: "Pending payout" },
-              ].map((s) => (
+              {referralStats.map((s) => (
                 <div key={s.label} className="bg-card border border-border rounded-xl p-4">
                   <p className="text-xs text-muted-foreground mb-2">{s.label}</p>
                   <p className="text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>{s.value}</p>
@@ -351,13 +450,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
               <h3 className="font-medium text-foreground mb-1">Referral funnel</h3>
               <p className="text-xs text-muted-foreground mb-5">How people move from link click → purchase</p>
               <div className="space-y-2.5">
-                {[
-                  { stage: "Link clicked", count: 1284, pct: 100, color: "#C86B3A" },
-                  { stage: "Visited scan page", count: 918, pct: 71, color: "#D4854A" },
-                  { stage: "Completed skin test", count: 743, pct: 58, color: "#B85A2E" },
-                  { stage: "Viewed product", count: 521, pct: 41, color: "#E09060" },
-                  { stage: "Purchased", count: 312, pct: 24, color: "#A04820" },
-                ].map((f) => (
+                {referralFunnel.map((f) => (
                   <div key={f.stage}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-muted-foreground">{f.stage}</span>
@@ -376,13 +469,11 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
               <h3 className="font-medium text-foreground mb-4">Share your link</h3>
               <div className="grid sm:grid-cols-2 gap-3">
                 {[
-                  { channel: "WhatsApp", icon: "💬", desc: "Send a pre-written WhatsApp message", color: "bg-green-50 border-green-200 text-green-700" },
-                  { channel: "Instagram DM", icon: "📸", desc: "Share a story with your link in bio", color: "bg-pink-50 border-pink-200 text-pink-700" },
-                  { channel: "Email campaign", icon: "📧", desc: "Copy HTML snippet for email blasts", color: "bg-blue-50 border-blue-200 text-blue-700" },
-                  { channel: "QR Code", icon: "◼️", desc: "Download a print-ready QR code", color: "bg-gray-50 border-gray-200 text-gray-700" },
+                  { channel: "WhatsApp", icon: <MessageCircle className="w-5 h-5" />, desc: "Share the assigned referral link", color: "bg-green-50 border-green-200 text-green-700" },
+                  { channel: "Email campaign", icon: <Megaphone className="w-5 h-5" />, desc: "Copy the assigned referral link", color: "bg-blue-50 border-blue-200 text-blue-700" },
                 ].map((c) => (
-                  <button key={c.channel} className={`flex items-center gap-3 p-3.5 rounded-lg border text-left transition-opacity hover:opacity-80 ${c.color}`}>
-                    <span className="text-2xl">{c.icon}</span>
+                  <button key={c.channel} disabled={!referralLink} className={`flex items-center gap-3 p-3.5 rounded-lg border text-left transition-opacity hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed ${c.color}`}>
+                    <span>{c.icon}</span>
                     <div>
                       <p className="text-sm font-medium">{c.channel}</p>
                       <p className="text-xs opacity-70 mt-0.5">{c.desc}</p>
@@ -397,29 +488,21 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
               <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                 <div>
                   <h3 className="font-medium text-foreground">Vendors signed up via your link</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">18 vendors total · showing most recent first</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">No referred vendors recorded yet</p>
                 </div>
                 <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full font-medium">
-                  18 vendors
+                  0 vendors
                 </span>
               </div>
               <div className="divide-y divide-border">
-                {[
-                  { name: "SkinGlow Lagos", owner: "Adaeze Nkem", city: "Lagos", plan: "Premium", joined: "Jul 6, 2025", products: 14, revenue: "₦89,400" },
-                  { name: "ClearFace PH", owner: "Blessing Obi", city: "Port Harcourt", plan: "Basic", joined: "Jul 4, 2025", products: 7, revenue: "₦31,200" },
-                  { name: "NatureSkin Abuja", owner: "Hauwa Musa", city: "Abuja", plan: "Premium", joined: "Jul 2, 2025", products: 22, revenue: "₦140,000" },
-                  { name: "GlowUp Ibadan", owner: "Sola Adeleke", city: "Ibadan", plan: "Free", joined: "Jun 30, 2025", products: 3, revenue: "—" },
-                  { name: "RadiancePro Kano", owner: "Fatima Yusuf", city: "Kano", plan: "Basic", joined: "Jun 28, 2025", products: 9, revenue: "₦42,700" },
-                  { name: "BeautyHub Enugu", owner: "Chioma Ezeh", city: "Enugu", plan: "Free", joined: "Jun 25, 2025", products: 2, revenue: "—" },
-                  { name: "SkinFirst Warri", owner: "Efemena Okoro", city: "Warri", plan: "Premium", joined: "Jun 22, 2025", products: 18, revenue: "₦97,600" },
-                  { name: "PureGlow Owerri", owner: "Ngozi Iheji", city: "Owerri", plan: "Basic", joined: "Jun 19, 2025", products: 11, revenue: "₦58,100" },
-                  { name: "FaceFirst Benin", owner: "Ese Ovienmhada", city: "Benin", plan: "Free", joined: "Jun 17, 2025", products: 4, revenue: "—" },
-                  { name: "SkincareNG Jos", owner: "Lydia Dung", city: "Jos", plan: "Basic", joined: "Jun 14, 2025", products: 6, revenue: "₦27,500" },
-                ].map((v, i) => {
+                {referredVendors.length > 0 ? referredVendors.map((v, i) => {
+                  const meta = v.metadata || {};
+                  const vendorName = meta.business_name || meta.vendor_name || "Referred vendor";
+                  const vendorPlan = meta.plan || "Pending";
                   const planStyle =
-                    v.plan === "Premium"
+                    vendorPlan === "Premium" || vendorPlan === "premium"
                       ? "bg-foreground text-primary-foreground"
-                      : v.plan === "Basic"
+                      : vendorPlan === "Basic" || vendorPlan === "basic"
                       ? "bg-accent/10 text-accent border border-accent/20"
                       : "bg-muted text-muted-foreground border border-border";
                   return (
@@ -427,47 +510,48 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                       {/* Avatar */}
                       <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
                         <span className="text-xs font-bold text-accent">
-                          {v.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                          {vendorName.split(" ").map((w: string) => w[0]).slice(0, 2).join("")}
                         </span>
                       </div>
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-medium text-foreground">{v.name}</p>
+                          <p className="text-sm font-medium text-foreground">{vendorName}</p>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${planStyle}`}>
-                            {v.plan}
+                            {vendorPlan}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {v.owner} · {v.city}
+                          {meta.owner || "Owner not recorded"} · {v.city || meta.city || "Online"}
                         </p>
                       </div>
                       {/* Stats */}
                       <div className="hidden sm:flex items-center gap-6 text-right flex-shrink-0">
                         <div>
                           <p className="text-xs text-muted-foreground mb-0.5">Products</p>
-                          <p className="text-sm font-mono font-medium text-foreground">{v.products}</p>
+                          <p className="text-sm font-mono font-medium text-foreground">{meta.products || 0}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-0.5">Revenue</p>
-                          <p className="text-sm font-mono font-medium text-foreground">{v.revenue}</p>
+                          <p className="text-sm font-mono font-medium text-foreground">₦{Number(v.amount || 0).toLocaleString()}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-0.5">Joined</p>
-                          <p className="text-xs font-mono text-muted-foreground">{v.joined}</p>
+                          <p className="text-xs font-mono text-muted-foreground">{new Date(v.created_at || Date.now()).toLocaleDateString("en-GB")}</p>
                         </div>
                       </div>
                     </div>
                   );
-                })}
+                }) : (
+                  <div className="p-8 text-center text-sm text-muted-foreground">
+                    Referred vendors will appear here when referral tracking is connected.
+                  </div>
+                )}
               </div>
               <div className="px-5 py-3 bg-muted/40 border-t border-border flex items-center justify-between">
                 <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Showing 10 of 18 vendors
+                  Showing {referredVendors.length} vendor{referredVendors.length === 1 ? "" : "s"}
                 </p>
-                <button className="text-xs text-accent font-medium hover:text-accent/70 transition-colors">
-                  View all 18 →
-                </button>
               </div>
             </div>
           </div>
@@ -480,14 +564,14 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
               <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                 <div>
                   <h3 className="font-medium text-foreground">Team leaderboard</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Ranked by total scans · July 2025</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Ranked by tracked referral performance</p>
                 </div>
                 <span className="text-xs bg-accent/10 text-accent px-2.5 py-1 rounded-full font-medium">
                   {member.id} · {member.role}
                 </span>
               </div>
               <div className="divide-y divide-border">
-                {leaderboard.map((m) => (
+                {leaderboard.length > 0 ? leaderboard.map((m) => (
                   <div
                     key={m.rank}
                     className={`flex items-center gap-4 px-5 py-4 ${(m as any).isMe ? "bg-accent/5 border-l-2 border-l-accent" : ""}`}
@@ -519,7 +603,11 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                       </div>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="p-8 text-center text-sm text-muted-foreground">
+                    No leaderboard data is available yet.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -527,12 +615,8 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
             <div className="bg-card border border-border rounded-xl p-5">
               <h3 className="font-medium text-foreground mb-4">Your monthly targets</h3>
               <div className="space-y-4">
-                {[
-                  { label: "Vendors onboarded", current: 18, target: 25, color: "#C86B3A" },
-                  { label: "Scans via link", current: 743, target: 1000, color: "#D4854A" },
-                  { label: "Revenue generated", current: 284000, target: 500000, display: "₦284K / ₦500K", color: "#B85A2E" },
-                ].map((t) => {
-                  const pct = Math.min(100, Math.round((t.current / t.target) * 100));
+                {monthlyTargets.map((t) => {
+                  const pct = t.target > 0 ? Math.min(100, Math.round((t.current / t.target) * 100)) : 0;
                   return (
                     <div key={t.label}>
                       <div className="flex justify-between text-xs mb-1.5">
@@ -556,46 +640,52 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
         {tab === "resources" && (
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {resources.map((r) => (
+              {resources.length > 0 ? resources.map((r) => (
                 <div key={r.title} className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3 hover:border-accent/40 transition-colors">
                   <div className="flex items-start justify-between">
-                    <span className="text-2xl">{r.icon}</span>
-                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded font-mono">{r.type} · {r.size}</span>
+                    <FileText className="w-5 h-5 text-accent" />
+                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded font-mono">{r.file_type || "FILE"} · {r.file_size || "—"}</span>
                   </div>
                   <div>
                     <h4 className="text-sm font-medium text-foreground mb-0.5">{r.title}</h4>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{r.desc}</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{r.description || "Team resource"}</p>
                   </div>
-                  <button className="mt-auto flex items-center gap-1.5 text-xs text-accent hover:text-accent/70 font-medium transition-colors">
+                  <a href={r.file_url || "#"} target="_blank" rel="noreferrer" className="mt-auto flex items-center gap-1.5 text-xs text-accent hover:text-accent/70 font-medium transition-colors">
                     <ExternalLink className="w-3.5 h-3.5" />
-                    Download
-                  </button>
+                    Open
+                  </a>
                 </div>
-              ))}
+              )) : (
+                <div className="sm:col-span-2 lg:col-span-3 bg-card border border-dashed border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
+                  Team resources have not been uploaded yet.
+                </div>
+              )}
             </div>
 
             {/* Announcements */}
             <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="font-medium text-foreground mb-4">📢 Team announcements</h3>
+              <h3 className="font-medium text-foreground mb-4">Team announcements</h3>
               <div className="space-y-3">
-                {[
-                  { date: "Jul 7, 2025", title: "New commission tier unlocked", body: "Anyone who onboards 20+ vendors this month earns 15% commission instead of 10%. You're at 18 — just 2 more to go!" },
-                  { date: "Jul 1, 2025", title: "Q3 targets released", body: "See the updated target sheet in Resources. Leaderboard bonuses now include top 3 spots." },
-                  { date: "Jun 28, 2025", title: "New pitch deck uploaded", body: "The updated vendor pitch deck is now in Resources. Use this version for all new outreach." },
-                ].map((a, i) => (
+                {announcements.length > 0 ? announcements.map((a, i) => (
                   <div key={i} className="border-b border-border last:border-0 pb-3 last:pb-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-muted-foreground font-mono">{a.date}</span>
+                      <span className="text-xs text-muted-foreground font-mono">{new Date(a.created_at || Date.now()).toLocaleDateString("en-GB")}</span>
                       <span className="w-1 h-1 rounded-full bg-border" />
                       <span className="text-xs font-semibold text-foreground">{a.title}</span>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">{a.body}</p>
                   </div>
-                ))}
+                )) : (
+                  <div className="border border-dashed border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
+                    No team announcements have been published yet.
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
+          </main>
+        </div>
       </div>
     </div>
   );

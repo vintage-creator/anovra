@@ -8,6 +8,7 @@ import type { View } from "./types";
 import { cn } from "./types";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 import { supabase } from "./utils/supabase";
+import { dispatchVendorWebhook, sendEmailNotification } from "./utils/notifications";
 import { toast } from "sonner";
 
 // ---- CATALOG DATA ----
@@ -1196,6 +1197,24 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
         clicks: savedData.clicks || 0,
       };
 
+      await dispatchVendorWebhook(user.id, savedData.nafdac_status === "flagged" ? "product.flagged" : "catalog.updated", {
+        product_id: savedData.id,
+        product_name: savedData.name,
+        status: savedData.nafdac_status,
+        action: newProd.id ? "updated" : "created",
+      });
+      if (user.email) {
+        await sendEmailNotification("product_submitted", {
+          name: user.user_metadata?.full_name || "Partner",
+          email: user.email,
+          product: savedData.name,
+        });
+      }
+      await sendEmailNotification("admin_product_review", {
+        message: `${savedData.name} is pending Anovra safety review.`,
+        metadata: { vendor_id: user.id, product_id: savedData.id, status: savedData.nafdac_status },
+      });
+
       if (newProd.id) {
         setProductsList((prev) => {
           const updated = prev.map((p) => p.id === newProd.id ? formattedProduct : p);
@@ -1533,9 +1552,9 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
                         <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-xl flex items-start gap-2.5">
                           <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                           <div>
-                            <p className="text-xs font-semibold text-amber-800" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Pending Administrator Approval</p>
+                            <p className="text-xs font-semibold text-amber-800" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Awaiting Anovra Safety Review</p>
                             <p className="text-[11px] text-amber-700/90 mt-0.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              This product is undergoing safety validation. It will not show up on your live storefront or customer recommendations until approved in the Admin Dashboard.
+                              This product is undergoing safety validation by Anovra. It will not show up on your live storefront or customer recommendations until approved by the review team.
                             </p>
                           </div>
                         </div>

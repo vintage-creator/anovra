@@ -3,19 +3,20 @@ import {
   Store, AlertCircle, CreditCard, Calendar, Ban, Search, RefreshCw,
   Users, Package, Shield, BarChart2, CheckCircle, X, Check, Eye,
   ChevronDown, ChevronUp, AlertTriangle, Info, Activity, TrendingUp,
-  ExternalLink, Upload, MapPin, Scan, FileText,
+  ExternalLink, Upload, MapPin, Scan, FileText, Star,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 import { supabase } from "./utils/supabase";
+import { dispatchVendorWebhook, sendEmailNotification } from "./utils/notifications";
 import { toast } from "sonner";
 
 
 
 // ---- ADMIN VIEW ----
 
-type AdminTab = "overview" | "safety" | "ingredients" | "vendors" | "team";
+type AdminTab = "overview" | "safety" | "ingredients" | "vendors" | "reviews" | "team";
 
 type TeamRole = "Marketing" | "Sales" | "Support";
 type TeamMember = {
@@ -69,6 +70,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [scansList, setScansList] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [paymentsList, setPaymentsList] = useState<any[]>([]);
+  const [reviewsList, setReviewsList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -91,6 +93,16 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           .from("products")
           .select("*");
         setProductsList(products || []);
+
+        try {
+          const { data: reviews } = await supabase
+            .from("storefront_reviews")
+            .select("*")
+            .order("created_at", { ascending: false });
+          setReviewsList(reviews || []);
+        } catch (reviewError) {
+          setReviewsList([]);
+        }
 
         const { data: authData } = await supabase.auth.getUser();
         const isAdminUser = authData.user?.user_metadata?.role === "admin";
@@ -133,7 +145,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       email: teamForm.email,
       role: teamForm.role,
       idFileName: teamForm.idFileName || "id_document.pdf",
-      headshotUrl: teamForm.headshotUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&h=80&fit=crop&auto=format",
+      headshotUrl: teamForm.headshotUrl || "",
       username: creds.username,
       password: creds.password,
       createdAt: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
@@ -167,12 +179,11 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     return paidAt.getFullYear() === now.getFullYear() && paidAt.getMonth() === now.getMonth();
   });
   const actualRevenueVal = currentMonthPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-  const expectedMrrVal = basicCount * 12500 + premiumCount * 25000 + brandCount * 75000;
-  const mrrVal = actualRevenueVal || expectedMrrVal;
+  const mrrVal = actualRevenueVal;
   const formattedMrr = `₦${mrrVal.toLocaleString()}`;
   const revenueDelta = actualRevenueVal
     ? `${currentMonthPayments.length} successful Paystack payment${currentMonthPayments.length === 1 ? "" : "s"} this month`
-    : "No tracked payments this month; showing plan estimate";
+    : "No tracked Paystack payments this month";
 
   const dynamicStats = [
     { label: "Total vendors", value: String(totalVendors), delta: `+${vendorsList.filter(v => new Date(v.created_at || Date.now()).getMonth() === new Date().getMonth()).length} this month`, icon: <Store className="w-4 h-4" />, warn: false },
@@ -203,7 +214,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       id: v.id,
       name: v.business_name || "My Skincare Brand",
       owner: v.name || "Vendor Partner",
-      city: v.phone ? "Nigeria" : "Lagos",
+      city: v.location || "Nigeria",
       tier: v.plan === "brand" ? "Brand" : (v.plan === "premium" ? "Pro" : v.plan === "basic" ? "Basic" : "Free"),
       products: vendorProds.length,
       scans: vendorScans,
@@ -230,7 +241,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     .map((p) => {
       const vendorProfileObj = vendorsList.find((v) => v.id === p.vendor_id);
       const vendorName = vendorProfileObj?.business_name || p.brand || "Unknown Vendor";
-      const vendorCity = vendorProfileObj?.phone ? "Nigeria" : "Lagos";
+      const vendorCity = vendorProfileObj?.location || "Nigeria";
       const status = flagStatuses[p.id] ?? (p.nafdac_status === "flagged" ? "pending" : "under_review");
 
       return {
@@ -299,6 +310,21 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         .eq("id", productId);
 
       if (error) throw error;
+      const product = productsList.find((p) => p.id === productId);
+      const vendor = vendorsList.find((v) => v.id === product?.vendor_id);
+      await dispatchVendorWebhook(product?.vendor_id, action === "approve" ? "catalog.updated" : "product.flagged", {
+        product_id: productId,
+        product_name: product?.name,
+        status: nextStatus,
+      });
+      if (vendor?.email) {
+        await sendEmailNotification(action === "approve" ? "product_approved" : "product_rejected", {
+          name: vendor.name || vendor.business_name || "Partner",
+          email: vendor.email,
+          product: product?.name || "Product",
+          message: action === "approve" ? "It can now appear on eligible storefront and recommendation surfaces." : "Please review the product details and resubmit after updating compliance information.",
+        });
+      }
       
       toast.success(`Product successfully ${action === "approve" ? "approved" : "blocked"}!`);
       setProductsList((prev) => 
@@ -318,6 +344,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     { id: "safety", label: "Safety Queue", badge: activeFlaggedQueue.filter((f) => f.status === "pending" || f.status === "under_review").length },
     { id: "ingredients", label: "Ingredient DB" },
     { id: "vendors", label: "Vendors" },
+    { id: "reviews", label: "Reviews", badge: reviewsList.filter((r) => r.status === "pending").length },
     { id: "team", label: "Team" },
   ];
 
@@ -353,7 +380,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         <UnifiedDashboardHeader
           currentView="admin"
           setView={setView}
-          title="Anovra Control Center"
+          title="Control Center"
           subtitle="Platform Administration, NAFDAC Safety Queue & MRR Analytics"
           badgeText="PLATFORM ADMIN"
           role="admin"
@@ -362,21 +389,21 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 relative pt-4">
-        {/* Tab bar */}
-        <div className="flex gap-2 border-b border-border overflow-x-auto pb-2 mb-6">
+        <div className="grid lg:grid-cols-[240px_1fr] gap-6 items-start">
+        <aside className="bg-card border border-border rounded-xl p-2 sticky top-24">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => { setTab(t.id); setSearch(""); }}
               className={cn(
-                "relative flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 font-medium whitespace-nowrap",
+                "relative w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm transition-colors rounded-lg font-medium whitespace-nowrap text-left",
                 tab === t.id
-                  ? "border-accent text-accent font-semibold"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "bg-accent text-white font-semibold shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              {t.label}
+              <span>{t.label}</span>
               {t.badge ? (
                 <span className="bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-mono">
                   {t.badge}
@@ -384,10 +411,11 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
               ) : null}
             </button>
           ))}
-        </div>
-      </div>
+        </aside>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <main className="min-w-0">
+
+      <div className="py-4">
 
         {/* ---- OVERVIEW ---- */}
         {tab === "overview" && (
@@ -556,9 +584,6 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       mrr: monthPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0),
                     };
                   });
-                  if (dynamicRevenueData.every((d) => d.mrr === 0)) {
-                    dynamicRevenueData[dynamicRevenueData.length - 1].mrr = expectedMrrVal;
-                  }
                   const vals = dynamicRevenueData.map((d) => d.mrr);
                   const minV = Math.min(...vals), maxV = Math.max(...vals) || 1;
                   const xStep = (w - padL - padR) / (vals.length - 1);
@@ -1170,6 +1195,113 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           </div>
         )}
 
+        {/* ---- REVIEWS ---- */}
+        {tab === "reviews" && (
+          <div className="space-y-6">
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Storefront reviews
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Approve customer ratings before they affect public storefront scores.
+                  </p>
+                </div>
+                <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
+                  {reviewsList.filter((r) => r.status === "pending").length} pending
+                </span>
+              </div>
+              <div className="divide-y divide-border">
+                {reviewsList.length > 0 ? reviewsList.map((review) => {
+                  const vendorProfile = vendorsList.find((vendor) => vendor.id === review.vendor_id);
+                  return (
+                    <div key={review.id} className="p-5 flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-2">
+                          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {vendorProfile?.business_name || "Vendor storefront"}
+                          </p>
+                          <span className={cn(
+                            "text-xs px-2 py-0.5 rounded-full font-medium",
+                            review.status === "approved" ? "bg-green-50 text-green-700" :
+                            review.status === "rejected" ? "bg-red-50 text-red-700" :
+                            "bg-amber-50 text-amber-700"
+                          )}>
+                            {review.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 mb-2">
+                          {[1, 2, 3, 4, 5].map((value) => (
+                            <Star key={value} className={`w-4 h-4 ${Number(review.rating) >= value ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30"}`} />
+                          ))}
+                          <span className="text-xs font-mono text-muted-foreground ml-1">{review.rating}/5</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {review.review_text || "No review text provided."}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-2 font-mono">
+                          {new Date(review.created_at || Date.now()).toLocaleDateString("en-GB")}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={async () => {
+                            const { error } = await supabase.from("storefront_reviews").update({ status: "approved" }).eq("id", review.id);
+                            if (error) {
+                              toast.error(error.message);
+                              return;
+                            }
+                            const { data: customer } = await supabase.from("profiles").select("name, email").eq("id", review.customer_id).maybeSingle();
+                            if (customer?.email) {
+                              await sendEmailNotification("review_approved", {
+                                name: customer.name || "there",
+                                email: customer.email,
+                              });
+                            }
+                            setReviewsList((prev) => prev.map((item) => item.id === review.id ? { ...item, status: "approved" } : item));
+                            toast.success("Review approved.");
+                          }}
+                          className="px-3 py-1.5 bg-accent text-white text-xs font-semibold rounded-lg hover:bg-accent/90 transition-colors"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const { error } = await supabase.from("storefront_reviews").update({ status: "rejected" }).eq("id", review.id);
+                            if (error) {
+                              toast.error(error.message);
+                              return;
+                            }
+                            const { data: customer } = await supabase.from("profiles").select("name, email").eq("id", review.customer_id).maybeSingle();
+                            if (customer?.email) {
+                              await sendEmailNotification("review_rejected", {
+                                name: customer.name || "there",
+                                email: customer.email,
+                              });
+                            }
+                            setReviewsList((prev) => prev.map((item) => item.id === review.id ? { ...item, status: "rejected" } : item));
+                            toast.success("Review rejected.");
+                          }}
+                          className="px-3 py-1.5 bg-secondary text-foreground border border-border text-xs font-semibold rounded-lg hover:bg-muted transition-colors"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }) : (
+                  <div className="p-10 text-center text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    No storefront reviews have been submitted yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ---- TEAM ---- */}
         {tab === "team" && (
           <div>
@@ -1429,11 +1561,17 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             <div className="space-y-3">
               {teamMembers.map((m) => (
                 <div key={m.id} className="bg-card border border-border rounded-xl p-4 flex items-start gap-4">
-                  <img
-                    src={m.headshotUrl}
-                    alt={m.name}
-                    className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-secondary"
-                  />
+                  {m.headshotUrl ? (
+                    <img
+                      src={m.headshotUrl}
+                      alt={m.name}
+                      className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-secondary"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full flex-shrink-0 bg-accent/10 text-accent flex items-center justify-center font-bold text-sm">
+                      {m.name.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "TM"}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                       <div>
@@ -1482,6 +1620,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             </div>
           </div>
         )}
+        </div>
+        </main>
+        </div>
       </div>
     </div>
   );
