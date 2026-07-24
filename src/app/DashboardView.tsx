@@ -2119,39 +2119,39 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
 
           {/* Billing & Subscription Card */}
-          <div className="bg-card border border-border rounded-xl p-5 shadow-xs space-y-5">
-            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+          <div className="bg-card border border-border rounded-xl p-5 sm:p-6 shadow-xs space-y-5 lg:col-span-2">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
               <div>
-                <h3 className="font-semibold text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
-                <p className="text-xs text-muted-foreground mt-1 max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
+                <p className="text-xs text-muted-foreground mt-1 max-w-3xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   Start on Free, try all premium features for 14 days, then choose a paid tier to keep advanced tools such as white-labeled results, custom domains, webhooks, and priority WhatsApp support.
                 </p>
               </div>
               {vendorPlan === "free" && (
                 <div className={cn(
-                  "rounded-2xl border px-4 py-3 min-w-[230px] shadow-sm",
+                  "rounded-2xl border px-4 py-3 w-full xl:w-[360px] shadow-sm",
                   trialActive
                     ? "bg-gradient-to-br from-emerald-50 via-amber-50 to-sky-50 border-emerald-200"
                     : "bg-red-50 border-red-200"
                 )}>
-                  <p className={cn("text-[10px] font-bold uppercase tracking-wider font-mono", trialActive ? "text-emerald-700" : "text-red-700")}>
-                    {trialActive ? "Free trial countdown" : "Free trial ended"}
-                  </p>
-                  <div className="grid grid-cols-3 gap-2 mt-2">
-                    {[
-                      { label: "Days", value: trialTime.days },
-                      { label: "Hours", value: trialTime.hours },
-                      { label: "Minutes", value: trialTime.minutes },
-                    ].map((item) => (
-                      <div key={item.label} className="bg-white/80 border border-white rounded-xl px-2 py-2 text-center shadow-xs">
-                        <p className="text-lg font-bold text-foreground font-mono leading-none">{String(item.value).padStart(2, "0")}</p>
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wide mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.label}</p>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className={cn("text-[10px] font-bold uppercase tracking-wider font-mono", trialActive ? "text-emerald-700" : "text-red-700")}>
+                        {trialActive ? "Free access ends in" : "Free trial ended"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {trialActive ? "Premium trial features turn off when this reaches zero." : "Your account remains on Free until you upgrade."}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-2xl sm:text-3xl font-bold text-foreground font-mono leading-none">
+                        {trialActive ? `${trialTime.days}d ${trialTime.hours}h` : "0d 0h"}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground font-mono mt-1">
+                        {trialActive ? `${trialTime.minutes} min left` : "expired"}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    {trialActive ? "Premium trial access is revoked when this timer reaches zero." : "Your account remains on Free. Upgrade to unlock premium features again."}
-                  </p>
                 </div>
               )}
             </div>
@@ -2191,11 +2191,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               ].map((p) => {
                 const isActive = vendorPlan === p.key;
                 return (
-                  <div key={p.name} className={cn("border rounded-xl p-4 flex flex-col justify-between space-y-3 bg-muted/5", isActive ? "border-[#008236] ring-1 ring-[#008236]/10" : "border-border")}>
+                  <div key={p.name} className={cn("border rounded-xl p-4 min-h-[190px] flex flex-col justify-between space-y-4 bg-muted/5", isActive ? "border-[#008236] ring-1 ring-[#008236]/10 bg-emerald-50/30" : "border-border")}>
                     <div>
-                      <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</p>
-                      <p className="text-lg font-light text-foreground font-mono mt-1">{p.price}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
+                      <p className="text-sm font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</p>
+                      <p className="text-xl font-light text-foreground font-mono mt-1.5">{p.price}</p>
+                      <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
                     </div>
                     {isActive ? (
                       <span className="w-full text-center py-1.5 text-[10px] bg-green-50 text-green-700 font-bold rounded-lg border border-green-200">
