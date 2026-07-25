@@ -148,15 +148,40 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
         setView("teamlogin");
         return;
       }
-      const { data: membership, error: membershipError } = await supabase
-        .from("team_members")
-        .select("*")
-        .eq("email", user.email)
-        .maybeSingle();
-
-      if (membershipError) {
-        console.warn("Team membership lookup failed:", membershipError.message);
+      let membership: any = null;
+      try {
+        const { data: memberRec, error: membershipError } = await supabase
+          .from("team_members")
+          .select("*")
+          .eq("email", user.email)
+          .maybeSingle();
+        if (membershipError) console.warn("Team membership lookup failed:", membershipError.message);
+        
+        if (memberRec) {
+          membership = memberRec;
+        } else {
+          // Fallback to admin_team table to resolve platform field officers
+          const { data: adminRec, error: adminErr } = await supabase
+            .from("admin_team")
+            .select("*")
+            .or(`email.eq.${user.email},username.eq.${user.email}`)
+            .maybeSingle();
+          if (adminErr) console.warn("Admin team fallback lookup failed:", adminErr.message);
+          
+          if (adminRec) {
+            membership = {
+              id: adminRec.id,
+              name: adminRec.name,
+              email: adminRec.email,
+              role: adminRec.role,
+              referral_code: adminRec.username || adminRec.id.slice(0, 8),
+            };
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load workspace membership:", err);
       }
+
       if (!membership) {
         toast.error("No team workspace is assigned to this account.");
         setView("teamlogin");

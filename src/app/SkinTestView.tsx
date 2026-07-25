@@ -800,6 +800,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               Upload file
             </button>
           </div>
+          <p className="text-[10px] text-muted-foreground text-center mb-4 animate-fade-in" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            Supported formats: PNG, JPG, JPEG, WEBP · Max size: 5MB
+          </p>
 
           <div className="flex items-start gap-2 p-3.5 bg-secondary/50 rounded-xl">
             <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />

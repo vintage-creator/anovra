@@ -149,10 +149,32 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           setView("signin");
           return;
         }
+
+        // Resolve active role & vendor ID context for team members
+        let activeRole: "Vendor" | "Manager" | "Viewer" = "Vendor";
+        let effectiveVendorId = user.id;
+
+        try {
+          const { data: membership } = await supabase
+            .from("team_members")
+            .select("vendor_id, role")
+            .eq("email", user.email)
+            .maybeSingle();
+
+          if (membership && (membership.role === "Manager" || membership.role === "Viewer")) {
+            activeRole = membership.role as any;
+            effectiveVendorId = membership.vendor_id;
+          }
+        } catch (e) {
+          console.warn("Could not check team membership:", e);
+        }
+
+        setTeamRole(activeRole);
+
         const { data: keyRows } = await supabase
           .from("vendor_api_keys")
           .select("key_prefix, created_at")
-          .eq("vendor_id", user.id)
+          .eq("vendor_id", effectiveVendorId)
           .eq("status", "active")
           .order("created_at", { ascending: false })
           .limit(1);
@@ -179,7 +201,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           const { data, error } = await supabase
             .from("profiles")
             .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url, tagline, location, since")
-            .eq("id", user.id)
+            .eq("id", effectiveVendorId)
             .maybeSingle();
           if (error) {
             fetchErr = error;
@@ -195,7 +217,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           const { data: baseData } = await supabase
             .from("profiles")
             .select("name, plan, is_verified, business_name")
-            .eq("id", user.id)
+            .eq("id", effectiveVendorId)
             .maybeSingle();
           profile = baseData;
         }
@@ -286,7 +308,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           const { data: savedTeamMembers } = await supabase
             .from("team_members")
             .select("name, email, role, status, created_at")
-            .eq("vendor_id", user.id)
+            .eq("vendor_id", effectiveVendorId)
             .order("created_at", { ascending: false });
 
           if (savedTeamMembers && savedTeamMembers.length > 0) {
@@ -307,7 +329,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         const { data: products } = await supabase
           .from("products")
           .select("*")
-          .eq("vendor_id", user.id);
+          .eq("vendor_id", effectiveVendorId);
 
         const numProducts = products ? products.length : 0;
         const flaggedProds = products ? products.filter(p => p.nafdac_status === "flagged").length : 0;
@@ -316,7 +338,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         const { data: scans } = await supabase
           .from("scans")
           .select("*")
-          .eq("vendor_id", user.id)
+          .eq("vendor_id", effectiveVendorId)
           .order("created_at", { ascending: false });
 
         const numScans = scans ? scans.length : 0;
@@ -2332,6 +2354,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         Send invite
                       </button>
                     </div>
+                    <p className="text-[11px] text-muted-foreground mt-2.5 bg-secondary/35 p-2.5 rounded-lg border border-border/40 leading-relaxed font-sans" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {inviteRole === "Manager" && "• Manager: Can manage products and catalog entries. Restructured from accessing settings like domains, billing, or platform integration."}
+                      {inviteRole === "Viewer" && "• Viewer: Read-only access. Can inspect product catalog, customer scans, and dashboard statistics but cannot save modifications."}
+                    </p>
                   </div>
                 )}
 

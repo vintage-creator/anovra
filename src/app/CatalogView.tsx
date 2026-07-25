@@ -184,6 +184,15 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
   };
 
   const handleScanImage = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image file is too large. Maximum size is 5MB.");
+      return;
+    }
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type);
+    if (!allowed) {
+      toast.error("Invalid image format. Supported formats: JPG, PNG, WEBP");
+      return;
+    }
     setScanPreview(URL.createObjectURL(file));
     setScanDone(false);
     setScanning(true);
@@ -205,6 +214,15 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
   };
 
   const handleScanDescription = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image file is too large. Maximum size is 5MB.");
+      return;
+    }
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type);
+    if (!allowed) {
+      toast.error("Invalid image format. Supported formats: JPG, PNG, WEBP");
+      return;
+    }
     setDescScanPreview(URL.createObjectURL(file));
     setDescScanDone(false);
     setDescScanning(true);
@@ -222,6 +240,15 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
   };
 
   const handleScanBenefits = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image file is too large. Maximum size is 5MB.");
+      return;
+    }
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type);
+    if (!allowed) {
+      toast.error("Invalid image format. Supported formats: JPG, PNG, WEBP");
+      return;
+    }
     setBenefitsScanPreview(URL.createObjectURL(file));
     setBenefitsScanDone(false);
     setBenefitsScanning(true);
@@ -578,7 +605,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
                             Take or upload a photo of the ingredients list
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Point your camera at the back of the product — the AI reads and fills in every ingredient automatically.
+                            Point your camera at the back of the product — the AI reads and fills in every ingredient automatically. (PNG, JPG, WEBP up to 5MB)
                           </p>
                         </div>
                         <span className="text-xs bg-accent/10 text-accent px-3 py-1 rounded-full font-medium">
@@ -715,7 +742,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
                           <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                             Photograph the product description on the label
                           </p>
-                          <p className="text-xs text-muted-foreground">The AI reads the text and fills it in for you.</p>
+                          <p className="text-xs text-muted-foreground">The AI reads the text and fills it in for you. (PNG, JPG, WEBP up to 5MB)</p>
                           <span className="text-xs bg-accent/10 text-accent px-3 py-1 rounded-full font-medium">Browse / Take Photo</span>
                         </div>
                       )}
@@ -818,7 +845,7 @@ function AddProductDrawer({ onClose, onSave, initialData }: { onClose: () => voi
                           <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                             Photograph the benefits section on the label
                           </p>
-                          <p className="text-xs text-muted-foreground">The AI reads the bullet points and fills them in for you.</p>
+                          <p className="text-xs text-muted-foreground">The AI reads the bullet points and fills them in for you. (PNG, JPG, WEBP up to 5MB)</p>
                           <span className="text-xs bg-accent/10 text-accent px-3 py-1 rounded-full font-medium">Browse / Take Photo</span>
                         </div>
                       )}
@@ -929,6 +956,23 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: "danger" | "warning" | "info";
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    cancelText: "Cancel",
+    type: "info",
+    onConfirm: () => {},
+  });
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "blocked">("all");
 
   const [productsList, setProductsList] = useState<any[]>([]);
@@ -1244,26 +1288,34 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
       toast.error("Viewer role is read-only. You cannot delete products.");
       return;
     }
-    const ok = window.confirm("Are you sure you want to remove this product from your catalogue?");
-    if (!ok) return;
+    setConfirmModal({
+      isOpen: true,
+      title: "Remove Product",
+      message: "Are you sure you want to remove this product from your catalogue? This action cannot be undone.",
+      confirmText: "Remove Product",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase
+            .from("products")
+            .delete()
+            .eq("id", id);
 
-    try {
-      const { error } = await supabase
-        .from("products")
-        .delete()
-        .eq("id", id);
+          if (error) throw error;
 
-      if (error) throw error;
-
-      setProductsList((prev) => {
-        const updated = prev.filter((p) => p.id !== id);
-        sessionStorage.setItem("cached_vendor_products", JSON.stringify(updated));
-        return updated;
-      });
-      toast.success("Product successfully removed from catalogue!");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete product.");
-    }
+          setProductsList((prev) => {
+            const updated = prev.filter((p) => p.id !== id);
+            sessionStorage.setItem("cached_vendor_products", JSON.stringify(updated));
+            return updated;
+          });
+          toast.success("Product successfully removed from catalogue!");
+        } catch (err: any) {
+          toast.error(err.message || "Failed to delete product.");
+        } finally {
+          setConfirmModal((c) => ({ ...c, isOpen: false }));
+        }
+      }
+    });
   };
 
   const filteredProducts = productsList.filter((p) => {
@@ -1678,9 +1730,56 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
       </div>
       </div>
 
+      {/* PREMIUM CONFIRM MODAL */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 flex items-start gap-4">
+              <div className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+                confirmModal.type === "danger" ? "bg-red-100 text-red-600" :
+                confirmModal.type === "warning" ? "bg-amber-100 text-amber-600" :
+                "bg-blue-100 text-blue-600"
+              )}>
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {confirmModal.title}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {confirmModal.message}
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-secondary/40 border-t border-border flex items-center justify-end gap-3">
+              <button
+                onClick={() => setConfirmModal((c) => ({ ...c, isOpen: false }))}
+                className="px-4 py-2 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:bg-secondary transition-colors cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {confirmModal.cancelText || "Cancel"}
+              </button>
+              <button
+                onClick={() => confirmModal.onConfirm()}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-xs font-medium text-white transition-colors cursor-pointer",
+                  confirmModal.type === "danger" ? "bg-red-600 hover:bg-red-700" :
+                  confirmModal.type === "warning" ? "bg-amber-600 hover:bg-amber-700" :
+                  "bg-accent hover:bg-accent/90"
+                )}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {confirmModal.confirmText || "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modern glassmorphism saving progress overlay */}
       {isSaving && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex flex-col items-center justify-center animate-fade-in">
+        <div className="fixed inset-0 bg-black/45 backdrop-blur-[2px] z-50 flex flex-col items-center justify-center animate-fade-in">
           <div className="bg-card border border-border p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full mx-4 text-center animate-scale-up">
             <div className="relative w-16 h-16 mb-4">
               <div className="absolute inset-0 border-4 border-muted rounded-full"></div>

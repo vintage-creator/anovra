@@ -76,8 +76,6 @@ export function UnifiedDashboardHeader({
   ];
 
   const adminLinks: { id: View; label: string; icon: React.ElementType }[] = [
-    { id: "admin", label: "Platform Control", icon: Shield },
-    { id: "dashboard", label: "Vendor Portal", icon: LayoutDashboard },
     { id: "landing", label: "Home", icon: Home },
   ];
 
@@ -108,7 +106,7 @@ export function UnifiedDashboardHeader({
                     {badgeText}
                   </span>
                 )}
-                {onToggleVerify ? (
+                {role === "vendor" && (onToggleVerify ? (
                   <button
                     onClick={onToggleVerify}
                     title="Click to toggle verification status"
@@ -146,7 +144,7 @@ export function UnifiedDashboardHeader({
                       </>
                     )}
                   </span>
-                )}
+                ))}
               </div>
 
               {subtitle && (

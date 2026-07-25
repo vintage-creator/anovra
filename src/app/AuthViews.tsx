@@ -950,8 +950,45 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       const userRole = data.user.user_metadata?.role;
       const cleanEmail = email.trim().toLowerCase();
 
+      let isStaff = false;
+      try {
+        const { data: staff } = await supabase
+          .from("admin_team")
+          .select("role, status")
+          .or(`email.eq.${cleanEmail},username.eq.${cleanEmail}`)
+          .maybeSingle();
+        if (staff) {
+          if (staff.status === "suspended") {
+            toast.error("Your staff account is suspended. Access denied.");
+            setLoading(false);
+            return;
+          }
+          isStaff = true;
+        }
+      } catch (err) {
+        console.warn("Staff query bypassed:", err);
+      }
+
+      let teamMemberRole: string | null = null;
+      try {
+        const { data: member } = await supabase
+          .from("team_members")
+          .select("role")
+          .eq("email", cleanEmail)
+          .maybeSingle();
+        if (member) teamMemberRole = member.role;
+      } catch (err) {
+        console.warn("Team member lookup bypassed:", err);
+      }
+
       if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
         setView("admin");
+      } else if (isStaff) {
+        setView("teamdashboard");
+      } else if (teamMemberRole === "Manager" || teamMemberRole === "Viewer") {
+        setView("dashboard");
+      } else if (teamMemberRole === "Representative") {
+        setView("teamdashboard");
       } else if (userRole === "vendor") {
         setView("dashboard");
       } else if (userRole === "customer") {
@@ -1004,8 +1041,45 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       const userRole = data.user.user_metadata?.role;
       const cleanEmail = email.trim().toLowerCase();
 
+      let isStaff = false;
+      try {
+        const { data: staff } = await supabase
+          .from("admin_team")
+          .select("role, status")
+          .or(`email.eq.${cleanEmail},username.eq.${cleanEmail}`)
+          .maybeSingle();
+        if (staff) {
+          if (staff.status === "suspended") {
+            toast.error("Your staff account is suspended. Access denied.");
+            setLoading(false);
+            return;
+          }
+          isStaff = true;
+        }
+      } catch (err) {
+        console.warn("Staff query bypassed:", err);
+      }
+
+      let teamMemberRole: string | null = null;
+      try {
+        const { data: member } = await supabase
+          .from("team_members")
+          .select("role")
+          .eq("email", cleanEmail)
+          .maybeSingle();
+        if (member) teamMemberRole = member.role;
+      } catch (err) {
+        console.warn("Team member lookup bypassed:", err);
+      }
+
       if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
         setView("admin");
+      } else if (isStaff) {
+        setView("teamdashboard");
+      } else if (teamMemberRole === "Manager" || teamMemberRole === "Viewer") {
+        setView("dashboard");
+      } else if (teamMemberRole === "Representative") {
+        setView("teamdashboard");
       } else if (userRole === "vendor") {
         setView("dashboard");
       } else if (userRole === "customer") {

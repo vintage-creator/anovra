@@ -3,7 +3,7 @@ import {
   Store, AlertCircle, CreditCard, Calendar, Ban, Search, RefreshCw,
   Users, Package, Shield, BarChart2, CheckCircle, X, Check, Eye,
   ChevronDown, ChevronUp, AlertTriangle, Info, Activity, TrendingUp,
-  ExternalLink, Upload, MapPin, Scan, FileText, Star,
+  ExternalLink, Upload, MapPin, Scan, FileText, Star, Edit, Trash2, LogOut,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -16,9 +16,9 @@ import { toast } from "sonner";
 
 // ---- ADMIN VIEW ----
 
-type AdminTab = "overview" | "safety" | "ingredients" | "vendors" | "reviews" | "team";
+type AdminTab = "overview" | "safety" | "ingredients" | "vendors" | "reviews" | "team" | "payments" | "onboarding" | "logs";
 
-type TeamRole = "Marketing" | "Sales" | "Support";
+type TeamRole = "Marketing" | "Sales" | "Support" | "Representative" | "Operations" | "Manager";
 type TeamMember = {
   id: string;
   name: string;
@@ -33,16 +33,7 @@ type TeamMember = {
   status: "active" | "suspended";
 };
 
-const ingredientDB = [
-  { name: "Mercury / Mercurous Chloride", function: "Skin lightening", status: "banned", scope: "Global + NAFDAC", maxConc: "0%", notes: "No safe concentration. Neurotoxic. Banned in all cosmetics globally." },
-  { name: "Hydroquinone", function: "Hyperpigmentation treatment", status: "restricted", scope: "NAFDAC (Nigeria)", maxConc: "2%", notes: "OTC limit is 2%. Higher concentrations require prescription. Carcinogenic risk at high doses." },
-  { name: "Clobetasol Propionate", function: "Anti-inflammatory (corticosteroid)", status: "restricted", scope: "NAFDAC + WHO", maxConc: "0.05% (Rx only)", notes: "Prescription only. Often misused as a skin lightener. Causes skin atrophy at OTC doses." },
-  { name: "Niacinamide", function: "Brightening, barrier support", status: "safe", scope: "Global", maxConc: "No limit (10% common)", notes: "Well-tolerated across all skin tones. No known dangerous interactions at cosmetic doses." },
-  { name: "Kojic Acid", function: "Melanin synthesis inhibitor", status: "safe", scope: "Global", maxConc: "1–2% recommended", notes: "Safe at cosmetic concentrations. Photosensitising — pair with SPF." },
-  { name: "Arbutin (Alpha)", function: "Tyrosinase inhibitor", status: "safe", scope: "Global", maxConc: "2% (EU guideline)", notes: "Considered safe. Avoid >3% without dermatologist guidance." },
-  { name: "Retinol", function: "Anti-aging, cell turnover", status: "caution", scope: "Global", maxConc: "1% OTC (EU)", notes: "Avoid during pregnancy. Photosensitising. Caution combining with AHAs/BHAs." },
-  { name: "Lactic Acid", function: "AHA exfoliant, hydration", status: "safe", scope: "Global", maxConc: "10% OTC", notes: "Safe up to 10% at pH ≥3.5. Above 10% requires professional supervision." },
-];
+const ingredientDB: any[] = [];
 
 function generateCredentials(name: string) {
   const slug = name.toLowerCase().replace(/\s+/g, ".").replace(/[^a-z.]/g, "");
@@ -71,7 +62,54 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [productsList, setProductsList] = useState<any[]>([]);
   const [paymentsList, setPaymentsList] = useState<any[]>([]);
   const [reviewsList, setReviewsList] = useState<any[]>([]);
+  const [ingredientsList, setIngredientsList] = useState<any[]>(ingredientDB);
+  const [onboardingRequests, setOnboardingRequests] = useState<any[]>([]);
+  const [emailLogs, setEmailLogs] = useState<any[]>([]);
+  const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Modal states
+  const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
+  const [showAddIngModal, setShowAddIngModal] = useState(false);
+  const [editingIngredient, setEditingIngredient] = useState<any | null>(null);
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: "danger" | "warning" | "info";
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    cancelText: "Cancel",
+    type: "info",
+    onConfirm: () => {},
+  });
+
+  // Add ingredient form states
+  const [ingName, setIngName] = useState("");
+  const [ingFunction, setIngFunction] = useState("");
+  const [ingStatus, setIngStatus] = useState<"safe" | "caution" | "restricted" | "banned">("safe");
+  const [ingScope, setIngScope] = useState("Global");
+  const [ingMaxConc, setIngMaxConc] = useState("No limit");
+  const [ingNotes, setIngNotes] = useState("");
+  const [isSavingIng, setIsSavingIng] = useState(false);
+
+  async function handleSignOut() {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      toast.success("Successfully logged out.");
+      setView("landing");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to log out.");
+    }
+  }
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -120,6 +158,66 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         } else {
           setPaymentsList([]);
         }
+
+        try {
+          const { data: ingredients, error: ingErr } = await supabase
+            .from("safety_ingredients")
+            .select("*")
+            .order("name", { ascending: true });
+          if (ingredients && ingredients.length > 0) {
+            setIngredientsList(ingredients);
+          }
+        } catch (e) {
+          console.warn("Could not load safety_ingredients table:", e);
+        }
+
+        try {
+          const { data: team, error: teamErr } = await supabase
+            .from("admin_team")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (!teamErr && team) {
+            setTeamMembers(team);
+          }
+        } catch (e) {
+          console.warn("Could not load admin_team table:", e);
+        }
+
+        try {
+          const { data: onboarding, error: onboardingErr } = await supabase
+            .from("onboarding_requests")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (!onboardingErr && onboarding) {
+            setOnboardingRequests(onboarding);
+          }
+        } catch (e) {
+          console.warn("Could not load onboarding_requests table:", e);
+        }
+
+        try {
+          const { data: emails, error: emailsErr } = await supabase
+            .from("email_delivery_logs")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (!emailsErr && emails) {
+            setEmailLogs(emails);
+          }
+        } catch (e) {
+          console.warn("Could not load email_delivery_logs table:", e);
+        }
+
+        try {
+          const { data: webhooks, error: webhooksErr } = await supabase
+            .from("webhook_delivery_logs")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (!webhooksErr && webhooks) {
+            setWebhookLogs(webhooks);
+          }
+        } catch (e) {
+          console.warn("Could not load webhook_delivery_logs table:", e);
+        }
       } catch (err) {
         console.error("Failed to fetch admin dashboard telemetry:", err);
       } finally {
@@ -130,31 +228,60 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   }, []);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [showTeamForm, setShowTeamForm] = useState(false);
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
   const [teamForm, setTeamForm] = useState({ name: "", phone: "", email: "", role: "Marketing" as TeamRole, idFileName: "", headshotUrl: "" });
   const [newCredentials, setNewCredentials] = useState<{ username: string; password: string; name: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  function handleCreateTeamMember() {
-    if (!teamForm.name || !teamForm.email || !teamForm.phone) return;
+  async function handleCreateTeamMember() {
+    if (!teamForm.name || !teamForm.email || !teamForm.phone) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
     const creds = generateCredentials(teamForm.name);
-    const member: TeamMember = {
-      id: `TM-${String(teamMembers.length + 1).padStart(3, "0")}`,
+    const member = {
       name: teamForm.name,
       phone: teamForm.phone,
       email: teamForm.email,
       role: teamForm.role,
-      idFileName: teamForm.idFileName || "id_document.pdf",
-      headshotUrl: teamForm.headshotUrl || "",
+      id_file_name: teamForm.idFileName || "id_document.pdf",
+      headshot_url: teamForm.headshotUrl || "",
       username: creds.username,
       password: creds.password,
-      createdAt: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
       status: "active",
     };
-    setTeamMembers((t) => [...t, member]);
-    setNewCredentials({ ...creds, name: teamForm.name });
-    setTeamForm({ name: "", phone: "", email: "", role: "Marketing", idFileName: "", headshotUrl: "" });
-    setShowTeamForm(false);
+
+    setIsCreatingTeam(true);
+    const tid = toast.loading("Saving team member record and sending credentials...");
+    try {
+      const { data, error } = await supabase
+        .from("admin_team")
+        .insert([member])
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      // Send onboarding email containing credentials
+      await sendEmailNotification("staff_welcome", {
+        email: teamForm.email,
+        name: teamForm.name,
+        subject: "Welcome to the Anovra Admin Team",
+        message: `You have been added to the Anovra Platform Administration team as a staff member with the role of ${teamForm.role}. Your login email is ${creds.username} and your temporary password is ${creds.password}. Please sign in here: ${window.location.origin}/#/teamlogin and change your password upon your first login.`,
+      });
+
+      toast.success("Team member successfully created and notified!");
+      setTeamMembers((t) => [data || member, ...t]);
+      setNewCredentials({ ...creds, name: teamForm.name });
+      setTeamForm({ name: "", phone: "", email: "", role: "Marketing", idFileName: "", headshotUrl: "" });
+      setShowTeamForm(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create team member.");
+    } finally {
+      toast.dismiss(tid);
+      setIsCreatingTeam(false);
+    }
   }
 
   function copyToClipboard(text: string, field: string) {
@@ -234,7 +361,19 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       v.owner.toLowerCase().includes(search.toLowerCase()) ||
       v.city.toLowerCase().includes(search.toLowerCase())
   );
-
+  const filteredPayments = paymentsList.filter((p) => {
+    if (search === "") return true;
+    const vendor = vendorsList.find((v) => v.id === p.vendor_id);
+    const searchLower = search.toLowerCase();
+    return (
+      (p.reference && p.reference.toLowerCase().includes(searchLower)) ||
+      (p.id && p.id.toLowerCase().includes(searchLower)) ||
+      (p.status && p.status.toLowerCase().includes(searchLower)) ||
+      (p.tier_name && p.tier_name.toLowerCase().includes(searchLower)) ||
+      (vendor?.business_name && vendor.business_name.toLowerCase().includes(searchLower)) ||
+      (vendor?.email && vendor.email.toLowerCase().includes(searchLower))
+    );
+  });
   // Dynamic mapped safety queue representations
   const activeFlaggedQueue = productsList
     .filter((p) => p.nafdac_status === "flagged" || p.nafdac_status === "pending")
@@ -339,6 +478,127 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     }
   };
 
+  const handleAddIngredientSubmit = async () => {
+    if (!ingName.trim() || !ingFunction.trim()) {
+      toast.error("Please fill in the ingredient name and function.");
+      return;
+    }
+    setIsSavingIng(true);
+    const isEdit = editingIngredient !== null;
+    const tid = toast.loading(isEdit ? "Updating ingredient in safety database..." : "Adding ingredient to safety database...");
+    try {
+      const payload = {
+        name: ingName.trim(),
+        function: ingFunction.trim(),
+        status: ingStatus,
+        scope: ingScope.trim(),
+        max_conc: ingMaxConc.trim(),
+        notes: ingNotes.trim(),
+      };
+
+      if (isEdit) {
+        const { data, error } = await supabase
+          .from("safety_ingredients")
+          .update(payload)
+          .eq("id", editingIngredient.id)
+          .select()
+          .maybeSingle();
+
+        if (error) throw error;
+        toast.success("Ingredient successfully updated!");
+        setIngredientsList((prev) =>
+          prev.map((item) => (item.id === editingIngredient.id ? (data || { ...item, ...payload }) : item))
+              .sort((a, b) => a.name.localeCompare(b.name))
+        );
+      } else {
+        const { data, error } = await supabase
+          .from("safety_ingredients")
+          .insert([payload])
+          .select()
+          .maybeSingle();
+
+        if (error) throw error;
+        toast.success("Ingredient successfully added!");
+        setIngredientsList((prev) => [...prev, data || payload].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+
+      setShowAddIngModal(false);
+      setEditingIngredient(null);
+      // Clear form
+      setIngName("");
+      setIngFunction("");
+      setIngStatus("safe");
+      setIngScope("Global");
+      setIngMaxConc("No limit");
+      setIngNotes("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save ingredient.");
+    } finally {
+      setIsSavingIng(false);
+      toast.dismiss(tid);
+    }
+  };
+
+  const openEditModal = (ing: any) => {
+    setEditingIngredient(ing);
+    setIngName(ing.name);
+    setIngFunction(ing.function);
+    setIngStatus(ing.status);
+    setIngScope(ing.scope);
+    setIngMaxConc(ing.max_conc || ing.maxConc || "");
+    setIngNotes(ing.notes || "");
+    setShowAddIngModal(true);
+  };
+
+  const handleDeleteIngredient = async (ing: any) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Ingredient",
+      message: `Are you sure you want to delete "${ing.name}" from the safety database? This action cannot be undone.`,
+      confirmText: "Delete",
+      type: "danger",
+      onConfirm: async () => {
+        const tid = toast.loading(`Deleting ${ing.name}...`);
+        try {
+          const { error } = await supabase
+            .from("safety_ingredients")
+            .delete()
+            .eq("id", ing.id);
+
+          if (error) throw error;
+
+          toast.success(`${ing.name} deleted successfully.`);
+          setIngredientsList((prev) => prev.filter((item) => item.id !== ing.id));
+        } catch (err: any) {
+          toast.error(err.message || "Failed to delete ingredient.");
+        } finally {
+          toast.dismiss(tid);
+          setConfirmModal((c) => ({ ...c, isOpen: false }));
+        }
+      }
+    });
+  };
+
+  const renderNotes = (notes: string, ingName: string) => {
+    const isExpanded = expandedNotes[ingName];
+    if (!notes) return <span className="text-muted-foreground italic">No advisory notes</span>;
+    if (notes.length <= 60) return <span>{notes}</span>;
+    return (
+      <span className="leading-relaxed">
+        {isExpanded ? notes : `${notes.slice(0, 60)}...`}
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpandedNotes(prev => ({ ...prev, [ingName]: !prev[ingName] }));
+          }}
+          className="text-accent hover:underline font-semibold ml-1 text-[11px] inline-block cursor-pointer focus:outline-none"
+        >
+          {isExpanded ? "See less" : "See more"}
+        </button>
+      </span>
+    );
+  };
+
   const tabs: { id: AdminTab; label: string; badge?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "safety", label: "Safety Queue", badge: activeFlaggedQueue.filter((f) => f.status === "pending" || f.status === "under_review").length },
@@ -346,9 +606,12 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     { id: "vendors", label: "Vendors" },
     { id: "reviews", label: "Reviews", badge: reviewsList.filter((r) => r.status === "pending").length },
     { id: "team", label: "Team" },
+    { id: "payments", label: "Payments" },
+    { id: "onboarding", label: "Onboarding Requests", badge: onboardingRequests.filter((r) => r.status === "pending").length },
+    { id: "logs", label: "System Logs" },
   ];
 
-  const filteredIngredients = ingredientDB.filter(
+  const filteredIngredients = ingredientsList.filter(
     (i) =>
       search === "" ||
       i.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -381,7 +644,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           currentView="admin"
           setView={setView}
           title="Control Center"
-          subtitle="Platform Administration, NAFDAC Safety Queue & MRR Analytics"
+          subtitle="Platform Operations, Merchant Verification & Product Safety Control"
           badgeText="PLATFORM ADMIN"
           role="admin"
           showShopLink={false}
@@ -390,27 +653,54 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 relative pt-4">
         <div className="grid lg:grid-cols-[240px_1fr] gap-6 items-start">
-        <aside className="bg-card border border-border rounded-xl p-2 sticky top-24">
-          {tabs.map((t) => (
+        <aside className="bg-card border border-border rounded-xl py-5 px-3 sticky top-24 z-20 lg:h-[calc(100vh-140px)] flex flex-col justify-between">
+          <div className="space-y-2">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => { setTab(t.id); setSearch(""); }}
+                className={cn(
+                  "relative w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm transition-colors rounded-lg font-medium whitespace-nowrap text-left",
+                  tab === t.id
+                    ? "bg-accent text-white font-semibold shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                <span className="flex items-center gap-2.5">
+                  {t.id === "overview" && <BarChart2 className="w-4 h-4" />}
+                  {t.id === "safety" && <Shield className="w-4 h-4" />}
+                  {t.id === "ingredients" && <Package className="w-4 h-4" />}
+                  {t.id === "vendors" && <Store className="w-4 h-4" />}
+                  {t.id === "reviews" && <Star className="w-4 h-4" />}
+                  {t.id === "team" && <Users className="w-4 h-4" />}
+                  {t.id === "payments" && <CreditCard className="w-4 h-4" />}
+                  {t.id === "onboarding" && <FileText className="w-4 h-4" />}
+                  {t.id === "logs" && <Activity className="w-4 h-4" />}
+                  {t.label}
+                </span>
+                {t.badge ? (
+                  <span className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0",
+                    tab === t.id ? "bg-white text-accent animate-pulse" : "bg-accent/15 text-accent"
+                  )} style={{ fontFamily: "'DM Mono', monospace" }}>
+                    {t.badge}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-4 border-t border-border mt-4 lg:mt-0">
             <button
-              key={t.id}
-              onClick={() => { setTab(t.id); setSearch(""); }}
-              className={cn(
-                "relative w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm transition-colors rounded-lg font-medium whitespace-nowrap text-left",
-                tab === t.id
-                  ? "bg-accent text-white font-semibold shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              )}
+              onClick={handleSignOut}
+              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors rounded-lg font-medium whitespace-nowrap text-left"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              <span>{t.label}</span>
-              {t.badge ? (
-                <span className="bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-mono">
-                  {t.badge}
-                </span>
-              ) : null}
+              <LogOut className="w-4 h-4 text-red-600" />
+              <span>Sign Out</span>
             </button>
-          ))}
+          </div>
         </aside>
 
         <main className="min-w-0">
@@ -445,22 +735,22 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             </div>
 
             {/* Subscription plan breakdown */}
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5 mb-6">
                 <div>
-                  <h3 className="font-medium text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <h3 className="font-semibold text-foreground text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     Subscribed vendors by plan
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Active plans and Paystack payment records
+                    Active tiers based on verified Paystack transaction records
                   </p>
                 </div>
-                <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full font-medium" style={{ fontFamily: "'DM Mono', monospace" }}>
+                <span className="text-xs bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-300 border border-green-200 dark:border-green-800/30 px-3 py-1 rounded-full font-semibold font-mono self-start sm:self-auto">
                   {successfulPayments.length} tracked payments
                 </span>
               </div>
 
-              <div className="divide-y divide-border">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
                   {
                     plan: "Basic Plan",
@@ -479,9 +769,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     count: premiumCount,
                     total: totalVendors || 1,
                     mrr: `₦${(premiumCount * 25000).toLocaleString()}`,
-                    color: "bg-foreground",
-                    textColor: "text-foreground",
-                    badgeColor: "bg-foreground text-primary-foreground",
+                    color: "bg-emerald-600",
+                    textColor: "text-emerald-600",
+                    badgeColor: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25",
                     features: ["Unlimited skin tests", "Unlimited catalog", "White-labeled results", "Website embed widget", "Priority support"],
                   },
                   {
@@ -492,70 +782,76 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     mrr: `₦${(brandCount * 75000).toLocaleString()}`,
                     color: "bg-indigo-600",
                     textColor: "text-indigo-600",
-                    badgeColor: "bg-indigo-50 text-indigo-700 border border-indigo-200",
+                    badgeColor: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/25",
                     features: ["Everything in Pro", "REST API key access", "Custom domain for test links", "Multi-user team accounts"],
                   },
                 ].map((plan) => {
-                  const pct = totalVendors > 0 ? Math.round((plan.count / plan.total) * 100) : 0;
+                  const pct = totalVendors > 0 ? Math.round((plan.count / totalVendors) * 100) : 0;
                   return (
-                    <div key={plan.plan} className="px-5 py-4">
-                      <div className="flex items-start justify-between gap-4 mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${plan.badgeColor}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              {plan.plan}
-                            </span>
-                            <span className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{plan.price}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                            {plan.features.map((f) => (
-                              <span key={f} className="text-xs text-muted-foreground flex items-center gap-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                                <CheckCircle className="w-3 h-3 text-accent flex-shrink-0" />{f}
-                              </span>
-                            ))}
-                          </div>
+                    <div key={plan.plan} className="border border-border bg-secondary/30 rounded-xl p-5 hover:border-accent/40 hover:shadow-xs transition-all flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-start gap-2 mb-3">
+                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${plan.badgeColor}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {plan.plan}
+                          </span>
+                          <span className="text-xs font-bold text-muted-foreground font-mono">{plan.price}</span>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-3xl font-light text-foreground leading-none mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>
-                            {plan.count}
-                          </p>
-                          <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>vendors</p>
-                          <p className="text-xs font-medium text-green-700 mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>
-                            {plan.mrr} MRR
-                          </p>
+                        
+                        <div className="space-y-2 mb-6">
+                          {plan.features.map((f) => (
+                            <div key={f} className="text-xs text-muted-foreground flex items-center gap-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              <CheckCircle className="w-3.5 h-3.5 text-accent shrink-0" />
+                              <span>{f}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
 
-                      {/* Progress bar */}
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${plan.color}`}
-                            style={{ width: `${pct}%` }}
-                          />
+                      <div className="border-t border-border pt-4 mt-auto">
+                        <div className="flex items-end justify-between mb-3">
+                          <div>
+                            <p className="text-3xl font-light text-foreground tracking-tight leading-none mb-1" style={{ fontFamily: "'Fraunces', serif" }}>
+                              {plan.count}
+                            </p>
+                            <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>vendors active</span>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Plan MRR contribution</p>
+                            <p className="text-sm font-semibold text-foreground font-mono mt-0.5">{plan.mrr}</p>
+                          </div>
                         </div>
-                        <span className="text-xs text-muted-foreground flex-shrink-0 w-12 text-right" style={{ fontFamily: "'DM Mono', monospace" }}>
-                          {pct}% of all
-                        </span>
+
+                        {/* Progress Bar */}
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${plan.color}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground font-mono shrink-0 w-10 text-right">
+                            {pct}%
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
                 })}
+              </div>
 
-                {/* Free tier summary row */}
-                <div className="px-5 py-3 bg-muted/40 flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-medium text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Free tier</span>
-                    <span className="text-xs text-muted-foreground ml-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>— no subscription</span>
+              {/* Free tier summary strip */}
+              <div className="mt-6 px-5 py-4 bg-secondary/50 border border-border rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-foreground bg-muted-foreground/10 px-2 py-0.5 rounded uppercase" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Free Tier</span>
+                  <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>— Sandbox vendors (no active recurring payments verified)</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-32 bg-muted rounded-full h-1.5 overflow-hidden shrink-0">
+                    <div className="h-full rounded-full bg-muted-foreground/30" style={{ width: `${totalVendors > 0 ? Math.round((freeCount / totalVendors) * 100) : 0}%` }} />
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-24 bg-muted rounded-full h-1.5 overflow-hidden">
-                      <div className="h-full rounded-full bg-border" style={{ width: `${totalVendors > 0 ? Math.round((freeCount / totalVendors) * 100) : 0}%` }} />
-                    </div>
-                    <span className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
-                      {freeCount} vendors · {totalVendors > 0 ? Math.round((freeCount / totalVendors) * 100) : 0}%
-                    </span>
-                  </div>
+                  <span className="text-xs text-foreground font-semibold font-mono whitespace-nowrap">
+                    {freeCount} vendors ({totalVendors > 0 ? Math.round((freeCount / totalVendors) * 100) : 0}%)
+                  </span>
                 </div>
               </div>
             </div>
@@ -633,7 +929,11 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   {successfulPayments.slice(0, 5).map((payment) => {
                     const vendor = vendorsList.find((v) => v.id === payment.vendor_id);
                     return (
-                      <div key={payment.id || payment.reference} className="flex items-start justify-between gap-3 border-b border-border last:border-0 pb-3 last:pb-0">
+                      <div 
+                        key={payment.id || payment.reference} 
+                        onClick={() => setSelectedPayment(payment)}
+                        className="flex items-start justify-between gap-3 border-b border-border last:border-0 pb-3 last:pb-0 cursor-pointer hover:bg-secondary/60 p-1.5 rounded transition-all"
+                      >
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                             {vendor?.business_name || "Unknown vendor"}
@@ -931,9 +1231,6 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
                   Ingredient safety database
                 </h2>
-                <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {ingredientDB.length} ingredients · {ingredientDB.filter((i) => i.status === "banned").length} banned · {ingredientDB.filter((i) => i.status === "restricted").length} restricted
-                </p>
               </div>
               <div className="flex gap-2">
                 <div className="relative">
@@ -947,63 +1244,198 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   />
                 </div>
-                <button className="flex items-center gap-1.5 text-sm bg-accent text-white px-3 py-2 rounded-lg hover:bg-accent/90 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <button 
+                  onClick={() => setShowAddIngModal(true)}
+                  className="flex items-center gap-1.5 text-sm bg-accent text-white px-3 py-2 rounded-lg hover:bg-accent/90 transition-colors cursor-pointer" 
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
                   + Add ingredient
                 </button>
               </div>
             </div>
 
-            {/* Status legend */}
-            <div className="flex flex-wrap gap-2 mb-5">
-              {[
-                { status: "banned", label: "Banned — globally prohibited" },
-                { status: "restricted", label: "Restricted — regulatory limit applies" },
-                { status: "caution", label: "Caution — specific use warnings" },
-                { status: "safe", label: "Safe — no known restrictions" },
-              ].map((item) => (
-                <span key={item.status} className={cn("text-xs px-2.5 py-1 rounded-full font-medium", ingredientStatusColors[item.status])} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {item.label}
-                </span>
-              ))}
+            {/* Status legend & Compliance Guidelines */}
+            <div className="bg-card border border-border rounded-xl p-5 mb-6 shadow-xs">
+              <div className="flex items-center gap-2 mb-3">
+                <Info className="w-4 h-4 text-accent" />
+                <h3 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Regulatory Classification & Action Guidelines
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Use these guidelines to evaluate ingredients identified in vendor catalogs during compliance audits:
+              </p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  {
+                    status: "banned",
+                    title: "Banned",
+                    desc: "Globally prohibited compounds.",
+                    action: "Reject and flag the product immediately. Zero tolerance (e.g. Mercury, Lead).",
+                  },
+                  {
+                    status: "restricted",
+                    title: "Restricted",
+                    desc: "Strict regulatory limits apply.",
+                    action: "Verify concentration is within allowable limits (e.g. Hydroquinone ≤ 2%).",
+                  },
+                  {
+                    status: "caution",
+                    title: "Caution",
+                    desc: "Usage warnings & constraints.",
+                    action: "Ensure appropriate warnings (e.g. Retinol/AHA requires sunscreen warning).",
+                  },
+                  {
+                    status: "safe",
+                    title: "Safe",
+                    desc: "Approved cosmetic ingredients.",
+                    action: "Safe for distribution. Eligible for storefront placement and recommendation filters.",
+                  },
+                ].map((item) => (
+                  <div key={item.status} className="bg-secondary/40 border border-border/80 rounded-lg p-3.5 flex flex-col justify-between space-y-2">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {item.title}
+                        </span>
+                        <span className={cn("text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono", ingredientStatusColors[item.status])}>
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-foreground/80 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {item.desc}
+                      </p>
+                    </div>
+                    <div className="border-t border-border/50 pt-2 text-[11px] text-muted-foreground leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      <strong className="text-foreground font-medium block mb-0.5">Audit Action:</strong>
+                      {item.action}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-border bg-secondary">
-                {["Ingredient", "Function", "Status", "Scope", "Max conc.", "Notes"].map((h) => (
-                  <p key={h} className={cn("text-xs font-medium text-muted-foreground", h === "Ingredient" ? "col-span-3" : h === "Notes" ? "col-span-3" : "col-span-1")} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    {h}
-                  </p>
-                ))}
-              </div>
-              <div className="divide-y divide-border">
-                {filteredIngredients.map((ing) => (
-                  <div key={ing.name} className="grid grid-cols-12 gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors items-start">
-                    <p className="col-span-3 text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {ing.name}
-                    </p>
-                    <p className="col-span-1 text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {ing.function}
-                    </p>
-                    <div className="col-span-1">
-                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", ingredientStatusColors[ing.status])} style={{ fontFamily: "'DM Mono', monospace" }}>
-                        {ing.status}
-                      </span>
+            <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs">
+              {/* Desktop View Table */}
+              <div className="hidden md:block">
+                <div className="grid grid-cols-12 gap-3 px-4 py-3 border-b border-border bg-secondary/60 text-xs font-semibold text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <span className="col-span-3">Ingredient</span>
+                  <span className="col-span-2">Function</span>
+                  <span className="col-span-1">Status</span>
+                  <span className="col-span-2">Scope</span>
+                  <span className="col-span-1 text-center">Max Conc.</span>
+                  <span className="col-span-2">Safety / Advisory Notes</span>
+                  <span className="col-span-1 pr-2 text-right">Actions</span>
+                </div>
+                <div className="divide-y divide-border">
+                  {filteredIngredients.map((ing) => (
+                    <div key={ing.name} className="grid grid-cols-12 gap-3 px-4 py-3.5 hover:bg-secondary/30 transition-all items-start">
+                      <p className="col-span-3 text-sm font-semibold text-foreground whitespace-normal break-words leading-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {ing.name}
+                      </p>
+                      <p className="col-span-2 text-xs text-muted-foreground leading-relaxed whitespace-normal break-words" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {ing.function}
+                      </p>
+                      <div className="col-span-1">
+                        <span className={cn("text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono inline-block text-center", ingredientStatusColors[ing.status])}>
+                          {ing.status}
+                        </span>
+                      </div>
+                      <p className="col-span-2 text-xs text-muted-foreground whitespace-normal break-words" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {ing.scope}
+                      </p>
+                      <p className="col-span-1 text-xs font-semibold font-mono text-foreground text-center bg-secondary/50 py-0.5 px-1 rounded">{ing.max_conc || ing.maxConc}</p>
+                      <p className="col-span-2 text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {renderNotes(ing.notes, ing.name)}
+                      </p>
+                      <div className="col-span-1 flex items-center justify-end gap-1.5 pr-1">
+                        <button
+                          onClick={() => openEditModal(ing)}
+                          className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-accent transition-colors cursor-pointer"
+                          title="Edit ingredient info"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteIngredient(ing)}
+                          className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-red-600 transition-colors cursor-pointer"
+                          title="Delete ingredient record"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <p className="col-span-1 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {ing.scope}
-                    </p>
-                    <p className="col-span-1 text-xs font-mono text-foreground">{ing.maxConc}</p>
-                    <p className="col-span-3 text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {ing.notes}
-                    </p>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mobile View Cards */}
+              <div className="block md:hidden divide-y divide-border">
+                {filteredIngredients.map((ing) => (
+                  <div key={ing.name} className="p-4 hover:bg-secondary/20 transition-all space-y-3">
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground whitespace-normal break-words leading-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {ing.name}
+                        </p>
+                        <span className={cn("text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono inline-block mt-1", ingredientStatusColors[ing.status])}>
+                          {ing.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => openEditModal(ing)}
+                          className="p-1.5 bg-secondary hover:bg-muted rounded-lg text-muted-foreground hover:text-accent transition-colors cursor-pointer"
+                          title="Edit ingredient"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteIngredient(ing)}
+                          className="p-1.5 bg-secondary hover:bg-muted rounded-lg text-muted-foreground hover:text-red-600 transition-colors cursor-pointer"
+                          title="Delete ingredient"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-[10px] text-muted-foreground uppercase font-bold block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Function</span>
+                        <span className="text-foreground whitespace-normal break-words" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{ing.function}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-muted-foreground uppercase font-bold block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Max Conc</span>
+                        <span className="font-mono text-foreground">{ing.max_conc || ing.maxConc}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Scope</span>
+                      <span className="text-xs text-muted-foreground whitespace-normal break-words" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{ing.scope}</span>
+                    </div>
+                    {ing.notes && (
+                      <div className="bg-secondary/40 p-2.5 rounded-lg border border-border">
+                        <span className="text-[9px] text-muted-foreground uppercase font-bold block mb-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Advisory Notes</span>
+                        <div className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {renderNotes(ing.notes, ing.name)}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
-                {filteredIngredients.length === 0 && (
-                  <div className="px-4 py-8 text-center">
-                    <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No ingredients match your search.</p>
-                  </div>
-                )}
               </div>
+
+              {isLoading ? (
+                <div className="px-4 py-16 text-center bg-card">
+                  <RefreshCw className="w-5 h-5 mx-auto text-muted-foreground animate-spin mb-2" />
+                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Loading safety database...</p>
+                </div>
+              ) : filteredIngredients.length === 0 ? (
+                <div className="px-4 py-16 text-center bg-card">
+                  <p className="text-xs text-muted-foreground font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No ingredients found.</p>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
@@ -1034,49 +1466,221 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             </div>
 
             <div className="bg-card border border-border rounded-xl overflow-hidden">
-              {/* Table header */}
-              <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-border bg-secondary text-xs font-medium text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                <span className="col-span-3">Vendor</span>
-                <span className="col-span-2">Location</span>
-                <span className="col-span-1">Tier</span>
-                <span className="col-span-1 text-right">Products</span>
-                <span className="col-span-1 text-right">Scans</span>
-                <span className="col-span-1 text-right">MRR</span>
-                <span className="col-span-1">Joined</span>
-                <span className="col-span-2">Status / Action</span>
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                {/* Table header */}
+                <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-border bg-secondary text-xs font-medium text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <span className="col-span-3">Vendor</span>
+                  <span className="col-span-2">Location</span>
+                  <span className="col-span-1">Tier</span>
+                  <span className="col-span-1 text-right">Products</span>
+                  <span className="col-span-1 text-right">Scans</span>
+                  <span className="col-span-1 text-right">MRR</span>
+                  <span className="col-span-1">Joined</span>
+                  <span className="col-span-2">Status / Action</span>
+                </div>
+                <div className="divide-y divide-border">
+                  {filteredVendors.map((v) => {
+                    const status = getVendorStatus(v);
+                    const isApproved = status !== "pending";
+                    const isDropOpen = openDropdown === v.id;
+
+                    const statusBadge = () => {
+                      if (status === "pending") return <span className="flex items-center gap-1 text-xs text-muted-foreground font-medium"><AlertCircle className="w-3 h-3" />Pending</span>;
+                      if (status === "suspended") return <span className="flex items-center gap-1 text-xs text-orange-600 font-medium"><AlertTriangle className="w-3 h-3" />Suspended</span>;
+                      if (status === "banned") return <span className="flex items-center gap-1 text-xs text-red-600 font-medium"><Ban className="w-3 h-3" />Banned</span>;
+                      if (status === "removed") return <span className="flex items-center gap-1 text-xs text-red-400 font-medium"><X className="w-3 h-3" />Removed</span>;
+                      if (status === "flagged") return <span className="flex items-center gap-1 text-xs text-amber-600 font-medium"><AlertTriangle className="w-3 h-3" />Flagged</span>;
+                      return <span className="flex items-center gap-1 text-xs text-green-600 font-medium"><CheckCircle className="w-3 h-3" />Active</span>;
+                    };
+
+                    return (
+                      <div
+                        key={v.id}
+                        className={cn(
+                          "grid grid-cols-12 gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors items-center",
+                          status === "flagged" ? "bg-amber-50/50" : "",
+                          status === "banned" ? "bg-red-50/30 opacity-60" : "",
+                          status === "suspended" ? "bg-orange-50/30" : "",
+                        )}
+                      >
+                        <div className="col-span-3">
+                          <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{v.name}</p>
+                          <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{v.owner}</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            {v.cacNumber && (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                CAC {v.cacNumber}
+                              </span>
+                            )}
+                            {v.cacDocumentUrl ? (
+                              <a
+                                href={v.cacDocumentUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] text-accent hover:underline font-medium"
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                              >
+                                <FileText className="w-3 h-3" />
+                                View CAC document
+                              </a>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                                <AlertTriangle className="w-3 h-3" />
+                                CAC document missing
+                              </span>
+                            )}
+                          </div>
+                          {isApproved && (
+                            <p className="text-xs text-accent mt-0.5 font-mono truncate">
+                              anovra.africa/shop/{v.name.toLowerCase().replace(/\s+/g, "-")}
+                            </p>
+                          )}
+                        </div>
+                        <div className="col-span-2 flex items-center gap-1 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          <MapPin className="w-3 h-3 flex-shrink-0" />
+                          {v.city}
+                        </div>
+                        <div className="col-span-1">
+                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tierColors[v.tier] ?? "bg-muted text-muted-foreground")} style={{ fontFamily: "'DM Mono', monospace" }}>
+                            {v.tier}
+                          </span>
+                        </div>
+                        <p className="col-span-1 text-sm text-right font-mono text-foreground">{v.products}</p>
+                        <p className="col-span-1 text-sm text-right font-mono text-foreground">{v.scans.toLocaleString()}</p>
+                        <div className="col-span-1 text-right">
+                          <p className="text-sm font-mono text-foreground">{v.mrr}</p>
+                          {v.paymentReference && (
+                            <p className="text-[10px] font-mono text-muted-foreground truncate" title={v.paymentReference}>
+                              paid
+                            </p>
+                          )}
+                        </div>
+                        <div className="col-span-1 flex items-center gap-1 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          <Calendar className="w-3 h-3" />
+                          {v.joined}
+                        </div>
+
+                        {/* Action column */}
+                        <div className="col-span-2 flex items-center gap-2">
+                          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {statusBadge()}
+                          </div>
+                          {!isApproved ? (
+                            <button
+                              onClick={() => setVendorAction(v.id, "active")}
+                              className="flex items-center gap-1 text-xs bg-accent text-white px-2.5 py-1 rounded-full hover:bg-accent/90 transition-colors font-medium whitespace-nowrap"
+                              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                            >
+                              <Check className="w-3 h-3" />
+                              Approve
+                            </button>
+                          ) : (
+                            <div className="relative">
+                              <button
+                                onClick={() => setOpenDropdown(isDropOpen ? null : v.id)}
+                                className="flex items-center gap-1 text-xs bg-secondary border border-border text-foreground px-2.5 py-1 rounded-full hover:bg-muted transition-colors cursor-pointer"
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                              >
+                                Manage
+                                <ChevronDown className="w-3 h-3" />
+                              </button>
+                              {isDropOpen && (
+                                <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-lg z-20 overflow-hidden">
+                                  <button
+                                    onClick={() => {
+                                      setVendorAction(v.id, "suspended");
+                                      setOpenDropdown(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 hover:bg-orange-50 transition-colors text-left"
+                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                                  >
+                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                    Suspend vendor
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setVendorAction(v.id, "banned");
+                                      setOpenDropdown(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors text-left border-t border-border"
+                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                                  >
+                                    <Ban className="w-3.5 h-3.5" />
+                                    Ban vendor
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setVendorAction(v.id, "removed");
+                                      setOpenDropdown(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary transition-colors text-left border-t border-border"
+                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    Remove account
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="divide-y divide-border">
+
+              {/* Mobile Card View */}
+              <div className="block md:hidden divide-y divide-border">
                 {filteredVendors.map((v) => {
                   const status = getVendorStatus(v);
                   const isApproved = status !== "pending";
                   const isDropOpen = openDropdown === v.id;
 
                   const statusBadge = () => {
-                    if (status === "pending") return <span className="flex items-center gap-1 text-xs text-muted-foreground font-medium"><AlertCircle className="w-3 h-3" />Pending</span>;
-                    if (status === "suspended") return <span className="flex items-center gap-1 text-xs text-orange-600 font-medium"><AlertTriangle className="w-3 h-3" />Suspended</span>;
-                    if (status === "banned") return <span className="flex items-center gap-1 text-xs text-red-600 font-medium"><Ban className="w-3 h-3" />Banned</span>;
-                    if (status === "removed") return <span className="flex items-center gap-1 text-xs text-red-400 font-medium"><X className="w-3 h-3" />Removed</span>;
-                    if (status === "flagged") return <span className="flex items-center gap-1 text-xs text-amber-600 font-medium"><AlertTriangle className="w-3 h-3" />Flagged</span>;
-                    return <span className="flex items-center gap-1 text-xs text-green-600 font-medium"><CheckCircle className="w-3 h-3" />Active</span>;
+                    if (status === "pending") return <span className="inline-flex items-center gap-1 text-[11px] bg-secondary text-muted-foreground font-semibold px-2 py-0.5 rounded-full border border-border"><AlertCircle className="w-3 h-3" />Pending</span>;
+                    if (status === "suspended") return <span className="inline-flex items-center gap-1 text-[11px] bg-orange-500/10 text-orange-600 font-semibold px-2 py-0.5 rounded-full border border-orange-500/20"><AlertTriangle className="w-3 h-3" />Suspended</span>;
+                    if (status === "banned") return <span className="inline-flex items-center gap-1 text-[11px] bg-red-500/10 text-red-600 font-semibold px-2 py-0.5 rounded-full border border-red-500/20"><Ban className="w-3 h-3" />Banned</span>;
+                    if (status === "removed") return <span className="inline-flex items-center gap-1 text-[11px] bg-red-500/5 text-red-400 font-semibold px-2 py-0.5 rounded-full border border-red-500/10"><X className="w-3 h-3" />Removed</span>;
+                    if (status === "flagged") return <span className="inline-flex items-center gap-1 text-[11px] bg-amber-500/10 text-amber-600 font-semibold px-2 py-0.5 rounded-full border border-amber-500/20"><AlertTriangle className="w-3 h-3" />Flagged</span>;
+                    return <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-500/10 text-green-600 font-semibold px-2 py-0.5 rounded-full border border-emerald-500/20"><CheckCircle className="w-3 h-3" />Active</span>;
                   };
 
                   return (
-                    <div
-                      key={v.id}
+                    <div 
+                      key={v.id} 
                       className={cn(
-                        "grid grid-cols-12 gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors items-center",
-                        status === "flagged" ? "bg-amber-50/50" : "",
-                        status === "banned" ? "bg-red-50/30 opacity-60" : "",
-                        status === "suspended" ? "bg-orange-50/30" : "",
+                        "p-4 hover:bg-secondary/20 transition-all space-y-3",
+                        status === "flagged" ? "bg-amber-50/40" : "",
+                        status === "banned" ? "bg-red-50/20 opacity-75" : "",
+                        status === "suspended" ? "bg-orange-50/20" : "",
                       )}
                     >
-                      <div className="col-span-3">
-                        <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{v.name}</p>
-                        <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{v.owner}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <h4 className="text-sm font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{v.name}</h4>
+                          <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{v.owner}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {statusBadge()}
+                          <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium font-mono", tierColors[v.tier] ?? "bg-muted text-muted-foreground")}>
+                            {v.tier}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Storefront Link & CAC */}
+                      <div className="text-xs space-y-1.5 pt-1">
+                        {isApproved && (
+                          <p className="text-[11px] text-accent font-mono truncate">
+                            anovra.africa/shop/{v.name.toLowerCase().replace(/\s+/g, "-")}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 flex-wrap text-[11px]">
                           {v.cacNumber && (
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              CAC {v.cacNumber}
+                            <span className="text-muted-foreground font-mono bg-secondary/80 px-1.5 py-0.5 rounded border border-border">
+                              CAC: {v.cacNumber}
                             </span>
                           )}
                           {v.cacDocumentUrl ? (
@@ -1084,134 +1688,135 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               href={v.cacDocumentUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-[10px] text-accent hover:underline font-medium"
-                              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                              className="inline-flex items-center gap-1 text-accent hover:underline font-semibold"
                             >
-                              <FileText className="w-3 h-3" />
-                              View CAC document
+                              <FileText className="w-3.5 h-3.5" />
+                              View Certificate
                             </a>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              <AlertTriangle className="w-3 h-3" />
-                              CAC document missing
+                            <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              CAC certificate missing
                             </span>
                           )}
                         </div>
-                        {isApproved && (
-                          <p className="text-xs text-accent mt-0.5 font-mono truncate">
-                            anovra.africa/shop/{v.name.toLowerCase().replace(/\s+/g, "-")}
-                          </p>
-                        )}
-                      </div>
-                      <div className="col-span-2 flex items-center gap-1 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        <MapPin className="w-3 h-3 flex-shrink-0" />
-                        {v.city}
-                      </div>
-                      <div className="col-span-1">
-                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tierColors[v.tier] ?? "bg-muted text-muted-foreground")} style={{ fontFamily: "'DM Mono', monospace" }}>
-                          {v.tier}
-                        </span>
-                      </div>
-                      <p className="col-span-1 text-sm text-right font-mono text-foreground">{v.products}</p>
-                      <p className="col-span-1 text-sm text-right font-mono text-foreground">{v.scans.toLocaleString()}</p>
-                      <div className="col-span-1 text-right">
-                        <p className="text-sm font-mono text-foreground">{v.mrr}</p>
-                        {v.paymentReference && (
-                          <p className="text-[10px] font-mono text-muted-foreground truncate" title={v.paymentReference}>
-                            paid
-                          </p>
-                        )}
-                      </div>
-                      <div className="col-span-1 flex items-center gap-1 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        <Calendar className="w-3 h-3" />
-                        {v.joined}
                       </div>
 
-                      {/* Action column */}
-                      <div className="col-span-2 flex items-center gap-2">
-                        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          {statusBadge()}
+                      {/* Metrics stats */}
+                      <div className="grid grid-cols-3 gap-2 bg-secondary/30 p-2 rounded-lg border border-border/60 text-center">
+                        <div>
+                          <span className="text-[9px] text-muted-foreground uppercase font-bold block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Products</span>
+                          <span className="text-xs font-semibold font-mono text-foreground">{v.products}</span>
                         </div>
-                        {!isApproved ? (
-                          <button
-                            onClick={() => setVendorAction(v.id, "active")}
-                            className="flex items-center gap-1 text-xs bg-accent text-white px-2.5 py-1 rounded-full hover:bg-accent/90 transition-colors font-medium whitespace-nowrap"
-                            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                          >
-                            <Check className="w-3 h-3" />
-                            Approve
-                          </button>
-                        ) : (
-                          <div className="relative">
+                        <div>
+                          <span className="text-[9px] text-muted-foreground uppercase font-bold block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Scans</span>
+                          <span className="text-xs font-semibold font-mono text-foreground">{v.scans.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-muted-foreground uppercase font-bold block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>MRR</span>
+                          <span className="text-xs font-semibold font-mono text-foreground">{v.mrr}</span>
+                        </div>
+                      </div>
+
+                      {/* Footer & Meta Info */}
+                      <div className="flex justify-between items-center gap-3 pt-2 flex-wrap">
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          <Calendar className="w-3 h-3" /> Joined {v.joined}
+                        </span>
+                        
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2">
+                          {!isApproved ? (
                             <button
-                              onClick={() => setOpenDropdown(isDropOpen ? null : v.id)}
-                              className="flex items-center gap-1 text-xs bg-secondary border border-border text-foreground px-2.5 py-1 rounded-full hover:bg-muted transition-colors"
+                              onClick={() => setVendorAction(v.id, "active")}
+                              className="flex items-center gap-1 text-[11px] bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-accent/90 transition-colors font-semibold"
                               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                             >
-                              Manage
-                              <ChevronDown className="w-3 h-3" />
+                              <Check className="w-3 h-3" /> Approve Account
                             </button>
-                            {isDropOpen && (
-                              <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-lg z-20 overflow-hidden">
-                                <button
-                                  onClick={() => setVendorAction(v.id, "suspended")}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 hover:bg-orange-50 transition-colors text-left"
-                                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                                >
-                                  <AlertTriangle className="w-3.5 h-3.5" />
-                                  Suspend vendor
-                                </button>
-                                <button
-                                  onClick={() => setVendorAction(v.id, "banned")}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors text-left border-t border-border"
-                                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                                >
-                                  <Ban className="w-3.5 h-3.5" />
-                                  Ban vendor
-                                </button>
-                                <button
-                                  onClick={() => setVendorAction(v.id, "removed")}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary transition-colors text-left border-t border-border"
-                                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                  Remove account
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                          ) : (
+                            <div className="relative">
+                              <button
+                                onClick={() => setOpenDropdown(isDropOpen ? null : v.id)}
+                                className="flex items-center gap-1 text-[11px] bg-secondary border border-border text-foreground px-2.5 py-1.5 rounded-lg hover:bg-muted transition-colors font-medium cursor-pointer"
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                              >
+                                Manage Partner
+                                <ChevronDown className="w-3 h-3" />
+                              </button>
+                              {isDropOpen && (
+                                <div className="absolute right-0 bottom-full mb-1.5 w-44 bg-card border border-border rounded-lg shadow-lg z-20 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
+                                  <button
+                                    onClick={() => {
+                                      setVendorAction(v.id, "suspended");
+                                      setOpenDropdown(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 hover:bg-orange-50 transition-colors text-left"
+                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                                  >
+                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                    Suspend merchant
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setVendorAction(v.id, "banned");
+                                      setOpenDropdown(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors text-left border-t border-border"
+                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                                  >
+                                    <Ban className="w-3.5 h-3.5" />
+                                    Ban brand account
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setVendorAction(v.id, "removed");
+                                      setOpenDropdown(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary transition-colors text-left border-t border-border"
+                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    Remove merchant
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
                 })}
-                {filteredVendors.length === 0 && (
-                  <div className="px-4 py-8 text-center">
-                    <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No vendors match your search.</p>
-                  </div>
-                )}
               </div>
+
+              {filteredVendors.length === 0 && (
+                <div className="px-4 py-8 text-center">
+                  <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No vendors match your search.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* ---- REVIEWS ---- */}
         {tab === "reviews" && (
-          <div className="space-y-6">
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Storefront reviews
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Approve customer ratings before they affect public storefront scores.
-                  </p>
-                </div>
-                <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
-                  {reviewsList.filter((r) => r.status === "pending").length} pending
-                </span>
+          <div>
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Storefront reviews
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Approve customer ratings before they affect public storefront scores.
+                </p>
               </div>
+              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-full font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {reviewsList.filter((r) => r.status === "pending").length} pending
+              </span>
+            </div>
+
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="divide-y divide-border">
                 {reviewsList.length > 0 ? reviewsList.map((review) => {
                   const vendorProfile = vendorsList.find((vendor) => vendor.id === review.vendor_id);
@@ -1467,6 +2072,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       <option value="Marketing">Marketing</option>
                       <option value="Sales">Sales</option>
                       <option value="Support">Support</option>
+                      <option value="Representative">Sales Representative (Ambassador)</option>
+                      <option value="Operations">Operations Staff</option>
+                      <option value="Manager">Workspace Manager</option>
                     </select>
                   </div>
 
@@ -1485,7 +2093,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                         className="sr-only"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
-                          if (file) setTeamForm((f) => ({ ...f, idFileName: file.name }));
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) {
+                              toast.error("ID file is too large. Maximum size is 10MB.");
+                              e.target.value = "";
+                              return;
+                            }
+                            setTeamForm((f) => ({ ...f, idFileName: file.name }));
+                          }
                         }}
                       />
                       <Upload className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
@@ -1493,6 +2108,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                         {teamForm.idFileName || "Upload ID document"}
                       </span>
                     </label>
+                    <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>PDF, JPG, PNG (Max 10MB)</p>
                   </div>
 
                   {/* Headshot upload */}
@@ -1511,6 +2127,11 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
+                            if (file.size > 5 * 1024 * 1024) {
+                              toast.error("Headshot image is too large. Maximum size is 5MB.");
+                              e.target.value = "";
+                              return;
+                            }
                             const url = URL.createObjectURL(file);
                             setTeamForm((f) => ({ ...f, headshotUrl: url }));
                           }
@@ -1521,6 +2142,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                         {teamForm.headshotUrl ? "Photo selected" : "Upload headshot"}
                       </span>
                     </label>
+                    <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>JPG, PNG, WEBP (Max 5MB)</p>
                   </div>
 
                   {/* Preview of generated login */}
@@ -1559,64 +2181,443 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
             {/* Team member list */}
             <div className="space-y-3">
-              {teamMembers.map((m) => (
-                <div key={m.id} className="bg-card border border-border rounded-xl p-4 flex items-start gap-4">
-                  {m.headshotUrl ? (
-                    <img
-                      src={m.headshotUrl}
-                      alt={m.name}
-                      className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-secondary"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full flex-shrink-0 bg-accent/10 text-accent flex items-center justify-center font-bold text-sm">
-                      {m.name.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "TM"}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <p className="font-medium text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.name}</p>
-                          <span className={cn(
-                            "text-xs px-2 py-0.5 rounded-full font-medium",
-                            m.role === "Marketing" ? "bg-blue-100 text-blue-700" :
-                            m.role === "Sales" ? "bg-accent/10 text-accent" :
-                            "bg-purple-100 text-purple-700"
-                          )} style={{ fontFamily: "'DM Mono', monospace" }}>
-                            {m.role}
-                          </span>
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Active</span>
+              {isLoading && (
+                <div className="bg-card border border-border border-dashed rounded-xl p-10 text-center w-full my-4 flex flex-col items-center justify-center gap-3">
+                  <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-muted-foreground font-medium animate-pulse" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Loading team accounts...
+                  </p>
+                </div>
+              )}
+
+              {isCreatingTeam && (
+                <div className="bg-card border border-border border-dashed rounded-xl p-8 text-center w-full my-4 flex flex-col items-center justify-center gap-3">
+                  <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-muted-foreground font-medium animate-pulse" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Saving new staff member and dispatching onboarding credentials...
+                  </p>
+                </div>
+              )}
+
+              {!isLoading && teamMembers.length > 0 && (
+                teamMembers.map((m) => (
+                  <div key={m.id} className="bg-card border border-border rounded-xl p-4 flex items-start gap-4">
+                    {m.headshotUrl || (m as any).headshot_url ? (
+                      <img
+                        src={m.headshotUrl || (m as any).headshot_url}
+                        alt={m.name}
+                        className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-secondary"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full flex-shrink-0 bg-accent/10 text-accent flex items-center justify-center font-bold text-sm">
+                        {m.name.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "TM"}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className="font-medium text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.name}</p>
+                            <span className={cn(
+                              "text-xs px-2 py-0.5 rounded-full font-medium",
+                              m.role === "Marketing" ? "bg-blue-100 text-blue-700" :
+                              m.role === "Sales" || m.role === "Representative" ? "bg-accent/15 text-accent" :
+                              m.role === "Manager" ? "bg-emerald-100 text-emerald-800" :
+                              m.role === "Operations" ? "bg-orange-100 text-orange-800" :
+                              "bg-purple-100 text-purple-700"
+                            )} style={{ fontFamily: "'DM Mono', monospace" }}>
+                              {m.role}
+                            </span>
+                            <span className={cn(
+                              "text-xs px-2 py-0.5 rounded-full font-medium",
+                              m.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                            )}>
+                              {m.status === "active" ? "Active" : "Suspended"}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            <span>{m.phone}</span>
+                            <span>{m.email}</span>
+                            <span className="font-mono">{m.username}</span>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          <span>{m.phone}</span>
-                          <span>{m.email}</span>
-                          <span className="font-mono">{m.username}</span>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          <Calendar className="w-3 h-3" />
+                          {new Date(m.createdAt || (m as any).created_at || Date.now()).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric"
+                          })}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        <Calendar className="w-3 h-3" />
-                        {m.createdAt}
+                      <div className="flex items-center gap-3 mt-2.5">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          <Shield className="w-3 h-3 text-green-600" />
+                          ID verified · {m.idFileName || (m as any).id_file_name}
+                        </div>
+                        <button
+                          onClick={() => {
+                            const creds = generateCredentials(m.name);
+                            setNewCredentials({ ...creds, name: m.name });
+                          }}
+                          className="text-xs text-accent hover:underline font-medium"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          Regenerate login
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const newStatus = m.status === "active" ? "suspended" : "active";
+                            const { error } = await supabase
+                              .from("admin_team")
+                              .update({ status: newStatus })
+                              .eq("id", m.id);
+                            if (error) {
+                              toast.error(error.message);
+                              return;
+                            }
+                            setTeamMembers((prev) =>
+                              prev.map((item) => (item.id === m.id ? { ...item, status: newStatus } : item))
+                            );
+                            toast.success(`Account successfully ${newStatus === "active" ? "activated" : "suspended"}.`);
+                          }}
+                          className={cn(
+                            "text-xs hover:underline font-medium ml-1.5",
+                            m.status === "active" ? "text-amber-600 hover:text-amber-700" : "text-green-600 hover:text-green-700"
+                          )}
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          {m.status === "active" ? "Suspend" : "Activate"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setConfirmModal({
+                              isOpen: true,
+                              title: "Remove Team Member",
+                              message: `Are you sure you want to remove ${m.name} from the platform team? They will lose dashboard access immediately.`,
+                              confirmText: "Remove Member",
+                              type: "danger",
+                              onConfirm: async () => {
+                                const { error } = await supabase
+                                  .from("admin_team")
+                                  .delete()
+                                  .eq("id", m.id);
+                                if (error) {
+                                  toast.error(error.message);
+                                  return;
+                                }
+                                setTeamMembers((prev) => prev.filter((item) => item.id !== m.id));
+                                toast.success("Account successfully removed from team.");
+                                setConfirmModal((c) => ({ ...c, isOpen: false }));
+                              }
+                            });
+                          }}
+                          className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium ml-1.5"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          Remove
+                        </button>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 mt-2.5">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        <Shield className="w-3 h-3 text-green-600" />
-                        ID verified · {m.idFileName}
-                      </div>
-                      <button
-                        onClick={() => {
-                          const creds = generateCredentials(m.name);
-                          setNewCredentials({ ...creds, name: m.name });
-                        }}
-                        className="text-xs text-accent hover:underline"
-                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                      >
-                        Regenerate login
-                      </button>
                     </div>
                   </div>
+                ))
+              )}
+
+              {!isLoading && teamMembers.length === 0 && !isCreatingTeam && !showTeamForm && (
+                <div className="bg-card border border-border border-dashed rounded-xl p-10 text-center w-full my-4">
+                  <div className="w-12 h-12 rounded-full bg-accent/10 text-accent flex items-center justify-center mx-auto mb-4">
+                    <Users className="w-5 h-5 text-accent" />
+                  </div>
+                  <h3 className="text-sm font-medium text-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    No team members added yet
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed max-w-md mx-auto" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Team members will appear here when you add them. You can see added staff awaiting acceptance, and their roles will be shown once they register.
+                  </p>
                 </div>
-              ))}
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ---- PAYMENTS ---- */}
+        {tab === "payments" && (
+          <div>
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Subscription Transactions
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Monitor vendor payment logs and merchant plans verified by Paystack checkout integrations.
+                </p>
+              </div>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search payments..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="bg-input-background border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-52"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </div>
+            </div>
+
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-secondary text-xs font-semibold text-muted-foreground border-b border-border" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      <th className="p-4">Transaction Reference</th>
+                      <th className="p-4">Vendor</th>
+                      <th className="p-4">Amount</th>
+                      <th className="p-4">Billing Plan</th>
+                      <th className="p-4">Date</th>
+                      <th className="p-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {filteredPayments.length > 0 ? (
+                      filteredPayments.map((p) => {
+                        const vendor = vendorsList.find((v) => v.id === p.vendor_id);
+                        return (
+                          <tr key={p.id} className="hover:bg-secondary/40 transition-colors">
+                            <td className="p-4 font-mono text-xs text-foreground font-semibold">{p.reference || p.id.slice(0, 8)}</td>
+                            <td className="p-4">
+                              <div className="font-medium text-foreground">{vendor?.business_name || "Unknown Business"}</div>
+                              <div className="text-xs text-muted-foreground">{vendor?.email || "No Email"}</div>
+                            </td>
+                            <td className="p-4 font-semibold text-foreground">
+                              {p.currency === "NGN" ? "₦" : "$"}
+                              {Number(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-4">
+                              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-accent/10 text-accent uppercase font-mono">
+                                {p.tier_name || "Vendor Pro"}
+                              </span>
+                            </td>
+                            <td className="p-4 text-xs text-muted-foreground">
+                              {new Date(p.created_at || Date.now()).toLocaleDateString("en-GB", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}
+                            </td>
+                            <td className="p-4">
+                              <span className={cn(
+                                "text-xs px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1",
+                                p.status === "success" || p.status === "completed"
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-amber-100 text-amber-800"
+                              )}>
+                                <span className={cn("w-1.5 h-1.5 rounded-full", p.status === "success" || p.status === "completed" ? "bg-green-600 animate-pulse" : "bg-amber-50")} />
+                                {p.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-muted-foreground text-xs">
+                          No payment transactions recorded in the database yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---- ONBOARDING REQUESTS ---- */}
+        {tab === "onboarding" && (
+          <div>
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Merchant Onboarding Tickets
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Manage store setups, catalog upload requests, and customer support tickets filed by vendor merchants.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {onboardingRequests.length > 0 ? (
+                onboardingRequests.map((req) => {
+                  const vendor = vendorsList.find((v) => v.id === req.vendor_id);
+                  return (
+                    <div key={req.id} className="bg-card border border-border rounded-xl p-5 flex flex-col md:flex-row md:items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className="text-xs px-2 py-0.5 bg-secondary text-foreground rounded-md font-mono">
+                            {req.request_type || "brand_onboarding"}
+                          </span>
+                          <span className={cn(
+                            "text-xs px-2 py-0.5 rounded-full font-medium text-capitalize",
+                            req.status === "pending" ? "bg-amber-100 text-amber-700" :
+                            req.status === "contacted" ? "bg-blue-100 text-blue-700" :
+                            req.status === "scheduled" ? "bg-purple-100 text-purple-700" :
+                            req.status === "completed" ? "bg-green-100 text-green-700" :
+                            "bg-muted text-muted-foreground"
+                          )}>
+                            {req.status}
+                          </span>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            Filed {new Date(req.created_at).toLocaleDateString("en-GB")}
+                          </span>
+                        </div>
+                        <h4 className="font-semibold text-foreground text-sm mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {vendor?.business_name || "Unknown Merchant"}
+                        </h4>
+                        <p className="text-xs text-muted-foreground font-mono mb-2">
+                          Merchant Email: {vendor?.email || "No Email"}
+                        </p>
+                        <div className="bg-secondary/40 border border-border/50 rounded-lg p-3 text-xs text-foreground max-w-2xl leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {req.notes || "No additional notes provided by merchant."}
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-stretch md:items-center gap-2 md:self-center shrink-0">
+                        <select
+                          value={req.status}
+                          onChange={async (e) => {
+                            const newStatus = e.target.value;
+                            const { error } = await supabase
+                              .from("onboarding_requests")
+                              .update({ status: newStatus })
+                              .eq("id", req.id);
+                            if (error) {
+                              toast.error(error.message);
+                              return;
+                            }
+                            setOnboardingRequests((prev) =>
+                              prev.map((item) => (item.id === req.id ? { ...item, status: newStatus } : item))
+                            );
+                            toast.success(`Ticket status updated to ${newStatus}`);
+                          }}
+                          className="bg-card border border-border rounded-lg text-xs font-semibold px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring text-foreground"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="contacted">Contacted</option>
+                          <option value="scheduled">Scheduled</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="bg-card border border-border border-dashed rounded-xl p-10 text-center w-full my-4">
+                  <div className="w-12 h-12 rounded-full bg-accent/10 text-accent flex items-center justify-center mx-auto mb-4">
+                    <FileText className="w-5 h-5 text-accent" />
+                  </div>
+                  <h3 className="text-sm font-medium text-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    No onboarding requests found
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed max-w-md mx-auto" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    When brand owners submit onboarding requests, they will populate here in real-time.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ---- SYSTEM LOGS ---- */}
+        {tab === "logs" && (
+          <div>
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Operational Activity Logs
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Audit outbound notification logs and webhook integrations to verify platform communications.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Email Delivery logs */}
+              <div className="bg-card border border-border rounded-xl p-5">
+                <h3 className="font-semibold text-foreground text-sm mb-3 border-b border-border pb-2.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Email Onboarding Logs
+                </h3>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                  {emailLogs.length > 0 ? (
+                    emailLogs.map((log) => (
+                      <div key={log.id} className="bg-secondary/40 border border-border/40 rounded-lg p-3 text-xs">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-semibold text-foreground truncate max-w-[150px]">{log.recipient}</span>
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded text-[10px] font-mono",
+                            log.status === "success" || log.status === "sent" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          )}>
+                            {log.status}
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground mb-1"><strong className="text-foreground">Subject:</strong> {log.subject}</div>
+                        {log.error_message && (
+                          <div className="text-red-600 bg-red-50 dark:bg-red-950/20 border border-red-200/50 rounded p-1.5 mt-1 font-mono">
+                            Err: {log.error_message}
+                          </div>
+                        )}
+                        <div className="text-[10px] text-muted-foreground text-right mt-1 font-mono">
+                          {new Date(log.created_at).toLocaleTimeString()} · {new Date(log.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-center text-xs text-muted-foreground py-8">No Resend notification logs recorded.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Webhook Delivery logs */}
+              <div className="bg-card border border-border rounded-xl p-5">
+                <h3 className="font-semibold text-foreground text-sm mb-3 border-b border-border pb-2.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Verification Webhook Logs
+                </h3>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                  {webhookLogs.length > 0 ? (
+                    webhookLogs.map((log) => (
+                      <div key={log.id} className="bg-secondary/40 border border-border/40 rounded-lg p-3 text-xs">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-mono text-foreground font-semibold">Status Code: {log.response_status || "N/A"}</span>
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded text-[10px] font-mono",
+                            log.success ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          )}>
+                            {log.success ? "success" : "failed"}
+                          </span>
+                        </div>
+                        {log.error_message && (
+                          <div className="text-red-600 bg-red-50 dark:bg-red-950/20 border border-red-200/50 rounded p-1.5 mb-1.5 font-mono">
+                            {log.error_message}
+                          </div>
+                        )}
+                        <div className="text-muted-foreground max-h-20 overflow-y-auto p-1 bg-code-background rounded font-mono text-[10px] bg-secondary/80 border border-border">
+                          Response: {log.response_body || "Empty body response."}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground text-right mt-1 font-mono">
+                          {new Date(log.created_at).toLocaleTimeString()} · {new Date(log.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-center text-xs text-muted-foreground py-8">No external API webhook events logged.</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1624,6 +2625,278 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         </main>
         </div>
       </div>
+
+      {/* PREMIUM CONFIRM MODAL */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 flex items-start gap-4">
+              <div className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+                confirmModal.type === "danger" ? "bg-red-100 text-red-600" :
+                confirmModal.type === "warning" ? "bg-amber-100 text-amber-600" :
+                "bg-blue-100 text-blue-600"
+              )}>
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {confirmModal.title}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {confirmModal.message}
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-secondary/40 border-t border-border flex items-center justify-end gap-3">
+              <button
+                onClick={() => setConfirmModal((c) => ({ ...c, isOpen: false }))}
+                className="px-4 py-2 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:bg-secondary transition-colors cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {confirmModal.cancelText || "Cancel"}
+              </button>
+              <button
+                onClick={() => confirmModal.onConfirm()}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-xs font-medium text-white transition-colors cursor-pointer",
+                  confirmModal.type === "danger" ? "bg-red-600 hover:bg-red-700" :
+                  confirmModal.type === "warning" ? "bg-amber-600 hover:bg-amber-700" :
+                  "bg-accent hover:bg-accent/90"
+                )}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {confirmModal.confirmText || "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD INGREDIENT MODAL */}
+      {showAddIngModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px]">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                {editingIngredient !== null ? "Edit Safety Ingredient" : "Add New Safety Ingredient"}
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowAddIngModal(false);
+                  setEditingIngredient(null);
+                  setIngName("");
+                  setIngFunction("");
+                  setIngStatus("safe");
+                  setIngScope("Global");
+                  setIngMaxConc("No limit");
+                  setIngNotes("");
+                }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Ingredient Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Salicylic Acid"
+                  value={ingName}
+                  onChange={(e) => setIngName(e.target.value)}
+                  className="w-full bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Function *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Acne treatment"
+                    value={ingFunction}
+                    onChange={(e) => setIngFunction(e.target.value)}
+                    className="w-full bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Safety Status *
+                  </label>
+                  <select
+                    value={ingStatus}
+                    onChange={(e) => setIngStatus(e.target.value as any)}
+                    className="w-full bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    <option value="safe">Safe (Approved)</option>
+                    <option value="caution">Caution (Warnings apply)</option>
+                    <option value="restricted">Restricted (Concentration limits)</option>
+                    <option value="banned">Banned (Globally prohibited)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Regulatory Scope
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Global + NAFDAC"
+                    value={ingScope}
+                    onChange={(e) => setIngScope(e.target.value)}
+                    className="w-full bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Max Concentration
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 2% OTC"
+                    value={ingMaxConc}
+                    onChange={(e) => setIngMaxConc(e.target.value)}
+                    className="w-full bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Regulatory &amp; Advisory Notes
+                </label>
+                <textarea
+                  placeholder="Enter details on safety profiles, warnings, side effects, or chemical background."
+                  value={ingNotes}
+                  onChange={(e) => setIngNotes(e.target.value)}
+                  rows={4}
+                  className="w-full bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-border flex justify-end gap-3 bg-secondary/50">
+              <button
+                onClick={() => {
+                  setShowAddIngModal(false);
+                  setEditingIngredient(null);
+                  setIngName("");
+                  setIngFunction("");
+                  setIngStatus("safe");
+                  setIngScope("Global");
+                  setIngMaxConc("No limit");
+                  setIngNotes("");
+                }}
+                className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddIngredientSubmit}
+                disabled={isSavingIng || !ingName.trim() || !ingFunction.trim()}
+                className="bg-accent text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors disabled:opacity-55 disabled:cursor-not-allowed cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {isSavingIng ? "Saving..." : (editingIngredient !== null ? "Update Ingredient" : "Add to Database")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENT TRANSACTION DETAIL MODAL */}
+      {selectedPayment && (() => {
+        const vendor = vendorsList.find(v => v.id === selectedPayment.vendor_id);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px]">
+            <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Payment Details
+                </h3>
+                <button 
+                  onClick={() => setSelectedPayment(null)}
+                  className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="flex justify-center flex-col items-center py-4 bg-secondary/30 rounded-xl border border-border mb-2">
+                  <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Transaction Amount</span>
+                  <p className="text-3xl font-bold text-foreground font-mono">
+                    ₦{Number(selectedPayment.amount || 0).toLocaleString()}
+                  </p>
+                  <span className="mt-2 text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-3 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">
+                    {selectedPayment.status || "success"}
+                  </span>
+                </div>
+
+                <div className="space-y-3 divide-y divide-border/60 text-sm">
+                  <div className="flex justify-between py-2.5">
+                    <span className="text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skincare Brand</span>
+                    <span className="font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{vendor?.business_name || "Unknown vendor"}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5">
+                    <span className="text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Brand Owner</span>
+                    <span className="text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{vendor?.name || "Vendor Partner"}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5">
+                    <span className="text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Email Address</span>
+                    <span className="text-foreground font-mono">{vendor?.email || "No email"}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5">
+                    <span className="text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Subscribed Tier</span>
+                    <span className="text-foreground capitalize font-bold">{selectedPayment.plan || "Premium"}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5">
+                    <span className="text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Paystack Ref</span>
+                    <span className="text-foreground font-mono text-xs">{selectedPayment.reference || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between py-2.5">
+                    <span className="text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Transaction Date</span>
+                    <span className="text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {new Date(selectedPayment.created_at || Date.now()).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                      })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-4 border-t border-border flex justify-end bg-secondary/50">
+                <button
+                  onClick={() => setSelectedPayment(null)}
+                  className="w-full bg-accent text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Close Receipt
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

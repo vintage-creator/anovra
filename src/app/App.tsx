@@ -379,9 +379,26 @@ export default function App() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           sessionStorage.setItem("show_welcome", "true");
+
+          let teamMemberRole: string | null = null;
+          try {
+            const { data: member } = await supabase
+              .from("team_members")
+              .select("role")
+              .eq("email", user.email)
+              .maybeSingle();
+            if (member) teamMemberRole = member.role;
+          } catch (e) {
+            console.warn("Session check team member lookup failed:", e);
+          }
+
           const role = user.user_metadata?.role || "customer";
           if (role === "vendor") {
             setView("dashboard");
+          } else if (teamMemberRole === "Manager" || teamMemberRole === "Viewer") {
+            setView("dashboard");
+          } else if (teamMemberRole === "Representative" || teamMemberRole === "Representative") {
+            setView("teamdashboard");
           } else {
             setView("userdashboard");
           }
@@ -415,6 +432,19 @@ export default function App() {
 
       const role = user.user_metadata?.role;
       const email = user.email?.toLowerCase();
+
+      let isStaff = false;
+      try {
+        const { data: staff } = await supabase
+          .from("admin_team")
+          .select("role, status")
+          .or(`email.eq.${email},username.eq.${email}`)
+          .maybeSingle();
+        if (staff && staff.status === "active") isStaff = true;
+      } catch (err) {
+        console.warn("Staff lookup failed:", err);
+      }
+
       const isAdmin = role === "admin" || email === "admin@anovra.africa" || email === "hello@anovra.africa";
 
       if (view === "admin" && !isAdmin) {
@@ -425,7 +455,21 @@ export default function App() {
         return;
       }
 
-      if ((view === "dashboard" || view === "catalog") && role && role !== "vendor" && !isAdmin) {
+      let isTeamStaff = false;
+      try {
+        const { data: member } = await supabase
+          .from("team_members")
+          .select("role")
+          .eq("email", email)
+          .maybeSingle();
+        if (member && (member.role === "Manager" || member.role === "Viewer")) {
+          isTeamStaff = true;
+        }
+      } catch (err) {
+        console.warn("Team staff lookup failed:", err);
+      }
+
+      if ((view === "dashboard" || view === "catalog") && role && role !== "vendor" && !isAdmin && !isTeamStaff) {
         toast.error("Vendor access is required.");
         setViewState("userdashboard");
         window.location.hash = "#/userdashboard";
@@ -444,7 +488,7 @@ export default function App() {
           .select("id")
           .eq("email", user.email)
           .maybeSingle();
-        if (!membership && !isAdmin) {
+        if (!membership && !isStaff && !isAdmin) {
           toast.error("No team workspace is assigned to this account.");
           setViewState("teamlogin");
           window.location.hash = "#/teamlogin";
