@@ -3,7 +3,7 @@ import {
   Store, AlertCircle, CreditCard, Calendar, Ban, Search, RefreshCw,
   Users, Package, Shield, BarChart2, CheckCircle, X, Check, Eye,
   ChevronDown, ChevronUp, AlertTriangle, Info, Activity, TrendingUp,
-  ExternalLink, Upload, MapPin, Scan, FileText, Star, Edit, Trash2, LogOut,
+  ExternalLink, Upload, Download, MapPin, Scan, FileText, Star, Edit, Trash2, LogOut, Menu, ArrowUp,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -183,6 +183,38 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           console.warn("Could not load admin_team table:", e);
         }
 
+        // Load announcements
+        try {
+          const { data: ann } = await supabase
+            .from("team_announcements")
+            .select("*")
+            .order("created_at", { ascending: false });
+          setAnnouncements(ann || []);
+        } catch (e) {
+          console.warn("Could not load team_announcements:", e);
+        }
+
+        // Load resources
+        try {
+          const { data: res } = await supabase
+            .from("team_resources")
+            .select("*")
+            .order("created_at", { ascending: false });
+          setResources(res || []);
+        } catch (e) {
+          console.warn("Could not load team_resources:", e);
+        }
+
+        // Load targets
+        try {
+          const { data: targ } = await supabase
+            .from("team_targets")
+            .select("*");
+          setTargets(targ || []);
+        } catch (e) {
+          console.warn("Could not load team_targets:", e);
+        }
+
         try {
           const { data: onboarding, error: onboardingErr } = await supabase
             .from("onboarding_requests")
@@ -230,9 +262,184 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
   const [teamForm, setTeamForm] = useState({ name: "", phone: "", email: "", role: "Marketing" as TeamRole, idFileName: "", headshotUrl: "" });
+  const [headshotFile, setHeadshotFile] = useState<File | null>(null);
+  const [idDocFile, setIdDocFile] = useState<File | null>(null);
   const [newCredentials, setNewCredentials] = useState<{ username: string; password: string; name: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  // Sub-tab toggling for team management
+  const [teamSubTab, setTeamSubTab] = useState<"accounts" | "announcements" | "resources" | "targets">("accounts");
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [resources, setResources] = useState<any[]>([]);
+  const [targets, setTargets] = useState<any[]>([]);
+
+  // Announcement form
+  const [showAnnForm, setShowAnnForm] = useState(false);
+  const [annForm, setAnnForm] = useState({ title: "", body: "" });
+  const [isPublishingAnn, setIsPublishingAnn] = useState(false);
+
+  // Resource form
+  const [showResForm, setShowResForm] = useState(false);
+  const [resForm, setResForm] = useState({ title: "", description: "" });
+  const [resourceFile, setResourceFile] = useState<File | null>(null);
+  const [isUploadingRes, setIsUploadingRes] = useState(false);
+
+  // Target edit modal state
+  const [editingTargetsMember, setEditingTargetsMember] = useState<any | null>(null);
+  const [targetForm, setTargetForm] = useState<any>({
+    vendors_onboarded: 0,
+    scans_via_link: 0,
+    revenue_generated: 0,
+    saving: false,
+  });
+
+  async function handlePublishAnnouncement(e: React.FormEvent) {
+    e.preventDefault();
+    if (!annForm.title || !annForm.body) {
+      toast.error("Please fill in all fields.");
+      return;
+    }
+    setIsPublishingAnn(true);
+    try {
+      const { data, error } = await supabase
+        .from("team_announcements")
+        .insert([{ title: annForm.title, body: annForm.body, is_active: true }])
+        .select()
+        .single();
+      if (error) throw error;
+      setAnnouncements((prev) => [data, ...prev]);
+      setAnnForm({ title: "", body: "" });
+      setShowAnnForm(false);
+      toast.success("Announcement published successfully!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to publish announcement.");
+    } finally {
+      setIsPublishingAnn(false);
+    }
+  }
+
+  async function handleDeleteAnnouncement(id: string) {
+    const { error } = await supabase
+      .from("team_announcements")
+      .delete()
+      .eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+    toast.success("Announcement deleted successfully.");
+  }
+
+  async function handleAddResource(e: React.FormEvent) {
+    e.preventDefault();
+    if (!resForm.title || !resourceFile) {
+      toast.error("Please provide a title and select a file.");
+      return;
+    }
+    setIsUploadingRes(true);
+    const toastId = toast.loading("Uploading team resource file...");
+    try {
+      const fileExt = resourceFile.name.split(".").pop();
+      const filePath = `team-resources/resource-${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("vendor-documents")
+        .upload(filePath, resourceFile, { cacheControl: "3600", upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("vendor-documents")
+        .getPublicUrl(filePath);
+
+      const sizeString = (resourceFile.size / (1024 * 1024)).toFixed(2) + " MB";
+      const typeString = fileExt?.toUpperCase() || "FILE";
+
+      const { data, error } = await supabase
+        .from("team_resources")
+        .insert([{
+          title: resForm.title,
+          description: resForm.description,
+          file_type: typeString,
+          file_size: sizeString,
+          file_url: publicUrl,
+          is_active: true,
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      setResources((prev) => [data, ...prev]);
+      setResForm({ title: "", description: "" });
+      setResourceFile(null);
+      setShowResForm(false);
+      toast.success("Resource uploaded successfully!", { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add resource.", { id: toastId });
+    } finally {
+      setIsUploadingRes(false);
+    }
+  }
+
+  async function handleDeleteResource(id: string) {
+    const { error } = await supabase
+      .from("team_resources")
+      .delete()
+      .eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setResources((prev) => prev.filter((r) => r.id !== id));
+    toast.success("Resource deleted successfully.");
+  }
+
+  async function handleSaveTargets(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingTargetsMember) return;
+    setTargetForm((prev: any) => ({ ...prev, saving: true }));
+    try {
+      const metrics = ["vendors_onboarded", "scans_via_link", "revenue_generated"];
+      const promises = metrics.map((metric) => {
+        const targetValue = targetForm[metric] || 0;
+        return supabase
+          .from("team_targets")
+          .upsert([{
+            team_member_id: editingTargetsMember.id,
+            metric,
+            target: targetValue,
+            period_start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0],
+          }], { onConflict: "team_member_id,metric,period_start" });
+      });
+
+      const results = await Promise.all(promises);
+      const errors = results.filter((r) => r.error);
+      if (errors.length > 0) throw errors[0].error;
+
+      // Reload all targets
+      const { data: targ } = await supabase.from("team_targets").select("*");
+      setTargets(targ || []);
+
+      setEditingTargetsMember(null);
+      toast.success("Monthly targets updated successfully!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update targets.");
+    } finally {
+      setTargetForm((prev: any) => ({ ...prev, saving: false }));
+    }
+  }
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 300);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   async function handleCreateTeamMember() {
     if (!teamForm.name || !teamForm.email || !teamForm.phone) {
@@ -240,41 +447,91 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       return;
     }
     const creds = generateCredentials(teamForm.name);
-    const member = {
-      name: teamForm.name,
-      phone: teamForm.phone,
-      email: teamForm.email,
-      role: teamForm.role,
-      id_file_name: teamForm.idFileName || "id_document.pdf",
-      headshot_url: teamForm.headshotUrl || "",
-      username: creds.username,
-      password: creds.password,
-      status: "active",
-    };
 
     setIsCreatingTeam(true);
     const tid = toast.loading("Saving team member record and sending credentials...");
     try {
-      const { data, error } = await supabase
-        .from("admin_team")
-        .insert([member])
-        .select()
-        .maybeSingle();
+      // 1. Upload Headshot to Supabase Storage if present
+      let uploadedHeadshotUrl = "";
+      if (headshotFile) {
+        const fileExt = headshotFile.name.split('.').pop();
+        const fileName = `headshots/${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("vendor-documents")
+          .upload(fileName, headshotFile, { cacheControl: '3600', upsert: true });
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from("vendor-documents")
+            .getPublicUrl(fileName);
+          uploadedHeadshotUrl = publicUrl;
+        } else {
+          console.error("Headshot upload failed:", uploadError);
+        }
+      }
+
+      // 2. Upload ID Document to Supabase Storage if present
+      let uploadedIdFileName = "";
+      if (idDocFile) {
+        const fileExt = idDocFile.name.split('.').pop();
+        const fileName = `ids/${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("vendor-documents")
+          .upload(fileName, idDocFile, { cacheControl: '3600', upsert: true });
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from("vendor-documents")
+            .getPublicUrl(fileName);
+          uploadedIdFileName = publicUrl;
+        } else {
+          console.error("ID document upload failed:", uploadError);
+          uploadedIdFileName = idDocFile.name; // fallback to raw filename
+        }
+      }
+
+      const { data, error } = await supabase.functions.invoke("send-onboarding-email", {
+        body: {
+          action: "create_team_member",
+          name: teamForm.name,
+          phone: teamForm.phone,
+          email: teamForm.email,
+          role: teamForm.role,
+          id_file_name: uploadedIdFileName || teamForm.idFileName || "id_document.pdf",
+          headshot_url: uploadedHeadshotUrl || "",
+          username: creds.username,
+          password: creds.password
+        }
+      });
 
       if (error) throw error;
 
-      // Send onboarding email containing credentials
-      await sendEmailNotification("staff_welcome", {
-        email: teamForm.email,
-        name: teamForm.name,
-        subject: "Welcome to the Anovra Admin Team",
-        message: `You have been added to the Anovra Platform Administration team as a staff member with the role of ${teamForm.role}. Your login email is ${creds.username} and your temporary password is ${creds.password}. Please sign in here: ${window.location.origin}/#/teamlogin and change your password upon your first login.`,
-      });
+      // Query database directly to get the created member's exact UUID
+      const { data: dbUser } = await supabase
+        .from("admin_team")
+        .select("*")
+        .eq("email", teamForm.email)
+        .maybeSingle();
 
       toast.success("Team member successfully created and notified!");
-      setTeamMembers((t) => [data || member, ...t]);
+      
+      const newMember: TeamMember = {
+        id: dbUser?.id || data?.user?.id || Math.random().toString(),
+        name: teamForm.name,
+        phone: teamForm.phone,
+        email: teamForm.email,
+        role: teamForm.role,
+        idFileName: dbUser?.id_file_name || uploadedIdFileName || teamForm.idFileName || "id_document.pdf",
+        headshotUrl: dbUser?.headshot_url || uploadedHeadshotUrl || "",
+        username: creds.username,
+        password: creds.password,
+        status: "active",
+        createdAt: dbUser?.created_at || new Date().toISOString()
+      };
+      
+      setTeamMembers((t) => [newMember, ...t]);
       setNewCredentials({ ...creds, name: teamForm.name });
       setTeamForm({ name: "", phone: "", email: "", role: "Marketing", idFileName: "", headshotUrl: "" });
+      setHeadshotFile(null);
+      setIdDocFile(null);
       setShowTeamForm(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to create team member.");
@@ -371,9 +628,35 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       (p.status && p.status.toLowerCase().includes(searchLower)) ||
       (p.tier_name && p.tier_name.toLowerCase().includes(searchLower)) ||
       (vendor?.business_name && vendor.business_name.toLowerCase().includes(searchLower)) ||
+      (vendor?.name && vendor.name.toLowerCase().includes(searchLower)) ||
       (vendor?.email && vendor.email.toLowerCase().includes(searchLower))
     );
   });
+
+  function downloadPaymentsCSV() {
+    const headers = ["Transaction Reference", "Vendor Name", "Vendor Email", "Amount", "Billing Plan", "Date", "Status"];
+    const rows = filteredPayments.map((p) => {
+      const vendor = vendorsList.find((v) => v.id === p.vendor_id);
+      return [
+        p.reference || p.id,
+        vendor?.business_name || vendor?.name || "Unknown Vendor",
+        vendor?.email || "",
+        p.amount ? `₦${p.amount.toLocaleString()}` : "₦0",
+        p.plan || p.tier_name || "free",
+        p.created_at ? new Date(p.created_at).toLocaleDateString("en-GB") : "",
+        p.status || "success"
+      ];
+    });
+    const csvContent = [headers.join(","), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `anovra_subscriptions_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
   // Dynamic mapped safety queue representations
   const activeFlaggedQueue = productsList
     .filter((p) => p.nafdac_status === "flagged" || p.nafdac_status === "pending")
@@ -653,55 +936,169 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 relative pt-4">
         <div className="grid lg:grid-cols-[240px_1fr] gap-6 items-start">
-        <aside className="bg-card border border-border rounded-xl py-5 px-3 sticky top-24 z-20 lg:h-[calc(100vh-140px)] flex flex-col justify-between">
-          <div className="space-y-2">
-            {tabs.map((t) => (
+          {/* Desktop Sidebar (hidden on mobile/tablet) */}
+          <aside className="hidden lg:flex bg-card border border-border rounded-xl py-5 px-3 sticky top-24 z-20 h-[calc(100vh-140px)] flex-col justify-between">
+            <div className="space-y-2">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => { setTab(t.id); setSearch(""); }}
+                  className={cn(
+                    "relative w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm transition-colors rounded-lg font-medium whitespace-nowrap text-left",
+                    tab === t.id
+                      ? "bg-accent text-white font-semibold shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  <span className="flex items-center gap-2.5">
+                    {t.id === "overview" && <BarChart2 className="w-4 h-4" />}
+                    {t.id === "safety" && <Shield className="w-4 h-4" />}
+                    {t.id === "ingredients" && <Package className="w-4 h-4" />}
+                    {t.id === "vendors" && <Store className="w-4 h-4" />}
+                    {t.id === "reviews" && <Star className="w-4 h-4" />}
+                    {t.id === "team" && <Users className="w-4 h-4" />}
+                    {t.id === "payments" && <CreditCard className="w-4 h-4" />}
+                    {t.id === "onboarding" && <FileText className="w-4 h-4" />}
+                    {t.id === "logs" && <Activity className="w-4 h-4" />}
+                    {t.label}
+                  </span>
+                  {t.badge ? (
+                    <span className={cn(
+                      "text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0",
+                      tab === t.id ? "bg-white text-accent animate-pulse" : "bg-accent/15 text-accent"
+                    )} style={{ fontFamily: "'DM Mono', monospace" }}>
+                      {t.badge}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-4 border-t border-border mt-4">
               <button
-                key={t.id}
-                onClick={() => { setTab(t.id); setSearch(""); }}
-                className={cn(
-                  "relative w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm transition-colors rounded-lg font-medium whitespace-nowrap text-left",
-                  tab === t.id
-                    ? "bg-accent text-white font-semibold shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                )}
+                onClick={handleSignOut}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors rounded-lg font-medium whitespace-nowrap text-left"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                <span className="flex items-center gap-2.5">
-                  {t.id === "overview" && <BarChart2 className="w-4 h-4" />}
-                  {t.id === "safety" && <Shield className="w-4 h-4" />}
-                  {t.id === "ingredients" && <Package className="w-4 h-4" />}
-                  {t.id === "vendors" && <Store className="w-4 h-4" />}
-                  {t.id === "reviews" && <Star className="w-4 h-4" />}
-                  {t.id === "team" && <Users className="w-4 h-4" />}
-                  {t.id === "payments" && <CreditCard className="w-4 h-4" />}
-                  {t.id === "onboarding" && <FileText className="w-4 h-4" />}
-                  {t.id === "logs" && <Activity className="w-4 h-4" />}
-                  {t.label}
-                </span>
-                {t.badge ? (
-                  <span className={cn(
-                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0",
-                    tab === t.id ? "bg-white text-accent animate-pulse" : "bg-accent/15 text-accent"
-                  )} style={{ fontFamily: "'DM Mono', monospace" }}>
-                    {t.badge}
-                  </span>
-                ) : null}
+                <LogOut className="w-4 h-4 text-red-600" />
+                <span>Sign Out</span>
               </button>
-            ))}
-          </div>
+            </div>
+          </aside>
 
-          <div className="pt-4 border-t border-border mt-4 lg:mt-0">
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors rounded-lg font-medium whitespace-nowrap text-left"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              <LogOut className="w-4 h-4 text-red-600" />
-              <span>Sign Out</span>
-            </button>
+          {/* Mobile Drawer Trigger Header & Drawer */}
+          <div className="lg:hidden w-full">
+            <div className="bg-card border border-border/80 rounded-xl p-3.5 mb-5 flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsMobileMenuOpen(true)}
+                  className="p-2 bg-secondary hover:bg-muted border border-border rounded-lg text-foreground transition-all active:scale-95 flex items-center justify-center"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="w-4.5 h-4.5" />
+                </button>
+                <div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-accent uppercase tracking-widest font-bold font-mono">
+                    <span>Admin Ops</span>
+                    <span className="text-muted-foreground/60">/</span>
+                  </div>
+                  <span className="text-sm font-semibold text-foreground tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {tabs.find((t) => t.id === tab)?.label || "Overview"}
+                  </span>
+                </div>
+              </div>
+
+              {tabs.find((t) => t.id === tab)?.badge ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/10 text-accent font-mono animate-pulse">
+                  {tabs.find((t) => t.id === tab)?.badge} Pending
+                </span>
+              ) : null}
+            </div>
+
+            {/* Mobile Navigation Drawer Overlay */}
+            {isMobileMenuOpen && (
+              <div 
+                className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] transition-opacity duration-300"
+                onClick={() => setIsMobileMenuOpen(false)}
+              />
+            )}
+
+            {/* Mobile Navigation Drawer Panel */}
+            <aside className={cn(
+              "fixed top-0 left-0 bottom-0 z-50 w-72 max-w-[85vw] bg-card border-r border-border p-5 flex flex-col justify-between transition-transform duration-300 ease-out transform",
+              isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+            )}>
+              <div>
+                <div className="flex items-center justify-between pb-4 mb-6 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-accent" />
+                    <span className="font-bold text-foreground text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      Admin Menu
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 overflow-y-auto max-h-[calc(100vh-180px)] pr-1">
+                  {tabs.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => { 
+                        setTab(t.id); 
+                        setSearch(""); 
+                        setIsMobileMenuOpen(false); 
+                      }}
+                      className={cn(
+                        "relative w-full flex items-center justify-between gap-2.5 px-4 py-2.5 text-sm transition-colors rounded-lg font-medium text-left",
+                        tab === t.id
+                          ? "bg-accent text-white font-semibold shadow-sm"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      )}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        {t.id === "overview" && <BarChart2 className="w-4 h-4" />}
+                        {t.id === "safety" && <Shield className="w-4 h-4" />}
+                        {t.id === "ingredients" && <Package className="w-4 h-4" />}
+                        {t.id === "vendors" && <Store className="w-4 h-4" />}
+                        {t.id === "reviews" && <Star className="w-4 h-4" />}
+                        {t.id === "team" && <Users className="w-4 h-4" />}
+                        {t.id === "payments" && <CreditCard className="w-4 h-4" />}
+                        {t.id === "onboarding" && <FileText className="w-4 h-4" />}
+                        {t.id === "logs" && <Activity className="w-4 h-4" />}
+                        {t.label}
+                      </span>
+                      {t.badge ? (
+                        <span className={cn(
+                          "text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0",
+                          tab === t.id ? "bg-white text-accent animate-pulse" : "bg-accent/15 text-accent"
+                        )} style={{ fontFamily: "'DM Mono', monospace" }}>
+                          {t.badge}
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-border mt-4">
+                <button
+                  onClick={handleSignOut}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors rounded-lg font-medium whitespace-nowrap text-left"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  <LogOut className="w-4 h-4 text-red-600" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </aside>
           </div>
-        </aside>
 
         <main className="min-w-0">
 
@@ -1077,7 +1474,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         {/* ---- SAFETY QUEUE ---- */}
         {tab === "safety" && (
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div>
                 <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
                   Ingredient safety review queue
@@ -1086,7 +1483,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   Products auto-flagged by the ingredient safety layer — review and approve or ban.
                 </p>
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border border-border px-3 py-2 rounded-lg" style={{ fontFamily: "'DM Mono', monospace" }}>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border border-border px-3 py-2 rounded-lg self-start md:self-auto" style={{ fontFamily: "'DM Mono', monospace" }}>
                 <RefreshCw className="w-3 h-3" />
                 Last sync: 2 min ago
               </div>
@@ -1226,27 +1623,27 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         {/* ---- INGREDIENT DB ---- */}
         {tab === "ingredients" && (
           <div>
-            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div>
                 <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
                   Ingredient safety database
                 </h2>
               </div>
-              <div className="flex gap-2">
-                <div className="relative">
+              <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto">
+                <div className="relative w-full sm:w-52">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="text"
                     placeholder="Search ingredients..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="bg-input-background border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-52"
+                    className="bg-input-background border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   />
                 </div>
                 <button 
                   onClick={() => setShowAddIngModal(true)}
-                  className="flex items-center gap-1.5 text-sm bg-accent text-white px-3 py-2 rounded-lg hover:bg-accent/90 transition-colors cursor-pointer" 
+                  className="flex items-center justify-center gap-1.5 text-sm bg-accent text-white px-3 py-2.5 rounded-lg hover:bg-accent/90 transition-colors cursor-pointer w-full sm:w-auto font-medium" 
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   + Add ingredient
@@ -1980,12 +2377,38 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
               </div>
             )}
 
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+            {/* Sub-tab navigation */}
+            <div className="flex border-b border-border mb-6 overflow-x-auto gap-2 scrollbar-none">
+              {[
+                { id: "accounts", label: "Team Accounts" },
+                { id: "announcements", label: "Announcements" },
+                { id: "resources", label: "Resources & Docs" },
+                { id: "targets", label: "Performance Targets" },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setTeamSubTab(sub.id as any)}
+                  className={cn(
+                    "px-4 py-2 border-b-2 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer",
+                    teamSubTab === sub.id
+                      ? "border-accent text-accent"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+
+            {teamSubTab === "accounts" && (
               <div>
-                <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Team accounts
-                </h2>
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                      Team accounts
+                    </h2>
                 <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {teamMembers.length} team members · Marketing, Sales &amp; Support staff
                 </p>
@@ -1993,7 +2416,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
               {!showTeamForm && (
                 <button
                   onClick={() => setShowTeamForm(true)}
-                  className="flex items-center gap-1.5 text-sm bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors font-medium"
+                  className="flex items-center justify-center gap-1.5 text-sm bg-accent text-white px-4 py-2.5 rounded-lg hover:bg-accent/90 transition-colors font-medium w-full sm:w-auto"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   + Create account
@@ -2099,6 +2522,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               e.target.value = "";
                               return;
                             }
+                            setIdDocFile(file);
                             setTeamForm((f) => ({ ...f, idFileName: file.name }));
                           }
                         }}
@@ -2132,6 +2556,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               e.target.value = "";
                               return;
                             }
+                            setHeadshotFile(file);
                             const url = URL.createObjectURL(file);
                             setTeamForm((f) => ({ ...f, headshotUrl: url }));
                           }
@@ -2162,15 +2587,16 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   <button
                     onClick={handleCreateTeamMember}
                     disabled={!teamForm.name || !teamForm.email || !teamForm.phone}
-                    className="flex items-center gap-2 bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-1 sm:flex-initial whitespace-nowrap"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
-                    <Check className="w-3.5 h-3.5" />
-                    Create account &amp; generate login
+                    <Check className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="hidden sm:inline">Create account &amp; generate login</span>
+                    <span className="sm:hidden">Create account</span>
                   </button>
                   <button
                     onClick={() => setShowTeamForm(false)}
-                    className="px-5 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors"
+                    className="px-4 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors flex-1 sm:flex-initial text-center font-medium border border-transparent hover:border-border/30"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     Cancel
@@ -2202,13 +2628,17 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
               {!isLoading && teamMembers.length > 0 && (
                 teamMembers.map((m) => (
                   <div key={m.id} className="bg-card border border-border rounded-xl p-4 flex items-start gap-4">
-                    {m.headshotUrl || (m as any).headshot_url ? (
-                      <img
-                        src={m.headshotUrl || (m as any).headshot_url}
-                        alt={m.name}
-                        className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-secondary"
-                      />
-                    ) : (
+                    {(() => {
+                      const src = m.headshotUrl || (m as any).headshot_url;
+                      return src && !src.startsWith("blob:") ? (
+                        <img
+                          src={src}
+                          alt={m.name}
+                          className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-secondary"
+                        />
+                      ) : null;
+                    })()}
+                    {(!m.headshotUrl && !(m as any).headshot_url || (m.headshotUrl || (m as any).headshot_url || "").startsWith("blob:")) && (
                       <div className="w-12 h-12 rounded-full flex-shrink-0 bg-accent/10 text-accent flex items-center justify-center font-bold text-sm">
                         {m.name.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "TM"}
                       </div>
@@ -2250,73 +2680,78 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                           })}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-2.5">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          <Shield className="w-3 h-3 text-green-600" />
-                          ID verified · {m.idFileName || (m as any).id_file_name}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3 pt-3 border-t border-border/40">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate max-w-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          <Shield className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                          <span>ID verified · </span>
+                          <span className="font-mono truncate max-w-[150px] sm:max-w-[200px]" title={m.idFileName || (m as any).id_file_name}>
+                            {m.idFileName || (m as any).id_file_name || "id_document.pdf"}
+                          </span>
                         </div>
-                        <button
-                          onClick={() => {
-                            const creds = generateCredentials(m.name);
-                            setNewCredentials({ ...creds, name: m.name });
-                          }}
-                          className="text-xs text-accent hover:underline font-medium"
-                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                        >
-                          Regenerate login
-                        </button>
-                        <button
-                          onClick={async () => {
-                            const newStatus = m.status === "active" ? "suspended" : "active";
-                            const { error } = await supabase
-                              .from("admin_team")
-                              .update({ status: newStatus })
-                              .eq("id", m.id);
-                            if (error) {
-                              toast.error(error.message);
-                              return;
-                            }
-                            setTeamMembers((prev) =>
-                              prev.map((item) => (item.id === m.id ? { ...item, status: newStatus } : item))
-                            );
-                            toast.success(`Account successfully ${newStatus === "active" ? "activated" : "suspended"}.`);
-                          }}
-                          className={cn(
-                            "text-xs hover:underline font-medium ml-1.5",
-                            m.status === "active" ? "text-amber-600 hover:text-amber-700" : "text-green-600 hover:text-green-700"
-                          )}
-                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                        >
-                          {m.status === "active" ? "Suspend" : "Activate"}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setConfirmModal({
-                              isOpen: true,
-                              title: "Remove Team Member",
-                              message: `Are you sure you want to remove ${m.name} from the platform team? They will lose dashboard access immediately.`,
-                              confirmText: "Remove Member",
-                              type: "danger",
-                              onConfirm: async () => {
-                                const { error } = await supabase
-                                  .from("admin_team")
-                                  .delete()
-                                  .eq("id", m.id);
-                                if (error) {
-                                  toast.error(error.message);
-                                  return;
-                                }
-                                setTeamMembers((prev) => prev.filter((item) => item.id !== m.id));
-                                toast.success("Account successfully removed from team.");
-                                setConfirmModal((c) => ({ ...c, isOpen: false }));
+                        <div className="flex items-center gap-3.5 flex-wrap">
+                          <button
+                            onClick={() => {
+                              const creds = generateCredentials(m.name);
+                              setNewCredentials({ ...creds, name: m.name });
+                            }}
+                            className="text-xs text-accent hover:underline font-semibold"
+                            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                          >
+                            Regenerate login
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const newStatus = m.status === "active" ? "suspended" : "active";
+                              const { error } = await supabase
+                                .from("admin_team")
+                                .update({ status: newStatus })
+                                .eq("id", m.id);
+                              if (error) {
+                                toast.error(error.message);
+                                return;
                               }
-                            });
-                          }}
-                          className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium ml-1.5"
-                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                        >
-                          Remove
-                        </button>
+                              setTeamMembers((prev) =>
+                                prev.map((item) => (item.id === m.id ? { ...item, status: newStatus } : item))
+                              );
+                              toast.success(`Account successfully ${newStatus === "active" ? "activated" : "suspended"}.`);
+                            }}
+                            className={cn(
+                              "text-xs hover:underline font-semibold",
+                              m.status === "active" ? "text-amber-600 hover:text-amber-700" : "text-green-600 hover:text-green-700"
+                            )}
+                            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                          >
+                            {m.status === "active" ? "Suspend" : "Activate"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setConfirmModal({
+                                isOpen: true,
+                                title: "Remove Team Member",
+                                message: `Are you sure you want to remove ${m.name} from the platform team? They will lose dashboard access immediately.`,
+                                confirmText: "Remove Member",
+                                type: "danger",
+                                onConfirm: async () => {
+                                  const { error } = await supabase
+                                    .from("admin_team")
+                                    .delete()
+                                    .eq("id", m.id);
+                                  if (error) {
+                                    toast.error(error.message);
+                                    return;
+                                  }
+                                  setTeamMembers((prev) => prev.filter((item) => item.id !== m.id));
+                                  toast.success("Account successfully removed from team.");
+                                  setConfirmModal((c) => ({ ...c, isOpen: false }));
+                                }
+                              });
+                            }}
+                            className="text-xs text-red-600 hover:text-red-700 hover:underline font-semibold"
+                            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2340,10 +2775,380 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           </div>
         )}
 
-        {/* ---- PAYMENTS ---- */}
+        {/* Announcements Tab */}
+        {teamSubTab === "announcements" && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Team Announcements
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Publish updates, notifications, and announcements directly to all staff portals
+                </p>
+              </div>
+              {!showAnnForm && (
+                <button
+                  onClick={() => setShowAnnForm(true)}
+                  className="w-full sm:w-auto text-center text-xs bg-accent text-white px-3 py-2.5 rounded-lg hover:bg-accent/90 transition-colors font-semibold cursor-pointer"
+                >
+                  + New Announcement
+                </button>
+              )}
+            </div>
+
+            {showAnnForm && (
+              <form onSubmit={handlePublishAnnouncement} className="bg-card border border-border rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-border pb-3 mb-2">
+                  <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider font-mono">Create Announcement</h4>
+                  <button type="button" onClick={() => setShowAnnForm(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5 font-mono">Announcement Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={annForm.title}
+                    onChange={(e) => setAnnForm({ ...annForm, title: e.target.value })}
+                    className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
+                    placeholder="e.g. Sales targets update"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5 font-mono">Body Content</label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={annForm.body}
+                    onChange={(e) => setAnnForm({ ...annForm, body: e.target.value })}
+                    className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
+                    placeholder="Type announcement details here..."
+                  />
+                </div>
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAnnForm(false)}
+                    className="w-full sm:w-auto text-center px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border/30 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isPublishingAnn}
+                    className="w-full sm:w-auto text-center bg-accent text-white px-4 py-2 text-xs font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isPublishingAnn ? "Publishing..." : "Publish announcement"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="space-y-3">
+              {announcements.length > 0 ? (
+                announcements.map((a) => (
+                  <div key={a.id} className="bg-card border border-border rounded-xl p-4 flex items-start justify-between gap-4">
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-semibold text-sm text-foreground truncate max-w-full">{a.title}</h4>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {new Date(a.created_at).toLocaleDateString("en-GB")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed break-words">{a.body}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setConfirmModal({
+                          isOpen: true,
+                          title: "Delete Announcement",
+                          message: `Are you sure you want to delete the announcement "${a.title}"? This cannot be undone.`,
+                          confirmText: "Delete",
+                          type: "danger",
+                          onConfirm: () => {
+                            handleDeleteAnnouncement(a.id);
+                            setConfirmModal((c) => ({ ...c, isOpen: false }));
+                          }
+                        });
+                      }}
+                      className="text-muted-foreground hover:text-red-600 p-1.5 rounded hover:bg-secondary transition-colors cursor-pointer flex-shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="border border-dashed border-border rounded-xl p-10 text-center text-sm text-muted-foreground bg-card">
+                  No announcements have been published yet.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Resources Tab */}
+        {teamSubTab === "resources" && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Team Resources &amp; Documentation
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Upload and share training material, assets, and guidelines with your staff portal
+                </p>
+              </div>
+              {!showResForm && (
+                <button
+                  onClick={() => setShowResForm(true)}
+                  className="w-full sm:w-auto text-center text-xs bg-accent text-white px-3 py-2.5 rounded-lg hover:bg-accent/90 transition-colors font-semibold cursor-pointer"
+                >
+                  + Upload Resource
+                </button>
+              )}
+            </div>
+
+            {showResForm && (
+              <form onSubmit={handleAddResource} className="bg-card border border-border rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-border pb-3 mb-2">
+                  <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider font-mono">Upload Resource</h4>
+                  <button type="button" onClick={() => setShowResForm(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1.5 font-mono">Resource Title</label>
+                    <input
+                      type="text"
+                      required
+                      value={resForm.title}
+                      onChange={(e) => setResForm({ ...resForm, title: e.target.value })}
+                      className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
+                      placeholder="e.g. Vendor onboarding guide"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1.5 font-mono">Short Description</label>
+                    <input
+                      type="text"
+                      value={resForm.description}
+                      onChange={(e) => setResForm({ ...resForm, description: e.target.value })}
+                      className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
+                      placeholder="Brief description of file contents"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1.5 font-mono">Select File</label>
+                    <input
+                      type="file"
+                      required
+                      onChange={(e) => setResourceFile(e.target.files?.[0] || null)}
+                      className="w-full text-xs text-muted-foreground file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-accent/15 file:text-accent hover:file:bg-accent/25 file:cursor-pointer"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">PDF, JPG, PNG, DOCX, ZIP files supported (Max 10MB)</p>
+                  </div>
+                </div>
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowResForm(false)}
+                    className="w-full sm:w-auto text-center px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border/30 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUploadingRes}
+                    className="w-full sm:w-auto text-center bg-accent text-white px-4 py-2 text-xs font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isUploadingRes ? "Uploading..." : "Upload resource"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="space-y-3">
+              {resources.length > 0 ? (
+                resources.map((r) => (
+                  <div key={r.id} className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <FileText className="w-5 h-5 text-accent" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-sm text-foreground truncate max-w-full">{r.title}</h4>
+                        <p className="text-xs text-muted-foreground break-words">{r.description || "No description provided"}</p>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-muted-foreground font-mono mt-1.5">
+                          <span className="bg-secondary px-1.5 py-0.5 rounded">{r.file_type}</span>
+                          <span>·</span>
+                          <span>{r.file_size}</span>
+                          <span>·</span>
+                          <a href={r.file_url} target="_blank" rel="noreferrer" className="text-accent hover:underline inline-flex items-center gap-0.5 font-semibold">
+                            View File <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setConfirmModal({
+                          isOpen: true,
+                          title: "Delete Resource",
+                          message: `Are you sure you want to delete "${r.title}"? This will remove the file from all staff portals immediately.`,
+                          confirmText: "Delete",
+                          type: "danger",
+                          onConfirm: () => {
+                            handleDeleteResource(r.id);
+                            setConfirmModal((c) => ({ ...c, isOpen: false }));
+                          }
+                        });
+                      }}
+                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 text-muted-foreground hover:text-red-600 p-2 sm:p-1.5 rounded border border-border sm:border-transparent hover:bg-secondary transition-colors cursor-pointer flex-shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4 flex-shrink-0" />
+                      <span className="text-xs sm:hidden font-semibold">Delete Resource</span>
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="border border-dashed border-border rounded-xl p-10 text-center text-sm text-muted-foreground bg-card">
+                  No training resources have been uploaded yet.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Targets Tab */}
+        {teamSubTab === "targets" && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                Performance Targets Management
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Set and manage monthly key performance indicator targets for staff field officers
+              </p>
+            </div>
+
+            {editingTargetsMember && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+                <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                  <div className="bg-foreground text-primary-foreground p-5">
+                    <h3 className="text-lg font-light" style={{ fontFamily: "'Fraunces', serif" }}>
+                      Edit Targets: {editingTargetsMember.name}
+                    </h3>
+                    <p className="text-xs text-white/50 mt-1">Set monthly goal levels for the current period</p>
+                  </div>
+                  <form onSubmit={handleSaveTargets} className="p-5 space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1.5 font-mono">Vendors Onboarded Target</label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        value={targetForm.vendors_onboarded}
+                        onChange={(e) => setTargetForm({ ...targetForm, vendors_onboarded: Number(e.target.value) })}
+                        className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1.5 font-mono">Scans via Link Target</label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        value={targetForm.scans_via_link}
+                        onChange={(e) => setTargetForm({ ...targetForm, scans_via_link: Number(e.target.value) })}
+                        className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1.5 font-mono">Revenue generated Target (₦)</label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        value={targetForm.revenue_generated}
+                        onChange={(e) => setTargetForm({ ...targetForm, revenue_generated: Number(e.target.value) })}
+                        className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingTargetsMember(null)}
+                        className="w-full sm:w-auto text-center px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border/30 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={targetForm.saving}
+                        className="w-full sm:w-auto text-center bg-accent text-white px-4 py-2 text-xs font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        {targetForm.saving ? "Saving..." : "Save targets"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="divide-y divide-border">
+                {teamMembers.length > 0 ? (
+                  teamMembers.map((m) => {
+                    const mTargets = targets.filter((t) => t.team_member_id === m.id);
+                    const vendorsTarget = mTargets.find((t) => t.metric === "vendors_onboarded")?.target || 0;
+                    const scansTarget = mTargets.find((t) => t.metric === "scans_via_link")?.target || 0;
+                    const revTarget = mTargets.find((t) => t.metric === "revenue_generated")?.target || 0;
+
+                    return (
+                      <div key={m.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-semibold text-sm text-foreground">{m.name}</h4>
+                          <p className="text-xs text-muted-foreground">{m.role}</p>
+                          <div className="flex flex-wrap gap-x-2 gap-y-1.5 text-[10px] text-muted-foreground font-mono mt-2">
+                            <span className="bg-secondary px-1.5 py-0.5 rounded border border-border">Vendors Goal: {vendorsTarget}</span>
+                            <span className="bg-secondary px-1.5 py-0.5 rounded border border-border">Scans Goal: {scansTarget}</span>
+                            <span className="bg-secondary px-1.5 py-0.5 rounded border border-border">Revenue Goal: ₦{Number(revTarget).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setEditingTargetsMember(m);
+                            setTargetForm({
+                              vendors_onboarded: Number(vendorsTarget),
+                              scans_via_link: Number(scansTarget),
+                              revenue_generated: Number(revTarget),
+                              saving: false,
+                            });
+                          }}
+                          className="w-full sm:w-auto text-center text-xs text-accent hover:underline font-semibold bg-accent/10 hover:bg-accent/15 px-3 py-2 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Edit Targets
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-8 text-center text-sm text-muted-foreground">No team members found.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+
+
         {tab === "payments" && (
           <div>
-            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div>
                 <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
                   Subscription Transactions
@@ -2352,16 +3157,26 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   Monitor vendor payment logs and merchant plans verified by Paystack checkout integrations.
                 </p>
               </div>
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search payments..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="bg-input-background border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-52"
+              <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto flex-shrink-0">
+                <div className="relative w-full sm:w-52">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search payments..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="bg-input-background border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  />
+                </div>
+                <button
+                  onClick={downloadPaymentsCSV}
+                  className="flex items-center justify-center gap-1.5 text-sm bg-accent text-white px-3.5 py-2.5 rounded-lg hover:bg-accent/90 transition-colors cursor-pointer w-full sm:w-auto font-medium"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                />
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export CSV</span>
+                </button>
               </div>
             </div>
 
@@ -2897,6 +3712,18 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           </div>
         );
       })()}
+
+      {/* BACK TO TOP FLOATING ACTION BUTTON */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        className={cn(
+          "fixed bottom-6 right-6 z-40 p-3 bg-accent text-white rounded-full shadow-lg transition-all duration-300 hover:bg-accent/95 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-ring active:scale-95 cursor-pointer flex items-center justify-center border border-accent/20",
+          showBackToTop ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-4 scale-75 pointer-events-none"
+        )}
+        aria-label="Back to top"
+      >
+        <ArrowUp className="w-5 h-5" />
+      </button>
     </div>
   );
 }

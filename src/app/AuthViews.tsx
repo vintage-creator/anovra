@@ -229,6 +229,37 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
         }
       }
 
+      // Record referred vendor signup if ref exists
+      if (selectedRole === "vendor") {
+        const storedRef = sessionStorage.getItem("referral_code");
+        if (storedRef) {
+          try {
+            const { data: staffMember } = await supabase
+              .from("admin_team")
+              .select("id")
+              .or(`username.eq."${storedRef}",id.like."${storedRef}%"`)
+              .maybeSingle();
+            if (staffMember) {
+              await supabase.from("team_referral_events").insert([{
+                team_member_id: staffMember.id,
+                event_type: "vendor_signup",
+                city: form.city || "Nigeria",
+                metadata: {
+                  business_name: form.businessName,
+                  vendor_name: form.fullName,
+                  plan: "Trial Started",
+                  owner: form.fullName,
+                  products: 0,
+                  city: form.city || "Nigeria"
+                }
+              }]);
+            }
+          } catch (e) {
+            console.warn("Failed to record referral vendor signup:", e);
+          }
+        }
+      }
+
       toast.success("Account created successfully!");
       setShowPopupModal(true);
     } catch (err: any) {
@@ -955,7 +986,7 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
         const { data: staff } = await supabase
           .from("admin_team")
           .select("role, status")
-          .or(`email.eq.${cleanEmail},username.eq.${cleanEmail}`)
+          .or(`email.eq."${cleanEmail}",username.eq."${cleanEmail}"`)
           .maybeSingle();
         if (staff) {
           if (staff.status === "suspended") {
@@ -1046,7 +1077,7 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
         const { data: staff } = await supabase
           .from("admin_team")
           .select("role, status")
-          .or(`email.eq.${cleanEmail},username.eq.${cleanEmail}`)
+          .or(`email.eq."${cleanEmail}",username.eq."${cleanEmail}"`)
           .maybeSingle();
         if (staff) {
           if (staff.status === "suspended") {

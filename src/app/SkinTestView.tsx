@@ -445,6 +445,28 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
         setProgress(100);
         setScanResult(resultData);
 
+        // Record referral scan completed event if ref exists
+        const storedRef = sessionStorage.getItem("referral_code");
+        if (storedRef) {
+          try {
+            const { data: staffMember } = await supabase
+              .from("admin_team")
+              .select("id")
+              .or(`username.eq."${storedRef}",id.like."${storedRef}%"`)
+              .maybeSingle();
+            if (staffMember) {
+              await supabase.from("team_referral_events").insert([{
+                team_member_id: staffMember.id,
+                event_type: "scan_completed",
+                city: "Nigeria",
+                metadata: { device: navigator.userAgent }
+              }]);
+            }
+          } catch (e) {
+            console.warn("Failed to record referral scan event:", e);
+          }
+        }
+
         // Record scan dynamically in user scan history if authenticated
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {

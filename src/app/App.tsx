@@ -315,6 +315,7 @@ export default function App() {
   };
 
   const [view, setViewState] = useState<View>(getViewFromHash);
+  const [isValidatingRoute, setIsValidatingRoute] = useState(false);
 
   const setView = (v: View) => {
     setViewState(v);
@@ -409,6 +410,44 @@ export default function App() {
     };
     handleEmailConfirmation();
 
+    // Capture referral query parameter from URL
+    const captureReferral = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      let ref = urlParams.get("ref");
+      if (!ref && window.location.hash.includes("?")) {
+        const hashQuery = window.location.hash.split("?")[1];
+        const hashParams = new URLSearchParams(hashQuery);
+        ref = hashParams.get("ref");
+      }
+      if (ref) {
+        const cleanRef = ref.trim();
+        sessionStorage.setItem("referral_code", cleanRef);
+        
+        // Record link click once per session to prevent abuse
+        if (!sessionStorage.getItem("referral_recorded")) {
+          sessionStorage.setItem("referral_recorded", "true");
+          try {
+            const { data: staffMember } = await supabase
+              .from("admin_team")
+              .select("id")
+              .or(`username.eq."${cleanRef}",id.like."${cleanRef}%"`)
+              .maybeSingle();
+            if (staffMember) {
+              await supabase.from("team_referral_events").insert([{
+                team_member_id: staffMember.id,
+                event_type: "link_click",
+                city: "Nigeria",
+                metadata: { user_agent: navigator.userAgent }
+              }]);
+            }
+          } catch (e) {
+            console.warn("Failed to record link click event:", e);
+          }
+        }
+      }
+    };
+    captureReferral();
+
     return () => {
       window.removeEventListener("hashchange", handleHashChange);
       window.removeEventListener("hashchange", setupInactivityTracker);
@@ -419,80 +458,120 @@ export default function App() {
 
   useEffect(() => {
     const enforceRouteAccess = async () => {
-      const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard"];
+      const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard", "skintest"];
       if (!protectedViews.includes(view)) return;
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Please sign in to continue.");
-        setViewState(view === "teamdashboard" ? "teamlogin" : "signin");
-        window.location.hash = view === "teamdashboard" ? "#/teamlogin" : "#/signin";
-        return;
-      }
-
-      const role = user.user_metadata?.role;
-      const email = user.email?.toLowerCase();
-
-      let isStaff = false;
+      setIsValidatingRoute(true);
       try {
-        const { data: staff } = await supabase
-          .from("admin_team")
-          .select("role, status")
-          .or(`email.eq.${email},username.eq.${email}`)
-          .maybeSingle();
-        if (staff && staff.status === "active") isStaff = true;
-      } catch (err) {
-        console.warn("Staff lookup failed:", err);
-      }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          if (view === "skintest" || view === "userdashboard") {
+            toast.error("Please sign up as a customer.");
+            setViewState("customersignup");
+            window.location.hash = "#/customersignup";
+          } else if (view === "teamdashboard") {
+            toast.error("Staff login required.");
+            setViewState("teamlogin");
+            window.location.hash = "#/teamlogin";
+          } else {
+            toast.error("Please sign up to continue.");
+            setViewState("signup");
+            window.location.hash = "#/signup";
+          }
+          return;
+        }
 
-      const isAdmin = role === "admin" || email === "admin@anovra.africa" || email === "hello@anovra.africa";
+        const role = user.user_metadata?.role;
+        const email = user.email?.toLowerCase();
 
-      if (view === "admin" && !isAdmin) {
-        toast.error("Admin access is required.");
-        const nextView = role === "vendor" ? "dashboard" : "userdashboard";
-        setViewState(nextView);
-        window.location.hash = `#/${nextView}`;
-        return;
-      }
+        // Resolve admin role
+        const isAdmin = role === "admin" || email === "admin@anovra.africa" || email === "hello@anovra.africa";
 
-      let isTeamStaff = false;
-      try {
-        const { data: member } = await supabase
-          .from("team_members")
-          .select("role")
-          .eq("email", email)
-          .maybeSingle();
-        if (member && (member.role === "Manager" || member.role === "Viewer")) {
-          isTeamStaff = true;
+        // Resolve staff role
+        let isStaff = false;
+        try {
+          const { data: staff } = await supabase
+            .from("admin_team")
+            .select("status")
+            .or(`email.eq."${email}",username.eq."${email}"`)
+            .maybeSingle();
+          if (staff && staff.status === "active") isStaff = true;
+        } catch (err) {}
+
+        // Resolve team representative staff role
+        let isTeamStaff = false;
+        try {
+          const { data: member } = await supabase
+            .from("team_members")
+            .select("role")
+            .eq("email", email)
+            .maybeSingle();
+          if (member && (member.role === "Manager" || member.role === "Viewer")) {
+            isTeamStaff = true;
+          }
+        } catch (err) {}
+
+        const userRole = role || "customer";
+
+        const redirectLoggedInUserToDashboard = () => {
+          if (role === "vendor" || isTeamStaff) {
+            setViewState("dashboard");
+            window.location.hash = "#/dashboard";
+          } else if (isStaff) {
+            setViewState("teamdashboard");
+            window.location.hash = "#/teamdashboard";
+          } else if (isAdmin) {
+            setViewState("admin");
+            window.location.hash = "#/admin";
+          } else {
+            setViewState("userdashboard");
+            window.location.hash = "#/userdashboard";
+          }
+        };
+
+        // 1. Customer views (skintest, userdashboard) -> Only customer accounts
+        if (view === "skintest" || view === "userdashboard") {
+          if (userRole !== "customer" || isAdmin || isStaff) {
+            toast.error("Customer profile required for skin diagnostics. Redirecting to your account dashboard.");
+            redirectLoggedInUserToDashboard();
+            return;
+          }
+        }
+
+        // 2. Vendor views (dashboard, catalog) -> Only vendors or manager/viewer team staff
+        if (view === "dashboard" || view === "catalog") {
+          if (role !== "vendor" && !isTeamStaff) {
+            toast.error("Vendor portal access restricted. Redirecting to your account dashboard.");
+            redirectLoggedInUserToDashboard();
+            return;
+          }
+        }
+
+        // 3. Admin views (admin) -> Only admin profiles
+        if (view === "admin") {
+          if (!isAdmin && !isStaff) {
+            toast.error("Administrative access required. Redirecting to your account dashboard.");
+            redirectLoggedInUserToDashboard();
+            return;
+          }
+        }
+
+        // 4. Team field staff views (teamdashboard) -> Only staff members
+        if (view === "teamdashboard") {
+          const { data: membership } = await supabase
+            .from("team_members")
+            .select("id")
+            .eq("email", user.email)
+            .maybeSingle();
+          if (!membership && !isStaff && !isAdmin) {
+            toast.error("Staff field workspace credentials required. Redirecting to your account dashboard.");
+            redirectLoggedInUserToDashboard();
+          }
         }
       } catch (err) {
-        console.warn("Team staff lookup failed:", err);
-      }
-
-      if ((view === "dashboard" || view === "catalog") && role && role !== "vendor" && !isAdmin && !isTeamStaff) {
-        toast.error("Vendor access is required.");
-        setViewState("userdashboard");
-        window.location.hash = "#/userdashboard";
-        return;
-      }
-
-      if (view === "userdashboard" && role === "vendor") {
-        setViewState("dashboard");
-        window.location.hash = "#/dashboard";
-        return;
-      }
-
-      if (view === "teamdashboard") {
-        const { data: membership } = await supabase
-          .from("team_members")
-          .select("id")
-          .eq("email", user.email)
-          .maybeSingle();
-        if (!membership && !isStaff && !isAdmin) {
-          toast.error("No team workspace is assigned to this account.");
-          setViewState("teamlogin");
-          window.location.hash = "#/teamlogin";
-        }
+        console.error("Route access check failed:", err);
+      } finally {
+        setIsValidatingRoute(false);
       }
     };
     enforceRouteAccess();
@@ -524,6 +603,17 @@ export default function App() {
     "teamlogin",
     "teamdashboard",
   ].includes(view) || !isSystemDomain;
+
+  if (isValidatingRoute) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 gap-3">
+        <div className="w-8 h-8 border-3 border-[#008236] border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs text-muted-foreground font-medium animate-pulse" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          Verifying account credentials...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div

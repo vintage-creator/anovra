@@ -569,7 +569,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
             </p>
             <div className="flex flex-col sm:flex-row gap-3.5 w-full sm:w-auto">
               <button
-                onClick={() => toast.info("Coming soon! The Anovra AI Engine is undergoing final NAFDAC review and safety integration.")}
+                onClick={() => setView("skintest")}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all text-center cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
@@ -577,7 +577,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                 <ArrowRight className="w-4 h-4 text-white" />
               </button>
               <button
-                onClick={() => toast.info("Coming soon! Vendor portals and embedded diagnostics are currently in private beta.")}
+                onClick={() => setView("dashboard")}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 border-2 border-[#008236] bg-transparent hover:bg-[#008236]/10 text-[#008236] dark:text-emerald-400 font-bold px-6 py-3.5 rounded-xl transition-all text-center cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
