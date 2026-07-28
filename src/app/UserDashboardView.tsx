@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
 import {
-  Scan, Star, FlaskConical, Share2, TrendingUp, Clock, Check, CheckCircle,
-  ChevronRight, Copy, MessageCircle, Users, Sparkles, Bell,
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
+import {
+  Scan, Star, FlaskConical, Share2, Check, CheckCircle,
+  ChevronRight, MessageCircle, Users,
   Calendar, BarChart2, ShoppingBag, BookOpen, Flame, Lock,
-  ExternalLink, Plus, X, ChevronDown,
+  Plus, X, LogOut, Settings, HeartPulse, User,
+  Store,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -11,7 +15,7 @@ import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 import { supabase } from "./utils/supabase";
 import { toast } from "sonner";
 
-type UserTab = "overview" | "history" | "recommendations" | "ingredients" | "progress" | "routine" | "family" | "perks" | "settings";
+type UserTab = "overview" | "history" | "recommendations" | "ingredients" | "progress" | "routine" | "family" | "settings";
 
 function PlanBadge({ required, current }: { required: "glow" | "glowplus" | "premium"; current: "glow" | "glowplus" | "premium" }) {
   const order = { glow: 0, glowplus: 1, premium: 2 };
@@ -45,37 +49,104 @@ function LockedOverlay({ label, onUpgrade }: { label: string; onUpgrade: () => v
   );
 }
 
-const ingredientGlossary = [
-  { name: "Niacinamide", safe: true, benefit: "Brightens skin tone, minimizes pores, reduces hyperpigmentation" },
-  { name: "Kojic Acid", safe: true, benefit: "Inhibits melanin production — effective for dark spots on melanin-rich skin" },
-  { name: "Azelaic Acid", safe: true, benefit: "Anti-inflammatory; targets post-acne marks and redness" },
-  { name: "Retinol", safe: true, benefit: "Speeds cell turnover — start with low concentrations, use at night" },
-  { name: "Hydroquinone", safe: false, benefit: "Skin-lightening agent — flagged for long-term use; avoid above 2%" },
-  { name: "Fragrance / Parfum", safe: false, benefit: "Common irritant — especially risky for sensitive and reactive skin types" },
-];
+function buildRoutineFromProducts(products: any[], latestConcern: string) {
+  const cleanConcern = latestConcern.toLowerCase();
+  const relevantProducts = products
+    .filter((product) => {
+      const searchable = [product.name, product.brand, product.category, product.description].join(" ").toLowerCase();
+      return cleanConcern && searchable.includes(cleanConcern.split(/\s+/)[0]);
+    })
+    .concat(products)
+    .filter(Boolean);
+
+  const uniqueProducts = Array.from(new Map(relevantProducts.map((product) => [product.id || product.name, product])).values()).slice(0, 6);
+  if (uniqueProducts.length === 0) return [];
+
+  const labels = [
+    { step: "AM 1", label: "Cleanse", tip: "Start with clean, dry skin before applying active products." },
+    { step: "AM 2", label: "Treat", tip: "Apply a thin layer and avoid combining too many actives at once." },
+    { step: "AM 3", label: "Protect", tip: "Use sunscreen during the day, especially when treating pigmentation or texture." },
+    { step: "PM 1", label: "Cleanse", tip: "Remove sunscreen, oil and daily build-up before night care." },
+    { step: "PM 2", label: "Repair", tip: "Give active ingredients time to work while protecting the skin barrier." },
+    { step: "PM 3", label: "Moisturise", tip: "Seal in hydration and pause if irritation appears." },
+  ];
+
+  return uniqueProducts.map((product, index) => ({
+    ...labels[index],
+    product: product.name,
+  }));
+}
+
+function FormattedChatText({ text }: { text: string }) {
+  const normalised = text
+    .replace(/\*\*/g, "")
+    .replace(/\s+\*\s+/g, "\n- ")
+    .trim();
+  return (
+    <div className="space-y-1.5">
+      {normalised.split(/\n+/).filter(Boolean).map((line, index) => {
+        const isBullet = line.trim().startsWith("-");
+        return (
+          <p key={index} className={cn("leading-relaxed", isBullet && "pl-3 relative before:content-[''] before:absolute before:left-0 before:top-2 before:w-1 before:h-1 before:rounded-full before:bg-current")}>
+            {line.replace(/^-\s*/, "")}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+const cleanTextInput = (value: string, maxLength = 120) =>
+  value.replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+
+const cleanPhoneInput = (value: string) =>
+  value.replace(/[^\d+()\-\s]/g, "").replace(/\s+/g, " ").trim().slice(0, 32);
+
+const isValidEmail = (value: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
 
 export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [tab, setTab] = useState<UserTab>(() => (sessionStorage.getItem("active_user_tab") as UserTab) || "overview");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
     sessionStorage.setItem("active_user_tab", tab);
   }, [tab]);
+
   const [showAddFamily, setShowAddFamily] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMsg, setChatMsg] = useState("");
+  const [chatTyping, setChatTyping] = useState(false);
   const [chatHistory, setChatHistory] = useState<{ from: "user" | "advisor"; text: string }[]>([
-    { from: "advisor", text: "Hi! I'm your certified skin advisor. I can review your latest analysis results and help you build a skincare plan. What would you like to know?" },
+    { from: "advisor", text: "Hi! I'm your certified skin adviser. I can review your latest analysis results and help you build a skincare plan. What would you like to know?" },
   ]);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [familyForm, setFamilyForm] = useState({ name: "", relationship: "", ageBand: "Adult", skinType: "Combination", concern: "", notes: "" });
+  const [savingFamily, setSavingFamily] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name: "", email: "", phone: "", location: "" });
+  const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const [userProfile, setUserProfile] = useState<{ name: string; plan: "glow" | "glowplus" | "premium" } | null>(null);
   const [analysesList, setAnalysesList] = useState<any[]>([]);
   const [matchedProducts, setMatchedProducts] = useState<any[]>([]);
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [routineList, setRoutineList] = useState<any[]>([]);
+  const [selectedIngredient, setSelectedIngredient] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [trialExpired, setTrialExpired] = useState(false);
+  const [trialEndsAt, setTrialEndsAt] = useState<Date | null>(null);
+  const [trialMsRemaining, setTrialMsRemaining] = useState(14 * 24 * 60 * 60 * 1000);
+
+  useEffect(() => {
+    if (!trialEndsAt || trialExpired) return;
+    const timer = window.setInterval(() => {
+      setTrialMsRemaining(Math.max(0, trialEndsAt.getTime() - Date.now()));
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, [trialEndsAt, trialExpired]);
 
   useEffect(() => {
     if (sessionStorage.getItem("show_welcome") === "true") {
@@ -96,12 +167,15 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         // Fetch profile
         const { data: profile } = await supabase
           .from("profiles")
-          .select("name, plan")
+          .select("name, email, phone, location, plan")
           .eq("id", user.id)
           .maybeSingle();
 
         // Enforce 14-day trial check
         const createdDate = user.created_at ? new Date(user.created_at) : new Date();
+        const endsAt = new Date(createdDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+        setTrialEndsAt(endsAt);
+        setTrialMsRemaining(Math.max(0, endsAt.getTime() - Date.now()));
         const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
         const rawPlan = profile?.plan || "free";
         if (rawPlan === "free" && daysDiff > 14) {
@@ -114,10 +188,16 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           plan: pVal as "glow" | "glowplus" | "premium"
         };
         setUserProfile(profileObj);
+        setProfileForm({
+          name: profileObj.name,
+          email: profile?.email || user.email || "",
+          phone: profile?.phone || user.user_metadata?.phone || "",
+          location: profile?.location || "",
+        });
 
         // Update chat adviser initial greeting with name
         setChatHistory([
-          { from: "advisor", text: `Hi ${profileObj.name}! I'm your certified skin advisor. I can review your latest analysis results and help you build a skincare plan. What would you like to know?` }
+          { from: "advisor", text: `Hi ${profileObj.name}! I'm your certified skin adviser. I can review your latest analysis results and help you build a skincare plan. What would you like to know?` }
         ]);
 
         // Fetch scans
@@ -130,52 +210,26 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         if (scans && scans.length > 0) {
           const formatted = scans.map((s, idx) => {
             const dateObj = new Date(s.created_at);
-            const dateStr = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+            const dateStr = dateObj.toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" });
             return {
               id: s.id.substring(0, 8).toUpperCase(),
               date: dateStr,
               vendor: s.vendor_name || s.vendor_brand || "Recorded scan",
               concerns: [s.concern],
               skinType: s.result || "Normal",
-              score: Math.max(50, 78 - (idx * 6)),
-              products: 3,
+              score: s.score !== null && s.score !== undefined && !Number.isNaN(Number(s.score)) ? Math.round(Number(s.score)) : null,
+              products: 0,
+              severity: Array.isArray(s.severity) ? s.severity : [],
+              benefits: Array.isArray(s.benefits) ? s.benefits : [],
+              area: s.skin_area || "Skin",
+              createdAt: s.created_at,
               link: `https://anovra.africa/results/${s.id.substring(0, 8)}`,
             };
           });
           setAnalysesList(formatted);
 
-          // Get dynamic routine based on latest scan concern
           const latestConcern = scans[0].concern;
           const cleanConcern = latestConcern.toLowerCase();
-          let rSteps = [];
-          if (cleanConcern.includes("acne")) {
-            rSteps = [
-              { step: "AM 1", label: "Cleanser", product: "Salicylic Acid Cleanser", tip: "Wash for 60 seconds to let active ingredients work." },
-              { step: "AM 2", label: "Treatment", product: "Niacinamide Serum", tip: "Reduces inflammation and regulates sebum production." },
-              { step: "AM 3", label: "Protection", product: "Oil-Free SPF 50 Sunscreen", tip: "Protects post-inflammatory hyperpigmentation from darkening." },
-              { step: "PM 1", label: "Double Cleanse", product: "Gentle Foaming Cleanser", tip: "Ensures all SPF and dirt is fully removed." },
-              { step: "PM 2", label: "Active", product: "Salicylic Acid 2% Liquid", tip: "Unclogs pores and prevents breakouts. Use 3x a week." },
-              { step: "PM 3", label: "Moisturiser", product: "Lightweight Gel Hydrator", tip: "Keeps skin hydrated without clogging pores." },
-            ];
-          } else if (cleanConcern.includes("pigment") || cleanConcern.includes("spot") || cleanConcern.includes("bright")) {
-            rSteps = [
-              { step: "AM 1", label: "Cleanser", product: "Vitamin C Brightening Cleanser", tip: "Brightens and prepares skin for serums." },
-              { step: "AM 2", label: "Antioxidant", product: "Vitamin C 15% Serum", tip: "Fights free radicals and fades dark spots." },
-              { step: "AM 3", label: "Moisturiser & SPF", product: "Brightening SPF 50 Fluid", tip: "Essential - UV light triggers melanin and spots." },
-              { step: "PM 1", label: "Cleanser", product: "Gentle Hydrating Cleanser", tip: "Cleanses without stripping delicate skin barrier." },
-              { step: "PM 2", label: "Treatment", product: "Niacinamide 10% + Kojic Acid", tip: "Prime treatment to fade hyperpigmentation." },
-              { step: "PM 3", label: "Moisturiser", product: "Ceramide Night Cream", tip: "Rebuilds barrier while active ingredients work overnight." },
-            ];
-          } else {
-            rSteps = [
-              { step: "AM 1", label: "Cleanser", product: "Hydrating Cleanser", tip: "Wash with lukewarm water." },
-              { step: "AM 2", label: "Hydration", product: "Hyaluronic Acid Serum", tip: "Apply to damp skin for maximum moisture retention." },
-              { step: "AM 3", label: "Sunscreen", product: "Broad Spectrum SPF 50+", tip: "Never skip sunscreen." },
-              { step: "PM 1", label: "Cleanser", product: "Hydrating Cleanser", tip: "Cleanse away daily pollutants." },
-              { step: "PM 2", label: "Moisturiser", product: "Barrier Restoring Cream", tip: "Locks in hydration and strengthens the skin barrier." },
-            ];
-          }
-          setRoutineList(rSteps);
 
           // Query approved products to match
           const { data: dbProducts } = await supabase
@@ -184,6 +238,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             .eq("nafdac_status", "approved");
 
           if (dbProducts && dbProducts.length > 0) {
+            setRoutineList(buildRoutineFromProducts(dbProducts, latestConcern));
             const matches = dbProducts.map((p) => {
               const isMatch = p.category?.toLowerCase().includes(cleanConcern) || 
                               p.description?.toLowerCase().includes(cleanConcern) ||
@@ -198,13 +253,32 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               };
             });
             setMatchedProducts(matches);
+          } else {
+            setRoutineList([]);
           }
         }
 
-        // Initialize family members with just user
-        setFamilyMembers([
-          { name: `Me (${profile?.name || "User"})`, skinType: "Normal", concern: "General Care", lastScan: "—", isYou: true }
-        ]);
+        try {
+          const { data: familyRows } = await supabase
+            .from("customer_family_profiles")
+            .select("*")
+            .eq("customer_id", user.id)
+            .order("created_at", { ascending: true });
+          const savedFamily = (familyRows || []).map((member: any) => ({
+            id: member.id,
+            name: member.name,
+            skinType: member.skin_type || "Not set",
+            concern: member.concern || "General care",
+            relationship: member.relationship || "Family member",
+            ageBand: member.age_band || "Not set",
+            notes: member.notes || "",
+            lastScan: member.last_scan_at ? new Date(member.last_scan_at).toLocaleDateString("en-GB", { month: "short", day: "numeric" }) : "—",
+            isYou: member.name === (profile?.name || user.user_metadata?.full_name),
+          }));
+          setFamilyMembers(savedFamily);
+        } catch {
+          setFamilyMembers([]);
+        }
 
       } catch (err) {
         console.error("Dashboard failed to retrieve live data:", err);
@@ -221,6 +295,129 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     setCopied(key);
     setTimeout(() => setCopied(null), 2000);
   }
+
+  function openCustomerSkinTest() {
+    sessionStorage.removeItem("active_scan_slug");
+    setView("skintest");
+  }
+
+  const saveFamilyMember = async () => {
+    if (!familyForm.name.trim()) {
+      toast.error("Enter a family member name.");
+      return;
+    }
+    setSavingFamily(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Please sign in first.");
+      const { data, error } = await supabase
+        .from("customer_family_profiles")
+        .insert([{
+          customer_id: user.id,
+          name: familyForm.name.trim(),
+          relationship: familyForm.relationship.trim() || "Family member",
+          age_band: familyForm.ageBand,
+          skin_type: familyForm.skinType,
+          concern: familyForm.concern.trim() || "General care",
+          notes: familyForm.notes.trim(),
+        }])
+        .select()
+        .single();
+      if (error) throw error;
+      setFamilyMembers((prev) => [...prev, {
+        id: data.id,
+        name: data.name,
+        skinType: data.skin_type || "Not set",
+        concern: data.concern || "General care",
+        relationship: data.relationship || "Family member",
+        ageBand: data.age_band || "Not set",
+        notes: data.notes || "",
+        lastScan: "—",
+        isYou: false,
+      }]);
+      setFamilyForm({ name: "", relationship: "", ageBand: "Adult", skinType: "Combination", concern: "", notes: "" });
+      setShowAddFamily(false);
+      toast.success("Family profile added.");
+    } catch (err: any) {
+      toast.error(err.message || "Could not save family profile.");
+    } finally {
+      setSavingFamily(false);
+    }
+  };
+
+  const saveUserProfile = async () => {
+    const nextProfile = {
+      name: cleanTextInput(profileForm.name, 80),
+      email: profileForm.email.trim().toLowerCase(),
+      phone: cleanPhoneInput(profileForm.phone),
+      location: cleanTextInput(profileForm.location, 80),
+    };
+    if (!nextProfile.name) {
+      toast.error("Enter your name.");
+      return;
+    }
+    if (nextProfile.email && !isValidEmail(nextProfile.email)) {
+      toast.error("Enter a valid email address.");
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Please sign in first.");
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          name: nextProfile.name,
+          email: nextProfile.email || user.email,
+          phone: nextProfile.phone || null,
+          location: nextProfile.location || null,
+        })
+        .eq("id", user.id);
+      if (error) throw error;
+      const authUpdates: { email?: string; data: Record<string, string> } = {
+        data: {
+          full_name: nextProfile.name,
+          phone: nextProfile.phone,
+          location: nextProfile.location,
+        },
+      };
+      if (nextProfile.email && nextProfile.email !== user.email) {
+        authUpdates.email = nextProfile.email;
+      }
+      await supabase.auth.updateUser(authUpdates);
+      setProfileForm(nextProfile);
+      setUserProfile((prev) => prev ? { ...prev, name: nextProfile.name } : prev);
+      toast.success("Profile updated.");
+    } catch (err: any) {
+      toast.error(err.message || "Could not update profile.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const changePassword = async () => {
+    const newPassword = passwordForm.newPassword.trim();
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== passwordForm.confirmPassword.trim()) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setPasswordForm({ newPassword: "", confirmPassword: "" });
+      toast.success("Password changed.");
+    } catch (err: any) {
+      toast.error(err.message || "Could not change password.");
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   const payWithPaystack = async (planKey: "basic" | "premium") => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -277,6 +474,13 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       toast.error("Failed to initialize payment gateway.");
     }
   };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    toast.success("Signed out.");
+    setView("landing");
+  };
+
   const sendChat = async () => {
     if (!chatMsg.trim()) return;
     
@@ -285,12 +489,17 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     
     const updatedHistory = [...chatHistory, { from: "user" as const, text: userText }];
     setChatHistory(updatedHistory);
+    setChatTyping(true);
 
     try {
-      const contents = updatedHistory.map(h => ({
-        role: h.from === "user" ? "user" : "model",
-        parts: [{ text: h.text }]
-      }));
+      const userTranscript = updatedHistory
+        .filter((h) => h.from === "user")
+        .map((h) => h.text)
+        .join("\n\n");
+      const contents = [{
+        role: "user",
+        parts: [{ text: userTranscript }]
+      }];
 
       const { data, error } = await supabase.functions.invoke("chat-advisor", {
         body: { contents }
@@ -301,45 +510,64 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       
       setChatHistory([...updatedHistory, { from: "advisor" as const, text: reply }]);
     } catch (err) {
-      console.error("Gemini advisor call failed:", err);
+      console.error("Gemini adviser call failed:", err);
       setChatHistory([...updatedHistory, { from: "advisor" as const, text: "I'm experiencing connection issues. Please try again in a moment!" }]);
+    } finally {
+      setChatTyping(false);
     }
   };
 
   const latestAnalysis = analysesList[0] || null;
   const plan = userProfile?.plan || "glow";
+  const trialAccessActive = plan === "glow" && !trialExpired;
+  const accessPlan = trialAccessActive ? "premium" : plan;
+  const trialDays = Math.floor(trialMsRemaining / (1000 * 60 * 60 * 24));
+  const trialHours = Math.floor((trialMsRemaining / (1000 * 60 * 60)) % 24);
+  const trialMinutes = Math.floor((trialMsRemaining / (1000 * 60)) % 60);
   const routineSteps = routineList;
   const familyProfiles = familyMembers;
-  const discounts: any[] = [];
-  const earlyAccessFeatures: any[] = [];
+  const visibleIngredients: any[] = [];
 
-  const tabs: { id: UserTab; label: string }[] = [
-    { id: "overview", label: "Overview" },
-    { id: "history", label: "My Analyses" },
-    { id: "recommendations", label: "Recommendations" },
-    { id: "ingredients", label: "Ingredients" },
-    { id: "progress", label: "Progress" },
-    { id: "routine", label: "My Routine" },
-    { id: "family", label: "Family" },
-    { id: "perks", label: "Perks & Discounts" },
-    { id: "settings", label: "Billing & Plans" },
+  const tabs = [
+    { id: "overview" as UserTab, label: "Overview", icon: <HeartPulse className="w-4 h-4" /> },
+    { id: "history" as UserTab, label: "My Analyses", icon: <Scan className="w-4 h-4" /> },
+    { id: "recommendations" as UserTab, label: "Recommendations", icon: <ShoppingBag className="w-4 h-4" /> },
+    { id: "ingredients" as UserTab, label: "Ingredients", icon: <FlaskConical className="w-4 h-4" /> },
+    { id: "progress" as UserTab, label: "Progress", icon: <BarChart2 className="w-4 h-4" /> },
+    { id: "routine" as UserTab, label: "My Routine", icon: <Calendar className="w-4 h-4" /> },
+    { id: "family" as UserTab, label: "Family", icon: <Users className="w-4 h-4" /> },
+    { id: "settings" as UserTab, label: "Billing & Plans", icon: <Settings className="w-4 h-4" /> },
   ];
+  const primaryTabs = tabs.slice(0, 4);
+  const trackingTabs = tabs.slice(4, 7);
+  const accountTabs = tabs.slice(7);
+
+  const activeTab = tabs.find((t) => t.id === tab) || tabs[0];
+  const scoredAnalyses = analysesList.filter((analysis) => typeof analysis.score === "number");
+  const latestScoreText = latestAnalysis && typeof latestAnalysis.score === "number" ? `${latestAnalysis.score} / 100` : "Not scored yet";
+  const userInitials = (userProfile?.name || "User")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "U";
+  const planLabel = trialAccessActive ? "Free trial" : (userProfile?.plan === "premium" ? "Premium Glow" : (userProfile?.plan === "glowplus" ? "Glow Pass+" : "Free plan"));
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex flex-col justify-center items-center gap-4">
         <div className="w-8 h-8 border-4 border-[#008236] border-t-transparent rounded-full animate-spin" />
         <p className="text-sm text-muted-foreground animate-pulse" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          Loading your skin profile...
+          Loading your skin profile…
         </p>
       </div>
     );
   }
 
-  const progressScores = analysesList.map((a, idx) => {
+  const progressScores = scoredAnalyses.map((a, idx) => {
     return {
-      month: new Date(analysesList[analysesList.length - 1 - idx].date).toLocaleDateString("en-US", { month: "short" }),
-      score: analysesList[analysesList.length - 1 - idx].score
+      month: new Date(scoredAnalyses[scoredAnalyses.length - 1 - idx].date).toLocaleDateString("en-GB", { month: "short" }),
+      score: scoredAnalyses[scoredAnalyses.length - 1 - idx].score
     };
   });
 
@@ -349,13 +577,16 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         currentView="userdashboard"
         setView={setView}
         title="My Skin Portal"
-        subtitle={latestAnalysis ? `Skin score: ${latestAnalysis.score} / 100 · Personalized routine` : "Start a skin test to evaluate your skin"}
-        badgeText="CONSUMER PROFILE"
+        subtitle={latestAnalysis ? `Skin score: ${latestScoreText} · Personalised routine` : "Start a skin test to evaluate your skin"}
         role="consumer"
         showShopLink={false}
+        onMenuClick={() => setSidebarOpen((open) => !open)}
+        menuLabel={sidebarOpen ? "Close" : "Menu"}
+        onProfileClick={() => setTab("settings")}
+        profileName={userProfile?.name}
       />
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-8 space-y-7 relative">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 relative">
         {trialExpired ? (
           <div className="max-w-2xl mx-auto py-16 text-center">
             <div className="bg-amber-50 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/30 rounded-3xl p-8 sm:p-12 shadow-md">
@@ -363,7 +594,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 <Lock className="w-8 h-8 text-amber-700 dark:text-amber-400" />
               </div>
               <h2 className="text-3xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-                Your 14-Day Free Trial Has Expired
+                Your 14-day free trial has expired
               </h2>
               <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 Your free trial of Anovra Skin Portal has ended. To continue evaluating your skin, building custom routines, tracking safety glossary terms, and chatting with experts, please choose a plan below.
@@ -374,20 +605,20 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   {
                     key: "glow" as const,
                     name: "Glow Pass",
-                    price: "₦1,500/mo",
-                    desc: "1 analysis per month, top 3 recommendations, basic skin reports, ingredient checks."
+                    price: "Free",
+                    desc: "Basic workspace access, storefront scan links, top recommendations, and ingredient checks."
                   },
                   {
                     key: "basic" as const,
                     name: "Glow Pass+",
                     price: "₦3,500/mo",
-                    desc: "Unlimited analyses, full recommendation list, save & track skin history, personalized glossary."
+                desc: "Unlimited analyses, full recommendation list, save and track skin history, personalised glossary."
                   },
                   {
                     key: "premium" as const,
                     name: "Premium Glow",
                     price: "₦7,000/mo",
-                    desc: "Direct chats with certified skin advisors, monthly progress reports, family profiles, discounts."
+                    desc: "Direct chats with certified skin advisers, monthly progress reports, family profiles, and partner offers."
                   }
                 ].map((p) => (
                   <div key={p.key} className="border border-border rounded-2xl p-4 bg-card flex flex-col justify-between">
@@ -399,13 +630,12 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                     <button
                       onClick={() => {
                         if (p.key === "glow") {
-                          // Allow setting basic Glow plan
                           supabase.auth.getUser().then(({ data: { user } }) => {
                             if (!user) return;
-                            supabase.from("profiles").update({ plan: "glow" }).eq("id", user.id).then(() => {
+                            supabase.from("profiles").update({ plan: "free" }).eq("id", user.id).then(() => {
                               setUserProfile(prev => prev ? { ...prev, plan: "glow" } : null);
                               setTrialExpired(false);
-                              toast.success("Welcome back! Glow Pass activated successfully.");
+                              toast.success("Free Glow Pass activated.");
                             });
                           });
                         } else {
@@ -424,49 +654,158 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap border-b border-border pb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs bg-accent/15 text-accent border border-accent/20 px-3 py-1.5 rounded-full font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {userProfile?.plan === "premium" ? "Premium Glow" : (userProfile?.plan === "glowplus" ? "Glow Pass+" : "Glow Pass")}
-            </span>
-          </div>
-          <button
-            onClick={() => setView("skintest")}
-            className="flex items-center gap-1.5 text-xs sm:text-sm bg-[#008236] hover:bg-[#006c2c] text-white px-3.5 py-2 rounded-lg transition-colors font-medium shadow-xs cursor-pointer"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
-            <Scan className="w-3.5 h-3.5 text-white" /> New skin analysis
-          </button>
-        </div>
-
-        <div className="grid lg:grid-cols-[240px_1fr] gap-6 items-start">
-          <aside className="bg-card border border-border rounded-xl p-2 sticky top-24">
-            {tabs.map((t) => (
+        <div className="lg:pl-72">
+          <aside className={cn(
+            "fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border p-3 shadow-xl transform transition-transform duration-300 lg:z-20 lg:translate-x-0 lg:top-24 lg:left-0 lg:h-[calc(100vh-6rem)] lg:rounded-r-xl lg:rounded-l-none lg:border-y lg:border-r lg:shadow-sm overflow-y-auto",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          )}>
+            <div className="px-3 py-3 border-b border-border mb-3 flex items-center justify-between gap-3">
               <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all cursor-pointer ${tab === t.id ? "bg-accent text-white shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                onClick={() => {
+                  setTab("settings");
+                  setSidebarOpen(false);
+                }}
+                className="min-w-0 flex items-center gap-3 text-left rounded-xl hover:bg-muted/60 transition-colors p-1 -m-1 flex-1"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                {t.label}
+                <span className="w-10 h-10 rounded-full bg-accent/10 text-accent border border-accent/20 flex items-center justify-center text-xs font-bold shrink-0">
+                  {userInitials}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-foreground truncate">{userProfile?.name || "Customer"}</span>
+                  <span className="block text-[11px] text-muted-foreground mt-0.5">{planLabel}</span>
+                </span>
+              </button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted" aria-label="Close menu">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <nav className="space-y-5">
+              <div className="space-y-2">
+                <p className="px-3 text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>Dashboard</p>
+            {primaryTabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTab(t.id);
+                  setSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer ${tab === t.id ? "bg-accent text-white shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {t.icon}
+                <span>{t.label}</span>
               </button>
             ))}
+              </div>
+              <div className="space-y-2">
+                <p className="px-3 text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>Skincare tools</p>
+            {trackingTabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTab(t.id);
+                  setSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer ${tab === t.id ? "bg-accent text-white shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {t.icon}
+                <span>{t.label}</span>
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                sessionStorage.removeItem("active_shop_slug");
+                setSidebarOpen(false);
+                setView("shop");
+              }}
+              className="w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              <Store className="w-4 h-4" />
+              <span>Product Shop</span>
+            </button>
+              </div>
+              <div className="space-y-2">
+                <p className="px-3 text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>Account</p>
+            {accountTabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTab(t.id);
+                  setSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer ${tab === t.id ? "bg-accent text-white shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {t.icon}
+                <span>{t.label}</span>
+              </button>
+            ))}
+              </div>
+            </nav>
+            <div className="border-t border-border mt-3 pt-3">
+              <button
+                onClick={handleSignOut}
+                className="w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sign out</span>
+              </button>
+            </div>
           </aside>
+          {sidebarOpen && (
+            <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/35 backdrop-blur-xs lg:hidden" />
+          )}
 
-          <main className="min-w-0">
+          <main className="min-w-0 animate-in fade-in duration-300">
 
       {/* ── OVERVIEW ── */}
       {tab === "overview" && (
-        <div className="space-y-5">
+        <div className="space-y-6">
+          <section className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm overflow-hidden relative">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#008236] via-[#f59e0b] to-[#0f766e]" />
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div className="flex items-start gap-4 min-w-0">
+                <div className="w-12 h-12 rounded-2xl bg-accent/10 text-accent border border-accent/20 flex items-center justify-center shrink-0">
+                  <HeartPulse className="w-6 h-6" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>Overview</p>
+                  <h2 className="text-2xl sm:text-3xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                    Good to see you, {(userProfile?.name || "there").split(" ")[0]}
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-2 max-w-2xl leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {latestAnalysis
+                      ? "Your latest skin analysis, product matches, routine steps, and progress signals are organised here."
+                      : "Start your first skin analysis to generate a personalised report, product matches, ingredient guidance, and routine tracking."}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => openCustomerSkinTest()}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white px-5 py-3 rounded-xl text-sm font-semibold shadow-sm transition-colors"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                <Plus className="w-4 h-4" />
+                <span className="whitespace-nowrap">New analysis</span>
+              </button>
+            </div>
+          </section>
+
           {/* Stats row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { label: "Skin score", value: latestAnalysis ? String(latestAnalysis.score) : "—", delta: latestAnalysis ? "Updated recently" : "No scan yet", icon: <Star className="w-4 h-4" />, color: "text-amber-500" },
+              { label: "Skin score", value: latestAnalysis && typeof latestAnalysis.score === "number" ? String(latestAnalysis.score) : "—", delta: latestAnalysis ? "From saved scan data" : "No scan yet", icon: <Star className="w-4 h-4" />, color: "text-amber-500" },
               { label: "Analyses done", value: String(analysesList.length), delta: "Platform scans", icon: <Scan className="w-4 h-4" />, color: "text-accent" },
               { label: "Products matched", value: latestAnalysis ? String(matchedProducts.length) : "0", delta: "Safety verified", icon: <ShoppingBag className="w-4 h-4" />, color: "text-blue-500" },
-              { label: "Days on routine", value: latestAnalysis ? String(Math.max(1, Math.round((Date.now() - new Date(latestAnalysis.date).getTime()) / (1000 * 60 * 60 * 24)))) : "—", delta: "Tracked days", icon: <Flame className="w-4 h-4" />, color: "text-orange-500" },
+              { label: "Days on routine", value: latestAnalysis ? String(Math.max(1, Math.round((Date.now() - new Date(latestAnalysis.createdAt || latestAnalysis.date).getTime()) / (1000 * 60 * 60 * 24)))) : "—", delta: "Tracked days", icon: <Flame className="w-4 h-4" />, color: "text-orange-500" },
             ].map((s) => (
-              <div key={s.label} className="bg-card border border-border rounded-lg p-4">
+              <div key={s.label} className="bg-card border border-border rounded-xl p-4 shadow-sm">
                 <div className={`flex items-center gap-2 mb-2 ${s.color}`}>
                   {s.icon}
                   <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.label}</span>
@@ -479,23 +818,33 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
 
           {/* Latest result card */}
           {latestAnalysis ? (
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Latest analysis — {latestAnalysis.date}</h3>
-                <span className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{latestAnalysis.id}</span>
+            <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>Latest saved report</p>
+                  <h3 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>{latestAnalysis.date}</h3>
+                </div>
+                <span className="text-xs text-muted-foreground bg-muted border border-border px-2.5 py-1 rounded-full self-start" style={{ fontFamily: "'DM Mono', monospace" }}>{latestAnalysis.id}</span>
               </div>
-              <div className="grid sm:grid-cols-3 gap-4 mb-4">
-                <div className="bg-muted/50 rounded-lg p-3">
+              <div className="grid lg:grid-cols-[160px_1fr] gap-5 mb-5">
+                <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4 flex flex-col items-center justify-center text-center">
+                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skin score</p>
+                  <p className="text-4xl font-light text-accent" style={{ fontFamily: "'Fraunces', serif" }}>{typeof latestAnalysis.score === "number" ? latestAnalysis.score : "—"}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>out of 100</p>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <div className="bg-muted/50 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skin type</p>
                   <p className="text-sm font-medium text-foreground">{latestAnalysis.skinType}</p>
                 </div>
-                <div className="bg-muted/50 rounded-lg p-3">
+                  <div className="bg-muted/50 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Primary concerns</p>
                   <p className="text-sm font-medium text-foreground">{latestAnalysis.concerns.join(", ")}</p>
                 </div>
-                <div className="bg-muted/50 rounded-lg p-3">
+                  <div className="bg-muted/50 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Products matched</p>
-                  <p className="text-sm font-medium text-foreground">{latestAnalysis.products} products</p>
+                  <p className="text-sm font-medium text-foreground">{matchedProducts.length} products</p>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
@@ -511,22 +860,23 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               </div>
             </div>
           ) : (
-            <div className="bg-card border border-border rounded-xl p-8 text-center flex flex-col items-center justify-center gap-4">
-              <div className="w-12 h-12 bg-accent/10 rounded-full flex items-center justify-center text-accent">
-                <Scan className="w-6 h-6" />
+            <div className="bg-card border border-border rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-4 shadow-sm">
+              <div className="w-14 h-14 bg-accent/10 rounded-2xl flex items-center justify-center text-accent border border-accent/20">
+                <Scan className="w-7 h-7" />
               </div>
               <div>
-                <h3 className="font-medium text-foreground text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No Skin Scan Recorded Yet</h3>
+                <h3 className="font-medium text-foreground text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No skin analysis recorded yet</h3>
                 <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Start your first skin analysis to see your personalized report, matching products, and customized routine!
+                  Start your first skin analysis to see your personalised report, matching products, and customised routine.
                 </p>
               </div>
               <button
-                onClick={() => setView("skintest")}
-                className="text-xs bg-[#008236] hover:bg-[#006c2c] text-white px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer"
+                onClick={() => openCustomerSkinTest()}
+                className="inline-flex items-center gap-2 text-xs bg-[#008236] hover:bg-[#006c2c] text-white px-4 py-2.5 rounded-lg font-semibold transition-colors cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                Start skin test now
+                <Plus className="w-3.5 h-3.5" />
+                <span className="whitespace-nowrap">Start new analysis</span>
               </button>
             </div>
           )}
@@ -536,7 +886,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             {[
               { icon: <BarChart2 className="w-4 h-4 text-accent" />, title: "Skin progress report", desc: "See how your skin score has changed over time", tab: "progress" as UserTab },
               { icon: <BookOpen className="w-4 h-4 text-blue-500" />, title: "Ingredient glossary", desc: "Safe vs flagged ingredients for your skin type", tab: "ingredients" as UserTab },
-              { icon: <Calendar className="w-4 h-4 text-green-600" />, title: "My skincare routine", desc: "Your personalized AM & PM routine steps", tab: "routine" as UserTab },
+              { icon: <Calendar className="w-4 h-4 text-green-600" />, title: "My skincare routine", desc: "Your personalised AM & PM routine steps", tab: "routine" as UserTab },
             ].map((q) => (
               <button key={q.title} onClick={() => setTab(q.tab)} className="text-left bg-card border border-border rounded-xl p-4 hover:border-accent/30 transition-colors group">
                 <div className="mb-3">{q.icon}</div>
@@ -551,19 +901,16 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       {/* ── MY ANALYSES ── */}
       {tab === "history" && (
         <div className="space-y-5">
-          <div className="flex items-center justify-between">
+          <div>
             <div>
               <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Analysis history</h2>
-              <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>All your skin analyses saved and tracked. <PlanBadge required="glowplus" current={plan} /></p>
+              <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>All your skin analyses are saved and tracked. <PlanBadge required="glowplus" current={accessPlan} /></p>
             </div>
-            <button onClick={() => setView("skintest")} className="flex items-center gap-1.5 text-sm bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-accent/90 transition-colors font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              <Plus className="w-3.5 h-3.5" /> New analysis
-            </button>
           </div>
           <div className="space-y-4 relative">
-            {plan === "glow" && <LockedOverlay label="Glow Pass+" onUpgrade={() => payWithPaystack("basic")} />}
+            {accessPlan === "glow" && <LockedOverlay label="Glow Pass+" onUpgrade={() => payWithPaystack("basic")} />}
             {analysesList.length > 0 ? (
-              analysesList.map((a) => (
+              analysesList.map((a, i) => (
                 <div key={a.id} className="bg-card border border-border rounded-xl overflow-hidden">
                   <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-3">
@@ -571,12 +918,16 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                       <span className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" />{a.date}</span>
                       <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{a.vendor}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>Score: {a.score}/100</span>
-                      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-accent rounded-full" style={{ width: `${a.score}%` }} />
+                    {typeof a.score === "number" ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>Score: {a.score}/100</span>
+                        <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-accent rounded-full" style={{ width: `${a.score}%` }} />
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Not scored</span>
+                    )}
                   </div>
                   <div className="px-5 py-4 flex items-center gap-4 flex-wrap">
                     <div className="flex-1">
@@ -588,7 +939,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.products} products matched</span>
+                      <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{i === 0 ? `${matchedProducts.length} live matches` : "View latest matches"}</span>
                       <button onClick={() => copy(a.link, a.id)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                         {copied === a.id ? <><Check className="w-3 h-3" /> Copied</> : <><Share2 className="w-3 h-3" /> Share results</>}
                       </button>
@@ -598,7 +949,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               ))
             ) : (
               <div className="bg-card border border-border border-dashed rounded-xl p-8 text-center text-muted-foreground">
-                No analyses run yet. Tap "+ New analysis" at the top to begin!
+                <p className="text-sm font-medium text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No analyses yet</p>
+                <p className="text-xs mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run a skin analysis and this page will show the saved report, score, concern, result link, and the path into recommendations.</p>
+                <button onClick={() => openCustomerSkinTest()} className="px-4 py-2 rounded-lg bg-accent text-white text-xs font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Start analysis</button>
               </div>
             )}
           </div>
@@ -611,12 +964,12 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           <div>
             <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Your product recommendations</h2>
             <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {plan === "glow" ? "Top 3 matches from your latest analysis." : "Full AI-matched list based on your latest skin analysis with priority product matching."}
+              {accessPlan === "glow" ? "Top 3 matches from your latest analysis." : "Full AI-matched list based on your latest skin analysis with priority product matching."}
             </p>
           </div>
           <div className="space-y-3">
             {matchedProducts.length > 0 ? (
-              (plan === "glow" ? matchedProducts.slice(0, 3) : matchedProducts).map((r, i) => (
+              (accessPlan === "glow" ? matchedProducts.slice(0, 3) : matchedProducts).map((r, i) => (
                 <div key={r.name} className={cn("bg-card border border-border rounded-xl p-4 flex items-center gap-4", i === 0 && "border-accent/30 ring-1 ring-accent/10")}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${i === 0 ? "bg-accent text-white" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
                     {i + 1}
@@ -636,16 +989,18 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               ))
             ) : (
               <div className="bg-card border border-border border-dashed rounded-xl p-8 text-center text-muted-foreground">
-                No product recommendations available. Run a skin test to get matches!
+                <p className="text-sm font-medium text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No recommendations yet</p>
+                <p className="text-xs mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Recommendations appear after a scan is saved and approved vendor products are available for matching.</p>
+                <button onClick={() => openCustomerSkinTest()} className="px-4 py-2 rounded-lg bg-accent text-white text-xs font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run analysis</button>
               </div>
             )}
           </div>
-          {plan === "glow" && matchedProducts.length > 0 && (
+          {accessPlan === "glow" && matchedProducts.length > 0 && (
             <div className="bg-muted/50 border border-dashed border-border rounded-xl p-5 text-center">
               <Lock className="w-5 h-5 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm font-medium text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>See your full recommendation list</p>
               <p className="text-xs text-muted-foreground mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Upgrade to Glow Pass+ for priority product matching and the complete list of matched products.</p>
-              <button className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent/90 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Upgrade to Glow Pass+</button>
+              <button onClick={() => payWithPaystack("basic")} className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent/90 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Upgrade to Glow Pass+</button>
             </div>
           )}
         </div>
@@ -656,33 +1011,46 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         <div className="space-y-5">
           <div className="flex items-center gap-2">
             <div>
-              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Ingredient safety check & glossary</h2>
+              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Ingredient safety check</h2>
               <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Personalized for your skin type (Combination · Hyperpigmentation). <PlanBadge required="glowplus" current={plan} />
+                Ingredient checks will appear when a saved scan includes product ingredients or label-extracted actives. <PlanBadge required="glowplus" current={accessPlan} />
               </p>
             </div>
           </div>
           <div className="relative space-y-3">
-            {plan === "glow" && <LockedOverlay label="Glow Pass+" onUpgrade={() => payWithPaystack("basic")} />}
-            {ingredientGlossary.map((ing) => (
-              <div key={ing.name} className={cn("bg-card border rounded-xl p-4 flex items-start gap-4", ing.safe ? "border-border" : "border-red-200 bg-red-50/30")}>
+            {accessPlan === "glow" && <LockedOverlay label="Glow Pass+" onUpgrade={() => payWithPaystack("basic")} />}
+            {visibleIngredients.length > 0 ? visibleIngredients.map((ing) => (
+              <button
+                key={ing.name}
+                onClick={() => setSelectedIngredient(ing)}
+                className={cn("w-full text-left bg-card border rounded-xl p-4 flex items-start gap-4 transition-all hover:shadow-sm hover:border-accent/40", ing.safe ? "border-border" : "border-red-200 bg-red-50/30")}
+              >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${ing.safe ? "bg-green-100" : "bg-red-100"}`}>
-                  {ing.safe
-                    ? <Check className="w-3.5 h-3.5 text-green-700" />
-                    : <X className="w-3.5 h-3.5 text-red-600" />
-                  }
+                  {ing.safe ? <Check className="w-3.5 h-3.5 text-green-700" /> : <X className="w-3.5 h-3.5 text-red-600" />}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{ing.name}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${ing.safe ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
-                      {ing.safe ? "Safe for you" : "Flagged"}
+                    <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${ing.safe ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+                      {ing.status}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{ing.benefit}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="text-[10px] bg-muted text-muted-foreground px-2 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>{ing.scope}</span>
+                    <span className="text-[10px] bg-muted text-muted-foreground px-2 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Max: {ing.maxConc}</span>
+                  </div>
                 </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground mt-1" />
+              </button>
+            )) : (
+              <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center">
+                <p className="text-sm font-medium text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No scan-derived ingredient checks yet</p>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Run an analysis and choose matched products with saved ingredients. This page will then show ingredient safety notes based on real scan and catalogue data.
+                </p>
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -693,58 +1061,70 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           <div>
             <div className="flex items-center gap-2 mb-0.5">
               <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Monthly skin progress report</h2>
-              <PlanBadge required="premium" current={plan} />
+              <PlanBadge required="premium" current={accessPlan} />
             </div>
             <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your skin score trend over the past 7 months.</p>
           </div>
 
           <div className="relative bg-card border border-border rounded-xl p-5">
-            {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
-            {/* SVG chart */}
-            <div className="mb-4 flex items-end gap-2 justify-between h-36">
-              {progressScores.map((s, i) => {
-                const isLatest = i === progressScores.length - 1;
-                const height = `${(s.score / 100) * 100}%`;
-                return (
-                  <div key={s.month} className="flex flex-col items-center gap-1.5 flex-1">
-                    <span className="text-xs font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{s.score}</span>
-                    <div className="w-full rounded-t-sm flex items-end" style={{ height: "100px" }}>
-                      <div
-                        className={`w-full rounded-t-sm transition-all ${isLatest ? "bg-accent" : "bg-accent/25"}`}
-                        style={{ height: `${(s.score / 100) * 100}px` }}
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.month}</span>
-                  </div>
-                );
-              })}
-            </div>
+            {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
+            {progressScores.length > 0 ? (
+              <div className="mb-4 h-64 rounded-xl border border-border bg-background p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={progressScores} margin={{ top: 12, right: 18, left: -18, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      formatter={(value) => [`${value} / 100`, "Skin score"]}
+                      contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                    />
+                    <Line type="monotone" dataKey="score" stroke="#008236" strokeWidth={3} dot={{ r: 4, fill: "#008236" }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="mb-4 h-36 rounded-xl border border-dashed border-border bg-muted/30 flex items-center justify-center text-center px-4">
+                <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your progress chart appears after scans with saved AI scores.</p>
+              </div>
+            )}
 
             <div className="border-t border-border pt-4 grid sm:grid-cols-3 gap-4">
               {[
                 {
                   label: "Current score",
-                  value: latestAnalysis ? `${latestAnalysis.score} / 100` : "—",
-                  delta: analysesList.length > 1 ? "Compared with previous scan" : "Run more scans to build trend data",
+                  value: latestScoreText,
+                  delta: scoredAnalyses.length > 1 ? "Compared with previous scan" : "Run more scans to build trend data",
                   good: true
                 },
                 {
                   label: "Best score",
-                  value: analysesList.length ? `${Math.max(...analysesList.map((a) => a.score))} / 100` : "—",
-                  delta: analysesList.length ? "From your scan history" : "No scan history yet",
+                  value: scoredAnalyses.length ? `${Math.max(...scoredAnalyses.map((a) => a.score))} / 100` : "—",
+                  delta: scoredAnalyses.length ? "From your scan history" : "No scan history yet",
                   good: true
                 },
                 {
                   label: "Trend",
-                  value: analysesList.length > 1 ? (analysesList[0].score >= analysesList[1].score ? "Improving" : "Monitor") : "Not enough data",
-                  delta: analysesList.length > 1 ? `${analysesList[0].score - analysesList[1].score} pts vs previous scan` : "At least 2 scans required",
-                  good: analysesList.length <= 1 || analysesList[0].score >= analysesList[1].score
+                  value: scoredAnalyses.length > 1 ? (scoredAnalyses[0].score >= scoredAnalyses[1].score ? "Improving" : "Monitor") : "Not enough data",
+                  delta: scoredAnalyses.length > 1 ? `${scoredAnalyses[0].score - scoredAnalyses[1].score} pts vs previous scan` : "At least 2 scans required",
+                  good: scoredAnalyses.length <= 1 || scoredAnalyses[0].score >= scoredAnalyses[1].score
                 },
               ].map((s) => (
                 <div key={s.label} className="bg-muted/50 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.label}</p>
                   <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>{s.value}</p>
                   <p className={`text-xs mt-0.5 ${s.good ? "text-green-700" : "text-red-600"}`} style={{ fontFamily: "'DM Mono', monospace" }}>{s.delta}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 grid sm:grid-cols-2 gap-4">
+              {[
+                { label: "Tracked concern", value: latestAnalysis?.concerns?.join(", ") || "No concern yet" },
+                { label: "Latest scan area", value: latestAnalysis?.area || "No area saved yet" },
+              ].map((item) => (
+                <div key={item.label} className="bg-background border border-border rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.label}</p>
+                  <p className="text-sm text-foreground font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
                 </div>
               ))}
             </div>
@@ -757,15 +1137,16 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         <div className="space-y-5">
           <div>
             <div className="flex items-center gap-2 mb-0.5">
-              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Personalized skincare routine</h2>
-              <PlanBadge required="premium" current={plan} />
+              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Personalised skincare routine</h2>
+              <PlanBadge required="premium" current={accessPlan} />
             </div>
               <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 {latestAnalysis ? `Built from your latest ${latestAnalysis.concerns.join(", ")} analysis.` : "Run a skin test to generate a routine."}
               </p>
           </div>
           <div className="relative">
-            {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
+            {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
+            {routineSteps.length > 0 ? (
             <div className="grid sm:grid-cols-2 gap-4">
               {[
                 { label: "Morning Routine", steps: routineSteps.filter((s) => s.step.startsWith("AM")), color: "text-amber-600", bg: "bg-amber-50" },
@@ -790,6 +1171,13 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 </div>
               ))}
             </div>
+            ) : (
+              <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center">
+                <p className="text-sm font-medium text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No routine yet</p>
+                <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run an analysis first. The routine page will use your latest concern and product matches to build AM and PM steps.</p>
+                <button onClick={() => openCustomerSkinTest()} className="px-4 py-2 rounded-lg bg-accent text-white text-xs font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run analysis</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -801,7 +1189,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             <div>
               <div className="flex items-center gap-2 mb-0.5">
                 <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Family skin profiles</h2>
-                <PlanBadge required="premium" current={plan} />
+                <PlanBadge required="premium" current={accessPlan} />
               </div>
               <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Track up to 5 family members. Each profile gets its own skin analysis history.</p>
             </div>
@@ -810,14 +1198,59 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </button>
           </div>
           <div className="relative space-y-3">
-            {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
+            {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
             {showAddFamily && (
-              <div className="bg-muted/30 border border-dashed border-border rounded-xl p-4 flex gap-2 flex-wrap">
-                <input placeholder="Name" className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-accent min-w-32" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
-                <select className="bg-background border border-border rounded-lg px-2 py-2 text-sm text-foreground outline-none focus:border-accent">
-                  <option>Dry</option><option>Oily</option><option>Combination</option><option>Normal</option>
+              <div className="bg-muted/30 border border-dashed border-border rounded-xl p-4 grid sm:grid-cols-2 lg:grid-cols-[1fr_150px_140px] gap-3">
+                <input
+                  value={familyForm.name}
+                  onChange={(e) => setFamilyForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Full name"
+                  className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-accent min-w-0"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+                <input
+                  value={familyForm.relationship}
+                  onChange={(e) => setFamilyForm((prev) => ({ ...prev, relationship: e.target.value }))}
+                  placeholder="Relationship"
+                  className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-accent min-w-0"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+                <select
+                  value={familyForm.ageBand}
+                  onChange={(e) => setFamilyForm((prev) => ({ ...prev, ageBand: e.target.value }))}
+                  className="bg-background border border-border rounded-lg px-2 py-2 text-sm text-foreground outline-none focus:border-accent"
+                >
+                  <option>Child</option><option>Teen</option><option>Adult</option><option>Older adult</option>
                 </select>
-                <button onClick={() => setShowAddFamily(false)} className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent/90 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Save</button>
+                <select
+                  value={familyForm.skinType}
+                  onChange={(e) => setFamilyForm((prev) => ({ ...prev, skinType: e.target.value }))}
+                  className="bg-background border border-border rounded-lg px-2 py-2 text-sm text-foreground outline-none focus:border-accent"
+                >
+                  <option>Dry</option><option>Oily</option><option>Combination</option><option>Normal</option><option>Sensitive</option>
+                </select>
+                <input
+                  value={familyForm.concern}
+                  onChange={(e) => setFamilyForm((prev) => ({ ...prev, concern: e.target.value }))}
+                  placeholder="Main concern"
+                  className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-accent min-w-0"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+                <input
+                  value={familyForm.notes}
+                  onChange={(e) => setFamilyForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Notes, allergies or sensitivities"
+                  className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-accent min-w-0"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+                <button
+                  onClick={saveFamilyMember}
+                  disabled={savingFamily}
+                  className="sm:col-span-2 lg:col-span-3 px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-60"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {savingFamily ? "Saving…" : "Save"}
+                </button>
               </div>
             )}
             {familyProfiles.map((m) => (
@@ -831,16 +1264,23 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                     {m.isYou && <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">You</span>}
                   </div>
                   <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.skinType} · {m.concern}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.relationship} · {m.ageBand}{m.notes ? ` · ${m.notes}` : ""}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Last scan</p>
                   <p className="text-xs font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{m.lastScan}</p>
                 </div>
-                <button onClick={() => setView("skintest")} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <button onClick={() => openCustomerSkinTest()} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   New scan <ChevronRight className="w-3 h-3" />
                 </button>
               </div>
             ))}
+            {familyProfiles.length === 0 && (
+              <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center">
+                <p className="text-sm font-medium text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No family profiles yet</p>
+                <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Add a real family profile above. Saved profiles are stored and fetched from your account.</p>
+              </div>
+            )}
             <div className="text-xs text-muted-foreground text-center py-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {familyProfiles.length} of 5 profiles used
             </div>
@@ -848,94 +1288,169 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         </div>
       )}
 
-      {/* ── PERKS ── */}
-      {tab === "perks" && (
-        <div className="space-y-6">
-          {/* Discounts */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Exclusive vendor discounts</h2>
-              <PlanBadge required="premium" current={plan} />
-            </div>
-            <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Discounts from Anovra partner vendors, available only to Premium Glow subscribers.</p>
-            <div className="relative space-y-3">
-              {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
-              {discounts.length > 0 ? discounts.map((d) => (
-                <div key={d.code} className={cn("bg-card border rounded-xl p-4 flex items-center gap-4", d.used ? "opacity-50" : "border-border")}>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-sm font-medium text-foreground">{d.vendor}</p>
-                      <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">{d.discount}</span>
-                      {d.used && <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Used</span>}
-                    </div>
-                    <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Expires {d.expires}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm text-foreground bg-muted px-3 py-1.5 rounded-lg">{d.code}</span>
-                    {!d.used && (
-                      <button onClick={() => copy(d.code, d.code)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {copied === d.code ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )) : (
-                <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
-                  No live vendor discounts are available yet.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Early access */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Early access features</h2>
-              <PlanBadge required="premium" current={plan} />
-            </div>
-            <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>You get first access to new Anovra AI features before they go public.</p>
-            <div className="relative space-y-3">
-              {plan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
-              {earlyAccessFeatures.length > 0 ? earlyAccessFeatures.map((f) => (
-                <div key={f.name} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${f.active ? "bg-green-500" : "bg-muted-foreground"}`} />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.desc}</p>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${f.active ? "bg-green-50 text-green-700" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
-                    {f.status}
-                  </span>
-                </div>
-              )) : (
-                <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
-                  No early-access releases are assigned to this account yet.
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
       {/* ── SETTINGS / BILLING ── */}
       {tab === "settings" && (
         <div className="space-y-6">
           <div>
-            <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Subscription Billing & Plans</h2>
-            <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Manage your account subscription, unlock features, and view active benefits.</p>
+            <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Account settings</h2>
+            <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Manage your profile, sign-in security, trial access, and paid plan options.</p>
           </div>
+
+          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
+              <div>
+                <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Profile details</h3>
+                <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Update the customer identity used across your skin portal.</p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 text-xs bg-accent/10 text-accent border border-accent/20 px-2.5 py-1 rounded-full font-semibold self-start" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <User className="w-3.5 h-3.5" />
+                {planLabel}
+              </span>
+            </div>
+            <div className="grid sm:grid-cols-[96px_1fr] gap-4 items-center">
+              <div className="w-20 h-20 rounded-full bg-accent/10 text-accent border border-accent/20 flex items-center justify-center text-xl font-bold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {userInitials}
+              </div>
+              <label className="block">
+                <span className="block text-xs font-semibold text-muted-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Full name</span>
+                <input
+                  value={profileForm.name}
+                  onChange={(event) => setProfileForm((prev) => ({ ...prev, name: event.target.value }))}
+                  className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-accent"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
+            <div className="mb-5">
+              <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Contact details</h3>
+              <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Keep your email, phone number, and location up to date for account recovery and support.</p>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="block text-xs font-semibold text-muted-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Email address</span>
+                <input
+                  type="email"
+                  value={profileForm.email}
+                  onChange={(event) => setProfileForm((prev) => ({ ...prev, email: event.target.value }))}
+                  className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-accent"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-semibold text-muted-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Phone number</span>
+                <input
+                  value={profileForm.phone}
+                  onChange={(event) => setProfileForm((prev) => ({ ...prev, phone: event.target.value }))}
+                  className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-accent"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="block text-xs font-semibold text-muted-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Location</span>
+                <input
+                  value={profileForm.location}
+                  onChange={(event) => setProfileForm((prev) => ({ ...prev, location: event.target.value }))}
+                  placeholder="City, country"
+                  className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-accent"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={saveUserProfile}
+                disabled={savingProfile}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-accent text-white text-sm font-semibold hover:bg-accent/90 disabled:opacity-60 transition-colors"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {savingProfile ? "Saving…" : "Save profile"}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
+            <div className="mb-5">
+              <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Security</h3>
+              <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Change your password for this customer account.</p>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="block text-xs font-semibold text-muted-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>New password</span>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
+                  className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-accent"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-semibold text-muted-foreground mb-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Confirm password</span>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(event) => setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+                  className="w-full bg-background border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-accent"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={changePassword}
+                disabled={savingPassword}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-border text-foreground text-sm font-semibold hover:bg-muted disabled:opacity-60 transition-colors"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {savingPassword ? "Changing…" : "Change password"}
+              </button>
+            </div>
+          </div>
+
+          {trialAccessActive && (
+            <div className="bg-card border border-[#008236]/25 rounded-2xl p-5 sm:p-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                <div>
+                  <span className="inline-flex text-[10px] uppercase tracking-wider font-bold text-[#008236] bg-[#008236]/10 border border-[#008236]/20 px-2.5 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>
+                    Current plan
+                  </span>
+                  <h3 className="text-2xl font-light text-foreground mt-3" style={{ fontFamily: "'Fraunces', serif" }}>14-day free trial</h3>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Full customer dashboard access is active during your trial. When it ends, advanced tools require a paid plan.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-3 min-w-[260px]">
+                  {[
+                    { label: "Days", value: trialDays },
+                    { label: "Hours", value: trialHours },
+                    { label: "Minutes", value: trialMinutes },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-xl bg-[#FAF7F2] border border-border p-3 text-center">
+                      <p className="text-2xl font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{item.value}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
                 id: "glow" as const,
-                name: "Glow Pass",
-                price: "₦1,500",
+                name: "Free plan",
+                price: "₦0",
                 period: "month",
-                desc: "Essential skin health analysis & matched recommendations.",
-                features: ["1 full skin analysis per month", "Top 3 product recommendations", "Basic skin type & concern report", "Ingredient safety check", "Results shared via link"],
-                cta: plan === "glow" ? "Current Plan" : "Downgrade to Glow Pass",
+                desc: "Basic access after the free trial ends.",
+                features: ["Limited skin analysis access", "Top product recommendations", "Basic skin type and concern report", "Ingredient safety check", "Results shared via link"],
+                cta: trialAccessActive ? "Available after trial" : (plan === "glow" ? "Current plan" : "Downgrade to free plan"),
                 planKey: null,
-                active: plan === "glow"
+                active: plan === "glow" && !trialAccessActive,
+                disabled: trialAccessActive,
               },
               {
                 id: "glowplus" as const,
@@ -943,8 +1458,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 price: "₦3,500",
                 period: "month",
                 desc: "Unlimited skin analyses and complete history log files tracking.",
-                features: ["Unlimited skin analyses", "Full product recommendation list", "Detailed skin health report", "Save & track skin history", "Personalized ingredient glossary", "Priority product matching"],
-                cta: plan === "glow" ? "Upgrade to Glow Pass+" : (plan === "glowplus" ? "Current Plan" : "Downgrade to Glow Pass+"),
+                features: ["Unlimited skin analyses", "Full product recommendation list", "Detailed skin health report", "Save and track skin history", "Personalised ingredient glossary", "Priority product matching"],
+                cta: trialAccessActive ? "Keep access after trial" : (plan === "glow" ? "Upgrade to Glow Pass+" : (plan === "glowplus" ? "Current plan" : "Downgrade to Glow Pass+")),
                 planKey: "basic" as const,
                 active: plan === "glowplus"
               },
@@ -954,8 +1469,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 price: "₦7,000",
                 period: "month",
                 desc: "Complete features including live dermatologist chats and routines.",
-                features: ["Everything in Glow Pass+", "Monthly progress reports & trend scores", "Direct chat with certified skin advisors", "Exclusive discounts from Anovra vendors", "Family skin profiles (up to 5 members)", "Skincare routine builder & early AI access"],
-                cta: plan === "premium" ? "Current Plan" : "Upgrade to Premium Glow",
+                features: ["Everything in Glow Pass+", "Monthly progress reports & trend scores", "Direct chat with certified skin advisers", "Verified partner product offers", "Family skin profiles (up to 5 members)", "Skincare routine builder"],
+                cta: trialAccessActive ? "Keep all features after trial" : (plan === "premium" ? "Current plan" : "Upgrade to Premium Glow"),
                 planKey: "premium" as const,
                 active: plan === "premium"
               }
@@ -987,9 +1502,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 </div>
 
                 <div className="mt-8">
-                  {p.active ? (
+                  {p.active || p.disabled ? (
                     <button disabled className="w-full py-3 bg-muted text-muted-foreground rounded-xl text-xs font-semibold cursor-not-allowed">
-                      Current Plan
+                      {p.active ? "Current plan" : p.cta}
                     </button>
                   ) : (
                     <button
@@ -1018,26 +1533,35 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         )}
       </div>
 
-      {/* ── Floating advisor chat (Premium) ── */}
-      {plan === "premium" && (
+      {/* ── Floating adviser chat (Premium) ── */}
+      {accessPlan === "premium" && (
         <div className="fixed bottom-6 right-6 z-50">
           {chatOpen && (
-            <div className="w-80 bg-card border border-border rounded-2xl shadow-xl overflow-hidden mb-3">
+            <div className="w-[min(24rem,calc(100vw-2rem))] bg-card border border-border rounded-2xl shadow-xl overflow-hidden mb-3">
               <div className="bg-foreground px-4 py-3 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-primary-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skin Advisor</p>
+                  <p className="text-sm font-medium text-primary-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skin Adviser</p>
                   <p className="text-xs text-white/50" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Certified · Usually replies in minutes</p>
                 </div>
                 <button onClick={() => setChatOpen(false)} className="text-white/40 hover:text-white/70 transition-colors"><X className="w-4 h-4" /></button>
               </div>
-              <div className="h-52 overflow-y-auto p-4 space-y-3">
+              <div className="h-72 overflow-y-auto p-4 space-y-3">
                 {chatHistory.map((m, i) => (
                   <div key={i} className={`flex ${m.from === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed ${m.from === "user" ? "bg-accent text-white" : "bg-muted text-foreground"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {m.text}
+                    <div className={`max-w-[88%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words ${m.from === "user" ? "bg-accent text-white" : "bg-muted text-foreground"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {m.from === "advisor" ? <FormattedChatText text={m.text} /> : m.text}
                     </div>
                   </div>
                 ))}
+                {chatTyping && (
+                  <div className="flex justify-start">
+                    <div className="bg-muted text-foreground rounded-xl px-3 py-2 flex items-center gap-1.5">
+                      {[0, 1, 2].map((dot) => (
+                        <span key={dot} className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: `${dot * 120}ms` }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="px-3 py-3 border-t border-border flex gap-2">
                 <input
@@ -1058,6 +1582,41 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           >
             <MessageCircle className="w-5 h-5 text-white" />
           </button>
+        </div>
+      )}
+
+      {selectedIngredient && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>Ingredient record</p>
+                <h3 className="text-xl font-light text-foreground mt-1" style={{ fontFamily: "'Fraunces', serif" }}>{selectedIngredient.name}</h3>
+              </div>
+              <button onClick={() => setSelectedIngredient(null)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {[
+                { label: "Safety status", value: selectedIngredient.status },
+                { label: "Function", value: selectedIngredient.function },
+                { label: "Scope", value: selectedIngredient.scope },
+                { label: "Maximum concentration", value: selectedIngredient.maxConc },
+              ].map((item) => (
+                <div key={item.label} className="bg-muted/40 rounded-xl p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{item.label}</p>
+                  <p className="text-sm text-foreground mt-1 capitalize" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value || "Not specified"}</p>
+                </div>
+              ))}
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>Notes</p>
+                <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {selectedIngredient.notes || selectedIngredient.benefit || "No additional notes have been added for this ingredient."}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

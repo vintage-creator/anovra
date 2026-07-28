@@ -597,7 +597,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                       {loading ? (
                         <>
                           <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                          <span>Submitting...</span>
+                          <span>Submitting…</span>
                         </>
                       ) : (
                         "Submit Vendor Application"
@@ -613,7 +613,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                 href="#/terms"
                 onClick={(e) => {
                   e.preventDefault();
-                  toast.info("Terms of Service: All accounts undergo CAC verification. Credentials must be kept secure, and product catalogs must meet platform purity rules.");
+                  toast.info("Terms of Service: All accounts undergo CAC verification. Credentials must be kept secure, and product catalogues must meet platform purity rules.");
                 }}
                 className="underline text-foreground hover:text-[#008236] transition-colors"
               >

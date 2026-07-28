@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
-  LayoutDashboard, Package, Eye, Store, User, Shield, Check, Copy,
-  CheckCircle, AlertTriangle, Home
+  LayoutDashboard, Package, Eye, Store, Shield, Check, Copy,
+  CheckCircle, AlertTriangle, Home, Menu, User
 } from "lucide-react";
 import type { View } from "../types";
 import { supabase } from "../utils/supabase";
@@ -18,6 +18,10 @@ interface UnifiedDashboardHeaderProps {
   showShopLink?: boolean;
   isVerified?: boolean;
   onToggleVerify?: () => void;
+  onMenuClick?: () => void;
+  menuLabel?: string;
+  onProfileClick?: () => void;
+  profileName?: string;
 }
 
 export function UnifiedDashboardHeader({
@@ -30,6 +34,10 @@ export function UnifiedDashboardHeader({
   showShopLink = true,
   isVerified = true,
   onToggleVerify,
+  onMenuClick,
+  menuLabel = "Menu",
+  onProfileClick,
+  profileName,
 }: UnifiedDashboardHeaderProps) {
   const [copied, setCopied] = useState(false);
   const [brandSlug, setBrandSlug] = useState("your-brand");
@@ -63,23 +71,24 @@ export function UnifiedDashboardHeader({
   // Strictly role-segregated navigation links
   const vendorLinks: { id: View; label: string; icon: React.ElementType }[] = [
     { id: "dashboard", label: "Overview", icon: LayoutDashboard },
-    { id: "catalog", label: "Product Catalog", icon: Package },
+    { id: "catalog", label: "Product Catalogue", icon: Package },
     { id: "skintest", label: "Preview Test", icon: Eye },
     { id: "shop", label: "View Storefront", icon: Store },
   ];
 
-  const consumerLinks: { id: View; label: string; icon: React.ElementType }[] = [
-    { id: "userdashboard", label: "My Skin Overview", icon: User },
-    { id: "skintest", label: "Take Skin Test", icon: Eye },
-    { id: "shop", label: "Product Shop", icon: Store },
-    { id: "landing", label: "Home", icon: Home },
-  ];
+  const consumerLinks: { id: View; label: string; icon: React.ElementType }[] = [];
 
   const adminLinks: { id: View; label: string; icon: React.ElementType }[] = [
     { id: "landing", label: "Home", icon: Home },
   ];
 
   const links = role === "consumer" ? consumerLinks : role === "admin" ? adminLinks : vendorLinks;
+  const avatarInitials = (profileName || "User")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "U";
 
   return (
     <div className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border shadow-xs mb-6 transition-all">
@@ -101,7 +110,7 @@ export function UnifiedDashboardHeader({
                 <h1 className="text-xl sm:text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
                   {title}
                 </h1>
-                {badgeText && (
+                {badgeText && role !== "consumer" && (
                   <span className="text-[10px] uppercase font-bold font-mono bg-accent/15 text-accent px-2 py-0.5 rounded-full">
                     {badgeText}
                   </span>
@@ -171,14 +180,41 @@ export function UnifiedDashboardHeader({
           </div>
 
           {/* Role-Specific Quick Nav Links */}
-          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap overflow-x-auto pb-1 sm:pb-0">
+          <div className="flex items-center gap-1.5">
+            {onMenuClick && (
+              <button
+                onClick={onMenuClick}
+                className="lg:hidden flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-background text-foreground"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                <Menu className="w-3.5 h-3.5" />
+                <span>{menuLabel}</span>
+              </button>
+            )}
+            {role === "consumer" && onProfileClick && (
+              <button
+                onClick={onProfileClick}
+                className="hidden lg:flex w-10 h-10 rounded-full border border-accent/25 bg-accent/10 text-accent hover:bg-accent hover:text-white transition-colors items-center justify-center text-xs font-bold shadow-sm"
+                aria-label="Edit user profile"
+                title="Edit user profile"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {avatarInitials}
+              </button>
+            )}
+          <div className="hidden lg:flex items-center gap-1.5 flex-wrap sm:flex-nowrap overflow-x-auto pb-1 sm:pb-0">
             {links.map((link) => {
               const Icon = link.icon;
               const isActive = currentView === link.id;
               return (
                 <button
                   key={link.id}
-                  onClick={() => setView(link.id)}
+                  onClick={() => {
+                    if (role === "consumer" && link.id === "shop") {
+                      sessionStorage.removeItem("active_shop_slug");
+                    }
+                    setView(link.id);
+                  }}
                   className={`flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg transition-all whitespace-nowrap font-medium ${
                     isActive
                       ? "bg-accent text-white font-semibold shadow-xs"
@@ -191,6 +227,7 @@ export function UnifiedDashboardHeader({
                 </button>
               );
             })}
+          </div>
           </div>
 
         </div>

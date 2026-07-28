@@ -1,0 +1,6 @@
+ALTER TABLE public.scans
+  ADD COLUMN IF NOT EXISTS score NUMERIC,
+  ADD COLUMN IF NOT EXISTS severity JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS benefits JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS skin_area TEXT,
+  ADD COLUMN IF NOT EXISTS image_quality JSONB DEFAULT '{}'::jsonb;

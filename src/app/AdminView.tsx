@@ -982,7 +982,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 <LogOut className="w-4 h-4 text-red-600" />
-                <span>Sign Out</span>
+                <span>Sign out</span>
               </button>
             </div>
           </aside>
@@ -1094,7 +1094,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   <LogOut className="w-4 h-4 text-red-600" />
-                  <span>Sign Out</span>
+                  <span>Sign out</span>
                 </button>
               </div>
             </aside>
@@ -1158,7 +1158,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     color: "bg-accent",
                     textColor: "text-accent",
                     badgeColor: "bg-accent/10 text-accent",
-                    features: ["Up to 50 skin tests/month", "10 products in catalog", "Shareable test link", "Basic analytics"],
+                    features: ["Up to 50 skin tests/month", "10 products in catalogue", "Shareable test link", "Basic analytics"],
                   },
                   {
                     plan: "Vendor Pro Plan",
@@ -1169,7 +1169,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     color: "bg-emerald-600",
                     textColor: "text-emerald-600",
                     badgeColor: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25",
-                    features: ["Unlimited skin tests", "Unlimited catalog", "White-labeled results", "Website embed widget", "Priority support"],
+                    features: ["Unlimited skin tests", "Unlimited catalogue", "White-labelled results", "Website embed widget", "Priority support"],
                   },
                   {
                     plan: "Brand Tier Plan",
@@ -1273,7 +1273,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       return paidAt.getFullYear() === cursor.getFullYear() && paidAt.getMonth() === cursor.getMonth();
                     });
                     return {
-                      month: cursor.toLocaleDateString("en-US", { month: "short" }),
+                      month: cursor.toLocaleDateString("en-GB", { month: "short" }),
                       mrr: monthPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0),
                     };
                   });
@@ -1660,7 +1660,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 </h3>
               </div>
               <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Use these guidelines to evaluate ingredients identified in vendor catalogs during compliance audits:
+                Use these guidelines to evaluate ingredients identified in vendor catalogues during compliance audits:
               </p>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -3090,7 +3090,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                         disabled={targetForm.saving}
                         className="w-full sm:w-auto text-center bg-accent text-white px-4 py-2 text-xs font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 cursor-pointer"
                       >
-                        {targetForm.saving ? "Saving..." : "Save targets"}
+                        {targetForm.saving ? "Saving…" : "Save targets"}
                       </button>
                     </div>
                   </form>
@@ -3259,7 +3259,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   Merchant Onboarding Tickets
                 </h2>
                 <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Manage store setups, catalog upload requests, and customer support tickets filed by vendor merchants.
+                  Manage store setups, catalogue upload requests, and customer support tickets filed by vendor merchants.
                 </p>
               </div>
             </div>
@@ -3627,7 +3627,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 className="bg-accent text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors disabled:opacity-55 disabled:cursor-not-allowed cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                {isSavingIng ? "Saving..." : (editingIngredient !== null ? "Update Ingredient" : "Add to Database")}
+                {isSavingIng ? "Saving…" : (editingIngredient !== null ? "Update ingredient" : "Add to database")}
               </button>
             </div>
           </div>

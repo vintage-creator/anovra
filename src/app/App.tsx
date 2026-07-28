@@ -127,13 +127,13 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Analyze Skin Button (Secondary Outline Button) */}
+            {/* Analyse Skin Button (Secondary Outline Button) */}
             <button
               onClick={() => setView("skintest")}
               className="text-sm px-4 py-2 rounded-lg border-2 border-[#008236] text-[#008236] hover:bg-[#008236]/10 font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              <span>Analyze Skin</span>
+              <span>Analyse Skin</span>
               <Scan className="w-3.5 h-3.5" />
             </button>
 
@@ -235,7 +235,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                     onClick={() => handleNavClick("skintest")}
                     className="w-full py-3 rounded-xl border-2 border-[#008236] text-[#008236] font-bold hover:bg-[#008236]/10 transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>Analyze Skin</span>
+                    <span>Analyse Skin</span>
                     <Scan className="w-4 h-4" />
                   </button>
                   <button
@@ -315,7 +315,8 @@ export default function App() {
   };
 
   const [view, setViewState] = useState<View>(getViewFromHash);
-  const [isValidatingRoute, setIsValidatingRoute] = useState(false);
+  const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard", "skintest"];
+  const [isValidatingRoute, setIsValidatingRoute] = useState(() => protectedViews.includes(getViewFromHash()));
 
   const setView = (v: View) => {
     setViewState(v);
@@ -324,11 +325,11 @@ export default function App() {
         window.history.pushState(null, "", window.location.pathname);
       }
     } else if (v === "shop") {
-      const slug = sessionStorage.getItem("active_shop_slug") || "vintage";
-      window.location.hash = `#/shop/${slug}`;
+      const slug = sessionStorage.getItem("active_shop_slug");
+      window.location.hash = slug ? `#/shop/${slug}` : "#/shop";
     } else if (v === "skintest") {
-      const slug = sessionStorage.getItem("active_scan_slug") || "vintage";
-      window.location.hash = `#/scan/${slug}`;
+      const slug = sessionStorage.getItem("active_scan_slug");
+      window.location.hash = slug ? `#/scan/${slug}` : "#/skintest";
     } else {
       window.location.hash = `#/${v}`;
     }
@@ -458,8 +459,10 @@ export default function App() {
 
   useEffect(() => {
     const enforceRouteAccess = async () => {
-      const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard", "skintest"];
-      if (!protectedViews.includes(view)) return;
+      if (!protectedViews.includes(view)) {
+        setIsValidatingRoute(false);
+        return;
+      }
 
       setIsValidatingRoute(true);
       try {

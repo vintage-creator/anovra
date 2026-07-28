@@ -1330,7 +1330,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
         <UnifiedDashboardHeader
           currentView="catalog"
           setView={setView}
-          title="Product Catalog"
+          title="Product Catalogue"
           subtitle={`${productsList.filter((p) => p.status === "active").length} active products · NAFDAC Safety Screened`}
           badgeText="NAFDAC Moderate"
           role="vendor"
@@ -1377,7 +1377,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
           </div>
         </div>
 
-        {/* Catalog Search & Controls Bar */}
+        {/* Catalogue Search & Controls Bar */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6 bg-card border border-border p-4 rounded-xl shadow-xs">
           <div className="flex items-center gap-3 flex-1">
             <input
@@ -1791,7 +1791,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
             <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {editingProduct 
                 ? "Saving your product changes. Please wait..." 
-                : "Adding your products to your catalog. Please wait..."}
+                : "Adding your products to your catalogue. Please wait..."}
             </p>
           </div>
         </div>

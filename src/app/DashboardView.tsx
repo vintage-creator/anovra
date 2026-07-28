@@ -49,7 +49,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [isSubmittingOnboarding, setIsSubmittingOnboarding] = useState(false);
-  const [onboardingArea, setOnboardingArea] = useState("Catalog setup");
+  const [onboardingArea, setOnboardingArea] = useState("Catalogue setup");
   const [onboardingContact, setOnboardingContact] = useState("Email");
   const [onboardingPreferredTime, setOnboardingPreferredTime] = useState("");
   const [onboardingUrgency, setOnboardingUrgency] = useState("Normal");
@@ -93,7 +93,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
   const [statsList, setStatsList] = useState<any[]>([
     { label: "Tests this month", value: "0", delta: "No scan data", icon: <Scan className="w-4 h-4" /> },
-    { label: "Products in catalog", value: "0", delta: "0 flagged", icon: <Package className="w-4 h-4" /> },
+    { label: "Products in catalogue", value: "0", delta: "0 flagged", icon: <Package className="w-4 h-4" /> },
     { label: "Product link clicks", value: "0", delta: "0 this week", icon: <TrendingUp className="w-4 h-4" /> },
     { label: "Top concern detected", value: "None", delta: "No data", icon: <Activity className="w-4 h-4" /> },
   ]);
@@ -428,7 +428,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
     setStatsList([
       { label: `Tests (${analyticsRange})`, value: String(numScans), delta: `${analyticsRange} scan data`, icon: <Scan className="w-4 h-4" /> },
-      { label: "Products in catalog", value: String(allProducts.length), delta: `${flaggedProds} flagged`, icon: <Package className="w-4 h-4" /> },
+      { label: "Products in catalogue", value: String(allProducts.length), delta: `${flaggedProds} flagged`, icon: <Package className="w-4 h-4" /> },
       { label: `Sales conversions (${analyticsRange})`, value: String(numCart), delta: `${numCart} checkouts`, icon: <TrendingUp className="w-4 h-4" /> },
       { label: "Top concern detected", value: topConcern, delta: topConcern !== "None" ? `${maxConcernPct}% of all scans` : "No scans", icon: <Activity className="w-4 h-4" /> },
     ]);
@@ -463,8 +463,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       bucketEnd.setDate(bucketStart.getDate() + bucketSize);
       const isLastBucket = index === bucketCount - 1;
       const label = analyticsRange === "7d"
-        ? bucketStart.toLocaleDateString("en-US", { weekday: "short" })
-        : `${bucketStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+        ? bucketStart.toLocaleDateString("en-GB", { weekday: "short" })
+        : `${bucketStart.toLocaleDateString("en-GB", { month: "short", day: "numeric" })}`;
 
       const scansInBucket = filteredScans.filter((s) => {
         const createdAt = new Date(s.created_at);
@@ -837,7 +837,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
   const tabs: { id: DashTab; label: string; icon: any }[] = [
     { id: "overview", label: "Overview", icon: Activity },
-    { id: "catalog", label: "Product Catalog", icon: Package },
+    { id: "catalog", label: "Product Catalogue", icon: Package },
     { id: "analytics", label: "Analytics", icon: TrendingUp },
     { id: "team", label: "Team", icon: Users },
     { id: "api", label: "API & Dev", icon: Key },
@@ -988,7 +988,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           </nav>
         </div>
 
-        {/* Bottom Sign Out Panel */}
+        {/* Bottom sign out panel */}
         <div className="p-4 border-t border-border">
           <button
             onClick={handleSignOut}
@@ -996,7 +996,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             <LogOut className="w-4 h-4" />
-            <span>Sign Out</span>
+            <span>Sign out</span>
           </button>
         </div>
       </div>
@@ -1018,7 +1018,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 Your 14-Day Free Trial Has Expired
               </h2>
               <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Your free trial of Anovra Skincare Partner has ended. To continue managing your safety-screened catalog, team accounts, custom domains, and viewing live customer scans, please select a plan below.
+                Your free trial of Anovra Skincare Partner has ended. To continue managing your safety-screened catalogue, team accounts, custom domains, and viewing live customer scans, please select a plan below.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto text-left">
@@ -1027,13 +1027,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     key: "basic" as const,
                     name: "Basic Plan",
                     price: "₦12,500/mo",
-                    desc: "Up to 50 skin tests/month, 10 products in catalog, Anovra branding, shareable link, basic analytics."
+                    desc: "Up to 50 skin tests/month, 10 products in catalogue, Anovra branding, shareable link, basic analytics."
                   },
                   {
                     key: "premium" as const,
                     name: "Vendor Pro",
                     price: "₦25,000/mo",
-                    desc: "Unlimited tests, unlimited catalog, white-labeled results page, website embed widget, full analytics, priority support."
+                    desc: "Unlimited tests, unlimited catalogue, white-labelled results page, website embed widget, full analytics, priority support."
                   }
                 ].map((p) => (
                   <div key={p.key} className="border border-border rounded-2xl p-5 bg-card flex flex-col justify-between">
@@ -1064,7 +1064,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {tab === "overview" && "Branded skincare intelligence & store statistics"}
-              {tab === "catalog" && "Manage your live safety-screened product catalog"}
+              {tab === "catalog" && "Manage your live safety-screened product catalogue"}
               {tab === "analytics" && "Live customer scan reports & product funnel conversions"}
               {tab === "settings" && "Custom domains, compliance logs & partner profiles"}
               {tab === "team" && "Manage vendor account operators & permissions"}
@@ -1168,7 +1168,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             <p className="text-xs text-muted-foreground mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Share these links with customers to start collecting skin analyses and generating orders.</p>
             <div className="grid md:grid-cols-2 gap-4">
               {[
-                { label: "Shop Link", url: shopLink, key: "shop", desc: "Your digital storefront with products, catalog, and skin test engine" },
+                { label: "Shop Link", url: shopLink, key: "shop", desc: "Your digital storefront with products, catalogue, and skin test engine" },
                 { label: "Skin Test Link", url: testLink, key: "test", desc: "Sends customers directly to your branded, CAC-verified skin test" },
               ].map((l) => (
                 <div key={l.key} className="flex flex-col justify-between border border-border rounded-xl p-4 bg-muted/30 hover:bg-muted/50 transition-colors">
@@ -1252,7 +1252,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mb-5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Embed Anovra's skin diagnostic tool directly on your website as a floating action widget to collect leads and recommend catalog items.
+                  Embed Anovra's skin diagnostic tool directly on your website as a floating action widget to collect leads and recommend catalogue items.
                 </p>
 
                 {/* Platform Selector tabs */}
@@ -1380,7 +1380,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       </div>
                       {/* Floating Widget Button mockup with CSS animation */}
                       <div className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-[#008236] text-white text-[8px] font-bold px-2.5 py-1 rounded-full shadow-md animate-pulse">
-                        <Scan className="w-2 h-2 text-white" /> Analyze Skin
+                        <Scan className="w-2 h-2 text-white" /> Analyse Skin
                       </div>
                     </div>
                   </div>
@@ -1398,7 +1398,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      Embed Anovra's skin diagnostic tool directly on your own website as a floating action widget. Customers can analyze skin and browse matched products without leaving your domain.
+                      Embed Anovra's skin diagnostic tool directly on your own website as a floating action widget. Customers can analyse skin and browse matched products without leaving your domain.
                     </p>
                     <ul className="space-y-2 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                       <li className="flex items-center gap-2">
@@ -1453,7 +1453,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 Select Your Subscription Plan
               </h3>
               <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Choose the best path to scale your business. Unlock white-labeled results, custom domains, widgets, and dedicated support.
+                Choose the best path to scale your business. Unlock white-labelled results, custom domains, widgets, and dedicated support.
               </p>
             </div>
 
@@ -1490,7 +1490,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
                   <ul className="mt-4 space-y-2 text-[10.5px] text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Up to 50 skin tests/month</li>
-                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> 10 products in catalog</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> 10 products in catalogue</li>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Shareable storefront link</li>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Basic analytics reports</li>
                   </ul>
@@ -1534,8 +1534,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
                   <ul className="mt-4 space-y-2 text-[10.5px] text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Unlimited skin tests</li>
-                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Unlimited catalog capacity</li>
-                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> White-labeled results page</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Unlimited catalogue capacity</li>
+                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> White-labelled results page</li>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Website embed widget</li>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Full analytics dashboard</li>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Priority WhatsApp support</li>
@@ -1619,7 +1619,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               Email Confirmed Successfully
             </p>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Our compliance team is verifying your business CAC certificate details within 3-5 working days. You can explore your workspace, manage your products catalog, and preview your storefront right away.
+              Our compliance team is verifying your business CAC certificate details within 3-5 working days. You can explore your workspace, manage your product catalogue, and preview your storefront right away.
             </p>
             <button
               onClick={() => setShowWelcomeModal(false)}
@@ -1778,7 +1778,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           {/* Skin concerns chart */}
           <div className="bg-card border border-border rounded-2xl p-6 shadow-xs">
             <h3 className="font-semibold text-foreground text-sm mb-1 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Top Skin Concerns Detected</h3>
-            <p className="text-xs text-muted-foreground mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Based on all customer skin tests analyzed this month</p>
+            <p className="text-xs text-muted-foreground mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Based on all customer skin tests analysed this month</p>
             {liveConcerns.length > 0 ? (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart id="chart-dash-concerns" data={liveConcerns} barSize={28}>
@@ -1840,7 +1840,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>White-labeled results page</p>
+                        <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>White-labelled results page</p>
                         <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Vendor Pro</span>
                       </div>
                       <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Remove all Anovra branding. Customers see only your brand name and logo on results.</p>
@@ -1848,7 +1848,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     <button
                       onClick={async () => {
                         if (!hasFeatureAccess("premium")) {
-                          setUpgradeTargetFeature("White-labeled results page");
+                          setUpgradeTargetFeature("White-labelled results page");
                           setUpgradeTargetPlan("premium");
                           setShowPremiumModal(true);
                           toast.warning("White-labeling requires Vendor Pro or Brand tier. Upgrade to unlock!");
@@ -1914,7 +1914,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       {isEditingStorefront ? (
                         <>
                           <Save className="w-3.5 h-3.5" />
-                          {isSavingStore ? "Saving..." : storeSaved ? "Saved" : "Save Changes"}
+                          {isSavingStore ? "Saving…" : storeSaved ? "Saved" : "Save changes"}
                         </>
                       ) : (
                         <>
@@ -2144,7 +2144,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               <div>
                 <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
                 <p className="text-xs text-muted-foreground mt-1 max-w-3xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Start on Free, try all premium features for 14 days, then choose a paid tier to keep advanced tools such as white-labeled results, custom domains, webhooks, and priority WhatsApp support.
+                  Start on Free, try all premium features for 14 days, then choose a paid tier to keep advanced tools such as white-labelled results, custom domains, webhooks, and priority WhatsApp support.
                 </p>
               </div>
               {vendorPlan === "free" && (
@@ -2183,7 +2183,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   name: "Free Tier",
                   price: "₦0/mo",
                   desc: trialActive
-                    ? "14-day premium feature trial, storefront preview, product catalog setup, scan testing, and basic workspace access."
+                    ? "14-day premium feature trial, storefront preview, product catalogue setup, scan testing, and basic workspace access."
                     : "Basic workspace access after trial. Premium storefront, API, webhooks, custom domain, and team features require an upgrade.",
                   isContact: false
                 },
@@ -2191,14 +2191,14 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   key: "basic", 
                   name: "Basic Plan", 
                   price: "₦12,500/mo", 
-                  desc: "Up to 50 skin tests/month, 10 products in catalog, Anovra branding, shareable link, basic analytics.",
+                  desc: "Up to 50 skin tests/month, 10 products in catalogue, Anovra branding, shareable link, basic analytics.",
                   isContact: false
                 },
                 { 
                   key: "premium", 
                   name: "Vendor Pro", 
                   price: "₦25,000/mo", 
-                  desc: "Unlimited tests, unlimited catalog, white-labeled results page, website embed widget, full analytics, priority support.",
+                  desc: "Unlimited tests, unlimited catalogue, white-labelled results page, website embed widget, full analytics, priority support.",
                   isContact: false
                 },
                 { 
@@ -2355,8 +2355,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       </button>
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-2.5 bg-secondary/35 p-2.5 rounded-lg border border-border/40 leading-relaxed font-sans" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {inviteRole === "Manager" && "• Manager: Can manage products and catalog entries. Restructured from accessing settings like domains, billing, or platform integration."}
-                      {inviteRole === "Viewer" && "• Viewer: Read-only access. Can inspect product catalog, customer scans, and dashboard statistics but cannot save modifications."}
+                      {inviteRole === "Manager" && "• Manager: Can manage products and catalogue entries. Restructured from accessing settings like domains, billing, or platform integration."}
+                      {inviteRole === "Viewer" && "• Viewer: Read-only access. Can inspect product catalogue, customer scans, and dashboard statistics but cannot save modifications."}
                     </p>
                   </div>
                 )}
@@ -2466,7 +2466,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     {[
                       { method: "GET", path: "/v1/scans", desc: "Fetch recent skin test reports" },
                       { method: "POST", path: "/v1/recommendations", desc: "Trigger AI match engine" },
-                      { method: "GET", path: "/v1/catalog", desc: "Sync catalog & NAFDAC status" },
+                      { method: "GET", path: "/v1/catalog", desc: "Sync catalogue & NAFDAC status" },
                     ].map((ep) => (
                       <div key={ep.path} className="flex items-center justify-between p-2.5 bg-muted/30 border border-border/60 rounded-lg text-xs flex-wrap gap-2">
                         <div className="flex items-center gap-2 font-mono">
@@ -2682,8 +2682,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {[
-                  { step: "1", title: "Kickoff call", desc: "60-minute call to map catalog, branding, and integration requirements.", done: true },
-                  { step: "2", title: "Catalog migration", desc: "Bulk-upload your existing product catalog with NAFDAC verification.", done: true },
+                  { step: "1", title: "Kickoff call", desc: "60-minute call to map catalogue, branding, and integration requirements.", done: true },
+                  { step: "2", title: "Catalogue migration", desc: "Bulk-upload your existing product catalogue with NAFDAC verification.", done: true },
                   { step: "3", title: "Custom domain setup", desc: "DNS configuration, SSL provisioning, and branded link testing.", done: false },
                   { step: "4", title: "Team training", desc: "Live walkthrough of the dashboard, analytics, and API for your team.", done: false },
                   { step: "5", title: "Go-live review", desc: "Final QA session and sign-off before your public launch on Anovra.", done: false },
@@ -2852,7 +2852,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <span className="text-xs font-mono font-bold text-foreground">/v1/catalog</span>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Retrieve your safety-screened product catalog, including automated NAFDAC compliance status.
+                  Retrieve your safety-screened product catalogue, including automated NAFDAC compliance status.
                 </p>
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Example Request Payload (cURL):</p>
                 <div className="bg-muted p-3 rounded-lg font-mono text-[10px] text-foreground/95 select-all overflow-x-auto whitespace-pre">
@@ -2909,7 +2909,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#008236]"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
-                  {["Catalog setup", "Custom domain", "Team training", "API and webhooks", "Launch QA", "Billing", "Other"].map((area) => (
+                  {["Catalogue setup", "Custom domain", "Team training", "API and webhooks", "Launch QA", "Billing", "Other"].map((area) => (
                     <option key={area} value={area}>{area}</option>
                   ))}
                 </select>
@@ -3016,7 +3016,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 <p>As the primary Vendor, you are the direct partner of Anovra who registered this organization. You hold full ownership access and can invite other team members (like Managers or Viewers) to collaborate.</p>
               )}
               {simulatedRoleInfo === "Manager" && (
-                <p>Invite managers (like store supervisors or product catalog leads) to actively curate your brand catalog and review customer skin scans. Their access excludes changing billing or developer settings.</p>
+                <p>Invite managers (like store supervisors or product catalogue leads) to actively curate your brand catalogue and review customer skin scans. Their access excludes changing billing or developer settings.</p>
               )}
               {simulatedRoleInfo === "Viewer" && (
                 <p>Invite viewers (like point-of-sale staff or retail consultants) to search matching products and look up skin logs. They are completely locked out of edits or settings.</p>
@@ -3038,7 +3038,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     {simulatedRoleInfo === "Vendor" && (
                       <>
                         <tr>
-                          <td className="px-4 py-2.5">Catalog & Diagnostics</td>
+                          <td className="px-4 py-2.5">Catalogue & Diagnostics</td>
                           <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">Full Control</td>
                         </tr>
                         <tr>
@@ -3070,7 +3070,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     {simulatedRoleInfo === "Viewer" && (
                       <>
                         <tr>
-                          <td className="px-4 py-2.5">Browse Catalog & Products</td>
+                          <td className="px-4 py-2.5">Browse Catalogue & Products</td>
                           <td className="px-4 py-2.5 text-right text-foreground/80">Read Only</td>
                         </tr>
                         <tr>

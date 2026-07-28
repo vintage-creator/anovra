@@ -252,6 +252,7 @@ END $$;
 INSERT INTO auth.users (
   instance_id,
   id,
+  aud,
   role,
   email,
   encrypted_password,
@@ -270,6 +271,7 @@ INSERT INTO auth.users (
 VALUES (
   '00000000-0000-0000-0000-000000000000',
   'a0e0a0e0-a0e0-a0e0-a0e0-a0e0a0e0a0e0',
+  'authenticated',
   'authenticated',
   'hello@anovra.africa',
   crypt('@Skin_ana1', gen_salt('bf')),
@@ -291,3 +293,116 @@ ON CONFLICT (id) DO NOTHING;
 UPDATE public.profiles
 SET plan = 'premium', is_verified = true, verification_status = 'approved'
 WHERE id = 'a0e0a0e0-a0e0-a0e0-a0e0-a0e0a0e0a0e0';
+
+-- 8. Seed Customer User
+-- Email: customer@anovra.africa | Password: @Skin_customer1
+CREATE TABLE IF NOT EXISTS public.customer_family_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  skin_type TEXT,
+  concern TEXT,
+  last_scan_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.customer_family_profiles ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'customer_family_profiles'
+      AND policyname = 'Customers manage own family profiles'
+  ) THEN
+    CREATE POLICY "Customers manage own family profiles" ON public.customer_family_profiles
+      FOR ALL TO authenticated
+      USING (auth.uid() = customer_id OR ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'))
+      WITH CHECK (auth.uid() = customer_id OR ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'));
+  END IF;
+END $$;
+
+INSERT INTO auth.users (
+  instance_id,
+  id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  last_sign_in_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at,
+  confirmation_token,
+  email_change,
+  email_change_token_new,
+  recovery_token
+)
+VALUES (
+  '00000000-0000-0000-0000-000000000000',
+  'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0',
+  'authenticated',
+  'authenticated',
+  'customer@anovra.africa',
+  crypt('@Skin_customer1', gen_salt('bf')),
+  NOW(),
+  NOW(),
+  '{"provider": "email", "providers": ["email"]}',
+  '{"full_name": "Shula Vera", "role": "customer", "email": "customer@anovra.africa"}',
+  NOW() - INTERVAL '3 days',
+  NOW(),
+  '',
+  '',
+  '',
+  ''
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO auth.identities (
+  provider_id,
+  user_id,
+  identity_data,
+  provider,
+  last_sign_in_at,
+  created_at,
+  updated_at,
+  id
+)
+VALUES (
+  'customer@anovra.africa',
+  'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0',
+  jsonb_build_object(
+    'sub', 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0',
+    'email', 'customer@anovra.africa',
+    'email_verified', true,
+    'phone_verified', false
+  ),
+  'email',
+  NOW(),
+  NOW(),
+  NOW(),
+  'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c1'
+)
+ON CONFLICT (provider, provider_id) DO UPDATE SET
+  user_id = EXCLUDED.user_id,
+  identity_data = EXCLUDED.identity_data,
+  updated_at = NOW();
+
+INSERT INTO public.profiles (id, name, email, plan, is_verified, verification_status)
+VALUES (
+  'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0',
+  'Shula Vera',
+  'customer@anovra.africa',
+  'free',
+  true,
+  'approved'
+)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  email = EXCLUDED.email,
+  plan = EXCLUDED.plan,
+  is_verified = EXCLUDED.is_verified,
+  verification_status = EXCLUDED.verification_status;

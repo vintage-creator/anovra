@@ -13,10 +13,10 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
       accentClass: "text-amber-700",
       dotColor: "bg-amber-500",
       photo: "/skin-analysis-feature.jpg",
-      desc: "Millions of people in Africa spend money on skincare products that don't match their skin type, tone, or concern — often because there's no accessible, personalized guidance. Anovra changes that.",
+      desc: "Millions of people in Africa spend money on skincare products that don't match their skin type, tone, or concern — often because there's no accessible, personalised guidance. Anovra changes that.",
       benefits: [
-        "AI-powered skin test that analyzes your unique skin type, tone, and concerns",
-        "Personalized product recommendations matched to your skin profile",
+        "AI-powered skin test that analyses your unique skin type, tone, and concerns",
+        "Personalised product recommendations matched to your skin profile",
         "Results from vendors near you, in your budget",
         "Understand what each ingredient does and why it's recommended for you",
         "Scan product labels to check ingredient safety before you buy",
@@ -35,7 +35,7 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
       desc: "Whether you run a single shop or a growing brand, Anovra gives you a complete digital storefront, AI-powered product matching, and real data on what your customers need — so every recommendation feels personal.",
       benefits: [
         "Your own branded skin test page — share your link and let Anovra do the selling",
-        "Add your full product catalog with ingredients, benefits, and safety checks",
+        "Add your full product catalogue with ingredients, benefits, and safety checks",
         "AI automatically matches customers to your products based on their skin scan",
         "Track visits, scans, and purchases from your unique link",
         "Generate a full e-commerce storefront in one click",
@@ -154,7 +154,7 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
       <section className="max-w-4xl mx-auto px-6 py-20 text-center">
         <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4" style={{ fontFamily: "'DM Mono', monospace" }}>Our mission</p>
         <h2 className="text-3xl sm:text-4xl font-light text-foreground leading-snug" style={{ fontFamily: "'Fraunces', serif" }}>
-          Every person in Africa deserves skincare advice as personalized as their skin.
+          Every person in Africa deserves skincare advice as personalised as their skin.
         </h2>
         <p className="text-muted-foreground mt-5 max-w-2xl mx-auto leading-relaxed">
           African skin is diverse — melanin-rich, climate-exposed, and deeply varied across regions. Yet most skincare advice is designed for skin types that look nothing like ours. Anovra was built to fix that, using AI trained on African skin data and a network of African vendors who know their customers.
@@ -324,7 +324,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
       icon: Store,
       label: "Vendor support",
       value: "vendors@anovra.africa",
-      sub: "Onboarding, catalog & billing help",
+      sub: "Onboarding, catalogue & billing help",
     },
     {
       icon: ShieldCheck,
@@ -360,12 +360,12 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "general",
       q: "What is Anovra?",
-      a: "Anovra is Africa's skincare intelligence platform that helps people understand their skin through advanced image analysis and connects them with trusted skincare vendors offering personalized product recommendations."
+      a: "Anovra is Africa's skincare intelligence platform that helps people understand their skin through advanced image analysis and connects them with trusted skincare vendors offering personalised product recommendations."
     },
     {
       cat: "general",
       q: "How does Anovra work?",
-      a: "Simply upload clear photos of your skin, and Anovra analyzes visible skin characteristics such as texture, pigmentation, dryness, oiliness, redness, pores, and blemishes. Based on the results, you'll receive a personalized skin report and product recommendations from trusted vendors."
+      a: "Simply upload clear photos of your skin, and Anovra analyses visible skin characteristics such as texture, pigmentation, dryness, oiliness, redness, pores, and blemishes. Based on the results, you'll receive a personalised skin report and product recommendations from trusted vendors."
     },
     {
       cat: "general",
@@ -381,12 +381,12 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "skin",
       q: "What skin concerns can Anovra identify?",
-      a: "Anovra analyzes visible skin characteristics that may indicate concerns such as: Acne, Hyperpigmentation, Dark spots, Uneven skin tone, Melasma, Fine lines, Wrinkles, Dry skin, Oily skin, Combination skin, Sensitive skin, Enlarged pores, Redness, Dehydration, and Visible blemishes."
+      a: "Anovra analyses visible skin characteristics that may indicate concerns such as: Acne, Hyperpigmentation, Dark spots, Uneven skin tone, Melasma, Fine lines, Wrinkles, Dry skin, Oily skin, Combination skin, Sensitive skin, Enlarged pores, Redness, Dehydration, and Visible blemishes."
     },
     {
       cat: "skin",
-      q: "Which parts of the body can I analyze?",
-      a: "You can analyze any visible skin area, including: Face, Neck, Hands, Arms, Legs, Back, and other visible skin areas."
+      q: "Which parts of the body can I analyse?",
+      a: "You can analyse any visible skin area, including: Face, Neck, Hands, Arms, Legs, Back, and other visible skin areas."
     },
     {
       cat: "skin",
@@ -396,7 +396,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "skin",
       q: "Does Anovra diagnose skin diseases?",
-      a: "No. Anovra provides an analysis of visible skin characteristics and personalized skincare recommendations. It is not a medical diagnostic tool and does not replace professional medical advice from a dermatologist."
+      a: "No. Anovra provides an analysis of visible skin characteristics and personalised skincare recommendations. It is not a medical diagnostic tool and does not replace professional medical advice from a dermatologist."
     },
     // Product Recommendations
     {
@@ -412,7 +412,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "products",
       q: "Can I share my skin report with a skincare vendor?",
-      a: "Yes. You can send your skin analysis to a vendor for additional review before making a purchase, allowing you to receive even more personalized guidance."
+      a: "Yes. You can send your skin analysis to a vendor for additional review before making a purchase, allowing you to receive even more personalised guidance."
     },
     // For Vendors
     {
@@ -438,7 +438,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "vendors",
       q: "What is an Anovra Mini Shop?",
-      a: "Your Mini Shop is your personalized digital storefront inside Anovra, where you can showcase your products, manage inventory, update pricing, and receive customer orders."
+      a: "Your Mini Shop is your personalised digital storefront inside Anovra, where you can showcase your products, manage inventory, update pricing, and receive customer orders."
     },
     // Privacy & Security
     {
@@ -449,7 +449,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "privacy",
       q: "Will my images be shared publicly?",
-      a: "No. Your skin images are never publicly displayed and are only used to generate your personalized analysis unless you choose to share your report with a vendor."
+      a: "No. Your skin images are never publicly displayed and are only used to generate your personalised analysis unless you choose to share your report with a vendor."
     },
     {
       cat: "privacy",
@@ -460,7 +460,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "support",
       q: "Do I need to create an account?",
-      a: "You can explore parts of Anovra without an account, but creating one allows you to save your analysis history, track your skincare journey, and access personalized recommendations."
+      a: "You can explore parts of Anovra without an account, but creating one allows you to save your analysis history, track your skincare journey, and access personalised recommendations."
     },
     {
       cat: "support",
@@ -470,7 +470,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "support",
       q: "Is Anovra free to use?",
-      a: "No. Anovra is a subscription-based platform designed to provide ongoing personalized skincare insights and recommendations. We offer flexible plans for both skincare consumers and skincare vendors, so you can choose the option that best suits your needs."
+      a: "No. Anovra is a subscription-based platform designed to provide ongoing personalised skincare insights and recommendations. We offer flexible plans for both skincare consumers and skincare vendors, so you can choose the option that best suits your needs."
     },
     {
       cat: "support",
@@ -495,7 +495,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "support",
       q: "Does Anovra replace a dermatologist?",
-      a: "No. Anovra is a skincare intelligence platform that analyzes visible skin characteristics and provides personalized skincare recommendations. It is designed to support informed skincare decisions and does not replace professional medical diagnosis or treatment. If you have severe, persistent, or worsening skin conditions, you should consult a qualified healthcare professional."
+      a: "No. Anovra is a skincare intelligence platform that analyses visible skin characteristics and provides personalised skincare recommendations. It is designed to support informed skincare decisions and does not replace professional medical diagnosis or treatment. If you have severe, persistent, or worsening skin conditions, you should consult a qualified healthcare professional."
     }
   ];
 

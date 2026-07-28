@@ -50,7 +50,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
               { label: "Skin Test", view: "skintest" as View },
               { label: "My Skin Dashboard", view: "userdashboard" as View },
               { label: "Vendor Dashboard", view: "dashboard" as View },
-              { label: "Product Catalog", view: "catalog" as View },
+              { label: "Product Catalogue", view: "catalog" as View },
               { label: "About Anovra", view: "about" as View },
             ].map((l) => (
               <li key={l.label}>

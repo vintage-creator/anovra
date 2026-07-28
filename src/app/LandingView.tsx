@@ -257,7 +257,7 @@ const ENGINE_FACTORS = [
   {
     icon: <Package className="w-5 h-5" />,
     label: "Vendor inventory",
-    desc: "Only in-stock products from the vendor's active catalog are surfaced. Out-of-stock items never appear in results.",
+    desc: "Only in-stock products from the vendor's active catalogue are surfaced. Out-of-stock items never appear in results.",
     color: "bg-orange-50 text-orange-700 border-orange-200",
     dot: "bg-orange-400",
   },
@@ -474,8 +474,8 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
     },
     {
       icon: <Package className="w-5 h-5" />,
-      title: "Smart Product Catalog",
-      desc: "Vendors build their catalog once. The AI maps every customer's skin analysis to the right products automatically — no manual sorting.",
+      title: "Smart Product Catalogue",
+      desc: "Vendors build their catalogue once. The AI maps every customer's skin analysis to the right products automatically — no manual sorting.",
     },
     {
       icon: <Shield className="w-5 h-5" />,
@@ -506,7 +506,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
       sub: "per month",
       features: [
         "Up to 50 skin tests/month",
-        "10 products in catalog",
+        "10 products in catalogue",
         "Anovra branding on results page",
         "Shareable test link",
         "Basic analytics",
@@ -520,8 +520,8 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
       sub: "per month",
       features: [
         "Unlimited skin tests",
-        "Unlimited product catalog",
-        "White-labeled results page",
+        "Unlimited product catalogue",
+        "White-labelled results page",
         "Website embed widget",
         "Full analytics dashboard",
         "Priority support via WhatsApp",
@@ -565,7 +565,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               <em className="text-[#008236] not-italic font-normal">Make Smarter</em> Skincare Decisions
             </h1>
             <p className="text-muted-foreground text-base sm:text-lg leading-relaxed mb-8 max-w-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Looking for personalized skincare recommendations or a better way to serve your customers, Anovra empowers individuals and skincare businesses with intelligent tools that make every recommendation more personal.
+              Looking for personalised skincare recommendations or a better way to serve your customers, Anovra empowers individuals and skincare businesses with intelligent tools that make every recommendation more personal.
             </p>
             <div className="flex flex-col sm:flex-row gap-3.5 w-full sm:w-auto">
               <button
@@ -573,7 +573,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                 className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all text-center cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                Analyze Your Skin
+                Analyse Your Skin
                 <ArrowRight className="w-4 h-4 text-white" />
               </button>
               <button
@@ -707,9 +707,9 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
             </div>
             <div className="grid sm:grid-cols-3 gap-6">
               {[
-                { step: "01", title: "Vendor sets up their catalog", desc: "Add products with ingredients and concerns. Our AI attaches ingredient benefits, side effects, and safety checks automatically." },
+                { step: "01", title: "Vendor sets up their catalogue", desc: "Add products with ingredients and concerns. Our AI attaches ingredient benefits, side effects, and safety checks automatically." },
                 { step: "02", title: "Share one link with customers", desc: "Your unique link — anovra.africa/shop/your-brand — is ready immediately. Paste it in your Instagram bio, WhatsApp, or embed on your site." },
-                { step: "03", title: "Customers get matched products", desc: "A 90-second selfie + questionnaire. AI analysis. Personalized recommendations from your catalog with full ingredient transparency." },
+                { step: "03", title: "Customers get matched products", desc: "A 90-second selfie + questionnaire. AI analysis. Personalised recommendations from your catalogue with full ingredient transparency." },
               ].map((s) => (
                 <div key={s.step} className="relative bg-card p-6 rounded-2xl border border-border/80 shadow-xs">
                   <p
@@ -742,7 +742,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               {[
                 { step: "01", title: "Take a 90-second skin test", desc: "Upload or take a quick photo or short video of your facial or body skin area in plain lighting." },
                 { step: "02", title: "AI instant skin analysis", desc: "Our AI fine-tuned on Fitzpatrick IV–VI skin evaluates hyperpigmentation, acne, tone evenness, and barrier health in seconds." },
-                { step: "03", title: "Get matched products & order", desc: "Receive personalized, NAFDAC-checked product recommendations with direct WhatsApp links to purchase from local vendors." },
+                { step: "03", title: "Get matched products & order", desc: "Receive personalised, NAFDAC-checked product recommendations with direct WhatsApp links to purchase from local vendors." },
               ].map((s) => (
                 <div key={s.step} className="relative bg-card p-6 rounded-2xl border border-border/80 shadow-xs">
                   <p
@@ -877,7 +877,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     "Full product recommendation list",
                     "Detailed skin health report",
                     "Save & track your skin history",
-                    "Personalized ingredient glossary",
+                    "Personalised ingredient glossary",
                     "Priority product matching",
                   ],
                   cta: "Get Glow Pass+",
@@ -890,11 +890,11 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   features: [
                     "Everything in Glow Pass+",
                     "Monthly skin progress report & score",
-                    "Direct chat with certified skin advisors",
+                    "Direct chat with certified skin advisers",
                     "Exclusive discounts from Anovra vendors",
                     "Family skin profiles (up to 5 members)",
                     "Early access to new AI features",
-                    "Personalized skincare routine builder",
+                    "Personalised skincare routine builder",
                   ],
                   cta: "Get Premium Glow",
                 },

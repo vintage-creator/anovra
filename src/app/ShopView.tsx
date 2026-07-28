@@ -10,8 +10,6 @@ import { toast } from "sonner";
 
 // ---- CATALOG PRODUCTS (shared data) ----
 
-const catalogProducts: any[] = [];
-
 const slugify = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
@@ -30,14 +28,14 @@ const getShopSlugFromUrl = () => {
     ? window.location.hash.split("/shop/")[1]?.split("?")[0]
     : "";
   const storedSlug = sessionStorage.getItem("active_shop_slug") || "";
-  const slug = hashSlug || storedSlug || "vintage";
-  return slug === "israel-abazie" ? "vintage" : slug;
+  return hashSlug || storedSlug || "";
 };
 
 // ---- SHOP VIEW ----
 
 export function ShopView({ setView }: { setView: (v: View) => void }) {
   const [activeSlug] = useState(getShopSlugFromUrl);
+  const isMarketplace = !activeSlug;
   const [isPreviewMode] = useState(() => sessionStorage.getItem("shop_preview_mode") === "true");
   const [vendor, setVendor] = useState<any>(() => {
     const snapshot = sessionStorage.getItem("active_shop_snapshot");
@@ -46,7 +44,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         const parsed = JSON.parse(snapshot);
         return {
           name: isPlaceholderName(parsed.name) ? titleFromSlug(activeSlug) : parsed.name,
-          tagline: parsed.tagline || "Personalized skincare recommendations from this vendor",
+          tagline: parsed.tagline || "Personalised skincare recommendations from this vendor",
           location: parsed.location || "Location not set",
           rating: null,
           reviews: 0,
@@ -58,7 +56,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
 
     return {
       name: titleFromSlug(activeSlug),
-      tagline: "Personalized skincare recommendations from this vendor",
+      tagline: "Personalised skincare recommendations from this vendor",
       location: "Location not set",
       rating: null,
       reviews: 0,
@@ -79,22 +77,28 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [vendorOptions, setVendorOptions] = useState<any[]>([]);
+  const [vendorFilter, setVendorFilter] = useState("All");
 
   const activeProducts = productsList.filter((p) => p.status === "active");
   const allConcerns = ["All", ...Array.from(new Set(activeProducts.flatMap((p) => p.concerns || [])))];
   const shopSlug = slugify(vendor.name || titleFromSlug(activeSlug)) || activeSlug;
-  const shopUrl = `https://anovra.africa/#/shop/${shopSlug}`;
+  const shopUrl = isMarketplace ? "https://anovra.africa/#/shop" : `https://anovra.africa/#/shop/${shopSlug}`;
 
   useEffect(() => {
     const loadProducts = async () => {
-      const cacheKey = `cached_shop_products_${activeSlug}`;
+      const cacheKey = `cached_shop_products_${activeSlug || "marketplace"}`;
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
         setProductsList(JSON.parse(cached));
       }
 
       try {
-        sessionStorage.setItem("active_shop_slug", activeSlug);
+        if (activeSlug) {
+          sessionStorage.setItem("active_shop_slug", activeSlug);
+        } else {
+          sessionStorage.removeItem("active_shop_slug");
+        }
         
         const isSystemDomain = [
           "anovra.africa",
@@ -108,6 +112,10 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
 
         // 1. Fetch profiles to match by business name slug or custom domain
         const { data: profiles } = await supabase.from("profiles").select("*");
+        const marketplaceProfiles = (profiles || [])
+          .filter((p) => p.business_name && !isPlaceholderName(p.business_name))
+          .map((p) => ({ id: p.id, name: p.business_name, slug: slugify(p.business_name), verified: p.is_verified }));
+        setVendorOptions(marketplaceProfiles);
         let targetProfile = profiles?.find((p) => {
           if (!isSystemDomain && p.custom_domain === window.location.hostname) {
             return true;
@@ -129,14 +137,14 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             targetProfile = loggedProfile;
           }
         }
-        if (!targetProfile) {
+        if (!targetProfile && !isMarketplace) {
           setProfileNotFound(true);
           setVendorProfileId(null);
           setGenerating(false);
           return;
         }
         setProfileNotFound(false);
-        setVendorProfileId(targetProfile.id);
+        setVendorProfileId(targetProfile?.id || null);
 
         let query = supabase.from("products").select("*").eq("nafdac_status", "approved");
         
@@ -144,7 +152,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           query = query.eq("vendor_id", targetProfile.id);
           
           const joinedYear = targetProfile.created_at ? new Date(targetProfile.created_at).getFullYear() : 2023;
-          let taglineVal = targetProfile.tagline || "Personalized skincare recommendations from this vendor";
+          let taglineVal = targetProfile.tagline || "Personalised skincare recommendations from this vendor";
           let locationVal = targetProfile.location || "Location not set";
           let sinceVal = targetProfile.since || String(joinedYear);
           
@@ -186,12 +194,15 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             is_verified: targetProfile.is_verified || false
           });
         } else {
-          query = query.eq("vendor_id", "00000000-0000-0000-0000-000000000000");
-          setVendor((current: any) => ({
-            ...current,
-            name: titleFromSlug(activeSlug),
-            is_verified: false,
-          }));
+          setVendor({
+            name: "Anovra Product Shop",
+            tagline: "Browse approved skincare products from verified Anovra vendors",
+            location: "Nigeria",
+            rating: null,
+            reviews: 0,
+            since: "",
+            is_verified: true,
+          });
         }
 
         const { data, error } = await query;
@@ -255,12 +266,15 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
               id: p.id,
               name: p.name,
               brand: p.brand || "Own Brand",
+              vendorId: p.vendor_id,
+              vendorName: marketplaceProfiles.find((profile) => profile.id === p.vendor_id)?.name || p.brand || "Verified vendor",
+              vendorSlug: marketplaceProfiles.find((profile) => profile.id === p.vendor_id)?.slug || "",
               concerns: [p.category || "General"],
               skinTypes: skinTypes.length > 0 ? skinTypes : ["All"],
               price: `₦${Number(p.price).toLocaleString()}`,
               priceVal: p.price,
               status: "active",
-              photo: p.image_url || "https://images.unsplash.com/photo-1608248597481-496100c80836?q=80&w=200&auto=format&fit=crop",
+              photo: p.image_url || parsedImages[0] || "",
               images: parsedImages,
               description: cleanDescription,
               benefits,
@@ -285,9 +299,14 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
       }
     };
     loadProducts();
-  }, [activeSlug, isPreviewMode]);
+  }, [activeSlug, isPreviewMode, isMarketplace]);
 
   const openSkinTest = () => {
+    if (isMarketplace) {
+      sessionStorage.removeItem("active_scan_slug");
+      setView("skintest");
+      return;
+    }
     sessionStorage.setItem("active_scan_slug", activeSlug);
     setView("skintest");
   };
@@ -324,7 +343,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           name: user.user_metadata?.full_name || "there",
           email: user.email,
           product: product.name,
-          brand: profile.name,
+          brand: vendor.name,
         });
       }
       toast.success(`${product.name} added to cart!`);
@@ -368,10 +387,10 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
       await sendEmailNotification("review_submitted", {
         name: user.user_metadata?.full_name || "there",
         email: user.email,
-        brand: profile.name,
+        brand: vendor.name,
       });
       await sendEmailNotification("admin_review_submitted", {
-        message: `A storefront review was submitted for ${profile.name}.`,
+        message: `A storefront review was submitted for ${vendor.name}.`,
         metadata: { vendor_id: vendorProfileId, customer_id: user.id, rating: reviewRating },
       });
       setReviewRating(0);
@@ -386,8 +405,10 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
 
   const filtered = activeProducts.filter((p) => {
     const matchesFilter = filter === "All" || p.concerns.includes(filter);
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.brand.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
+    const matchesVendor = vendorFilter === "All" || p.vendorId === vendorFilter;
+    const searchText = [p.name, p.brand, p.vendorName, ...(p.concerns || [])].join(" ").toLowerCase();
+    const matchesSearch = searchText.includes(searchQuery.toLowerCase());
+    return matchesFilter && matchesVendor && matchesSearch;
   });
 
   const copy = () => {
@@ -547,20 +568,22 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
               </div>
             </div>
 
-            <button
-              onClick={openSkinTest}
-              className="flex-shrink-0 flex items-center gap-2 bg-accent text-white px-5 py-3 rounded-xl font-medium text-sm hover:bg-accent/90 transition-colors shadow-lg cursor-pointer"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              <Scan className="w-4 h-4" />
-              Get my skin match
-            </button>
+            {!isMarketplace && (
+              <button
+                onClick={openSkinTest}
+                className="flex-shrink-0 flex items-center gap-2 bg-accent text-white px-5 py-3 rounded-xl font-medium text-sm hover:bg-accent/90 transition-colors shadow-lg cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                <Scan className="w-4 h-4" />
+                Get my skin match
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* AI skin test banner */}
-      <div className="bg-accent/8 border-b border-accent/20 py-3 px-4">
+      {!isMarketplace && <div className="bg-accent/8 border-b border-accent/20 py-3 px-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <Zap className="w-4 h-4 text-accent shrink-0" />
@@ -577,13 +600,37 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             Start free skin test →
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* Main content */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
 
         {/* Filter & Search Bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div className="flex flex-col gap-4 mb-6">
+          {isMarketplace && (
+            <div className="grid md:grid-cols-[1fr_280px] gap-4 items-end">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  Product marketplace
+                </p>
+                <h2 className="text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Search approved products across Anovra vendors
+                </h2>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search serum, sunscreen, vendor..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 bg-input-background border border-border rounded-xl text-sm placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-accent/50 text-foreground"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
             {allConcerns.map((c) => (
               <button
@@ -601,7 +648,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             ))}
           </div>
 
-          <div className="relative w-full md:w-72">
+          {!isMarketplace && <div className="relative w-full md:w-72">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
@@ -611,6 +658,20 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
               className="w-full pl-9 pr-4 py-2 bg-input-background border border-border rounded-full text-sm placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-accent/50 text-foreground"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             />
+          </div>}
+          {isMarketplace && vendorOptions.length > 0 && (
+            <select
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value)}
+              className="w-full md:w-64 bg-card border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-accent/50"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              <option value="All">All vendors</option>
+              {vendorOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.name}</option>
+              ))}
+            </select>
+          )}
           </div>
         </div>
 
@@ -629,11 +690,18 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             >
               {/* Product image */}
               <div className="relative aspect-square bg-secondary overflow-hidden">
-                <img
-                  src={product.photo}
-                  alt={product.name}
-                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
-                />
+                {product.photo ? (
+                  <img
+                    src={product.photo}
+                    alt={product.name}
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-muted text-muted-foreground">
+                    <Package className="w-8 h-8" />
+                    <span className="text-xs" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Image pending</span>
+                  </div>
+                )}
                 <div className="absolute top-3 left-3 flex flex-wrap gap-1">
                   {product.skinTypes.slice(0, 2).map((t) => (
                     <span key={t} className="text-xs bg-white/90 text-foreground px-2 py-0.5 rounded-full font-medium backdrop-blur-sm">
@@ -646,7 +714,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
               {/* Product info */}
               <div className="p-4 flex flex-col flex-1">
                 <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
-                  {product.brand}
+                  {isMarketplace ? product.vendorName : product.brand}
                 </p>
                 <h3
                   className="font-medium text-foreground text-sm leading-snug mb-2 flex-1 hover:text-accent transition-colors"
@@ -697,6 +765,19 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
                 >
                   Check if this matches my skin →
                 </button>
+                {isMarketplace && product.vendorSlug && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      sessionStorage.setItem("active_shop_slug", product.vendorSlug);
+                      window.location.hash = `#/shop/${product.vendorSlug}`;
+                    }}
+                    className="mt-2 w-full text-xs text-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    Visit vendor storefront →
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -707,7 +788,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           <div className="text-center py-16">
             <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-foreground font-medium mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No products for this concern yet</p>
-            <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try "All" or take the skin test to get personalized matches.</p>
+            <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try "All" or take the skin test to get personalised matches.</p>
           </div>
         )}
 
@@ -767,7 +848,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
                   className="w-full sm:w-auto px-5 py-2.5 bg-accent text-white text-sm font-semibold rounded-xl hover:bg-accent/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
-                  {reviewSubmitting ? "Submitting..." : "Submit review"}
+                  {reviewSubmitting ? "Submitting…" : "Submit review"}
                 </button>
               </div>
             </div>
@@ -804,11 +885,18 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
                 {/* Left Column: Image Gallery */}
                 <div className="space-y-3">
                   <div className="aspect-square bg-muted rounded-2xl overflow-hidden border border-border">
-                    <img 
-                      src={selectedProduct.images?.[activeImgIdx] || selectedProduct.photo} 
-                      alt={selectedProduct.name} 
-                      className="w-full h-full object-cover transition-transform duration-300 hover:scale-105" 
-                    />
+                    {selectedProduct.images?.[activeImgIdx] || selectedProduct.photo ? (
+                      <img
+                        src={selectedProduct.images?.[activeImgIdx] || selectedProduct.photo}
+                        alt={selectedProduct.name}
+                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                        <Package className="w-9 h-9" />
+                        <span className="text-xs" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Image pending</span>
+                      </div>
+                    )}
                   </div>
                   {/* Thumbnail slider */}
                   {selectedProduct.images && selectedProduct.images.length > 1 && (
@@ -830,7 +918,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
                 <div className="flex flex-col justify-between">
                   <div className="space-y-4">
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">Retail Price</p>
+                      <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">Retail price</p>
                       <p className="text-2xl font-light text-foreground mt-1" style={{ fontFamily: "'Fraunces', serif" }}>
                         {selectedProduct.price}
                       </p>

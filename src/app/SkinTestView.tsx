@@ -19,23 +19,23 @@ const SKIN_AREAS = [
   { name: "Back", desc: "Upper or lower back", photo: "1541752857837-f8a0154fd092", guide: "rect", icon: Bone },
   { name: "Hands", desc: "Knuckles, palms, wrists", photo: "1558618666-fcd25c85cd64", guide: "rect", icon: Hand },
   { name: "Legs", desc: "Thighs, shins, calves", photo: "1523297736436-356615162cc8", guide: "rect", icon: Footprints },
-  { name: "Whole Body", desc: "Full-body video scan — face, torso, limbs and all visible skin areas analyzed together", photo: "1707161256359-0919306e0d3c", guide: "rect", icon: PersonStanding },
+  { name: "Whole Body", desc: "Full-body video scan — face, torso, limbs and all visible skin areas analysed together", photo: "1707161256359-0919306e0d3c", guide: "rect", icon: PersonStanding },
   { name: "Other area", desc: "Any other visible skin area not listed above", photo: "1577746838851-816a43ca8733", guide: "rect", icon: ScanSearch },
 ];
 
 const ANALYSIS_STEPS_LABELS = [
-  "Normalizing image exposure and white balance...",
-  "Evaluating skin texture and surface detail...",
-  "Scoring pigmentation and tone evenness...",
-  "Detecting acne severity and blemishes...",
-  "Assessing redness, dryness and oiliness...",
-  "Measuring pore visibility and fine lines...",
-  "Checking skin tone consistency...",
-  "Detecting visible inflammation...",
-  "Generating personalized skin report...",
-  "Searching verified vendor products...",
-  "Ranking recommendations by match score...",
-  "Applying ingredient safety checks...",
+  "Normalising image exposure and white balance…",
+  "Evaluating skin texture and surface detail…",
+  "Scoring pigmentation and tone evenness…",
+  "Detecting acne severity and blemishes…",
+  "Assessing redness, dryness and oiliness…",
+  "Measuring pore visibility and fine lines…",
+  "Checking skin tone consistency…",
+  "Detecting visible inflammation…",
+  "Generating personalised skin report…",
+  "Searching verified vendor products…",
+  "Ranking recommendations by match score…",
+  "Applying ingredient safety checks…",
 ];
 
 const SKIN_REPORT_CONCERNS = [
@@ -62,6 +62,13 @@ type ScanSeverity = {
 };
 
 type SkinStep = 1 | 2 | 3 | 4 | 5;
+type CaptureQuality = {
+  brightness: number;
+  sharpness: number;
+  faceOk: boolean | null;
+  guidance: string;
+  ready: boolean;
+};
 
 const titleFromSlug = (slug: string) =>
   slug
@@ -76,8 +83,7 @@ const getScanSlugFromUrl = () => {
   const hashSlug = hash.includes("/scan/")
     ? hash.split("/scan/")[1]?.split("?")[0]
     : "";
-  const slug = queryMatch?.[1] || hashSlug || sessionStorage.getItem("active_scan_slug") || "";
-  return slug === "israel-abazie" ? "vintage" : slug;
+  return queryMatch?.[1] || hashSlug || sessionStorage.getItem("active_scan_slug") || "";
 };
 
 type MatchedProduct = {
@@ -151,6 +157,21 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const [matchedProducts, setMatchedProducts] = useState<MatchedProduct[]>([]);
   const [matchingProducts, setMatchingProducts] = useState(false);
   const [trialExpired, setTrialExpired] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const [captureQuality, setCaptureQuality] = useState<CaptureQuality>({
+    brightness: 0,
+    sharpness: 0,
+    faceOk: null,
+    guidance: "Open the camera and position the skin area inside the guide.",
+    ready: false,
+  });
+
+  const exitScan = () => {
+    stopCamera();
+    setView?.("userdashboard");
+  };
 
   // Gemini scan state
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -165,10 +186,113 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const [analyzingError, setAnalyzingError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const qualityTimerRef = useRef<number | null>(null);
   const vendorDisplayName = vendorProfile?.business_name || vendorProfile?.name || titleFromSlug(activeScanSlug);
   const hasVendorBrand = Boolean(vendorDisplayName);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const fileToDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const compressImageFile = async (file: File, quality = 0.82) => {
+    const dataUrl = await fileToDataUrl(file);
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = reject;
+      image.src = dataUrl;
+    });
+    const maxSide = 1280;
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return { file, dataUrl };
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (!blob) return { file, dataUrl };
+    const compressed = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+    return { file: compressed, dataUrl: canvas.toDataURL("image/jpeg", quality) };
+  };
+
+  const getImageQuality = async (canvas: HTMLCanvasElement): Promise<CaptureQuality> => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return { brightness: 0, sharpness: 0, faceOk: null, guidance: "Camera preview is unavailable. Try uploading a photo instead.", ready: false };
+    }
+    const sampleWidth = 120;
+    const sampleHeight = Math.max(1, Math.round((canvas.height / canvas.width) * sampleWidth));
+    const sample = document.createElement("canvas");
+    sample.width = sampleWidth;
+    sample.height = sampleHeight;
+    const sampleCtx = sample.getContext("2d");
+    if (!sampleCtx) {
+      return { brightness: 0, sharpness: 0, faceOk: null, guidance: "Camera preview is unavailable. Try uploading a photo instead.", ready: false };
+    }
+    sampleCtx.drawImage(canvas, 0, 0, sampleWidth, sampleHeight);
+    const pixels = sampleCtx.getImageData(0, 0, sampleWidth, sampleHeight).data;
+    let brightnessTotal = 0;
+    let diffTotal = 0;
+    let diffCount = 0;
+    const greys: number[] = [];
+    for (let i = 0; i < pixels.length; i += 4) {
+      const grey = pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+      greys.push(grey);
+      brightnessTotal += grey;
+    }
+    for (let y = 0; y < sampleHeight; y += 1) {
+      for (let x = 1; x < sampleWidth; x += 1) {
+        const idx = y * sampleWidth + x;
+        diffTotal += Math.abs(greys[idx] - greys[idx - 1]);
+        diffCount += 1;
+      }
+    }
+    const brightness = Math.round(brightnessTotal / greys.length);
+    const sharpness = Math.round(diffTotal / Math.max(1, diffCount));
+    let faceOk: boolean | null = null;
+    let faceGuidance = "";
+    const FaceDetector = (window as any).FaceDetector;
+    if (selectedArea === "Face" && FaceDetector) {
+      try {
+        const detector = new FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+        const faces = await detector.detect(canvas);
+        if (!faces.length) {
+          faceOk = false;
+          faceGuidance = "Centre your face inside the oval guide.";
+        } else {
+          const box = faces[0].boundingBox;
+          const centreX = box.x + box.width / 2;
+          const centreY = box.y + box.height / 2;
+          const centred = Math.abs(centreX - canvas.width / 2) < canvas.width * 0.18 && Math.abs(centreY - canvas.height / 2) < canvas.height * 0.18;
+          const sizeOk = box.width > canvas.width * 0.28 && box.width < canvas.width * 0.78;
+          faceOk = centred && sizeOk;
+          if (!sizeOk) faceGuidance = box.width <= canvas.width * 0.28 ? "Move closer to the camera." : "Move slightly back from the camera.";
+          if (sizeOk && !centred) faceGuidance = "Centre your face inside the oval guide.";
+        }
+      } catch {
+        faceOk = null;
+      }
+    }
+    const lightOk = brightness >= 70 && brightness <= 220;
+    const sharpOk = sharpness >= 9;
+    const ready = lightOk && sharpOk && faceOk !== false;
+    const guidance = !lightOk
+      ? (brightness < 70 ? "Improve lighting before capture." : "Reduce harsh light or glare.")
+      : !sharpOk
+        ? "Hold still until the preview looks sharper."
+        : faceGuidance || (ready ? "Looks good. Hold still and capture." : "Position the skin area inside the guide.");
+    return { brightness, sharpness, faceOk, guidance, ready };
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -186,19 +310,111 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       return;
     }
 
-    setSelectedFile(file);
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setImageBase64(reader.result as string);
+    try {
+      const prepared = await compressImageFile(file);
+      setSelectedFile(prepared.file);
+      setImageBase64(prepared.dataUrl);
       setStep(3);
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      toast.error("Could not prepare that image. Please try another photo.");
+    }
   };
 
   const triggerFileSelect = () => {
     fileInputRef.current?.click();
   };
+
+  const stopCamera = () => {
+    if (qualityTimerRef.current) {
+      window.clearInterval(qualityTimerRef.current);
+      qualityTimerRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraActive(false);
+  };
+
+  const startCamera = async () => {
+    setCameraError("");
+    setCameraStarting(true);
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera is not available on this browser.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: selectedArea === "Face" ? "user" : "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 1600 },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      qualityTimerRef.current = window.setInterval(async () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas || video.readyState < 2) return;
+        const width = video.videoWidth || 720;
+        const height = video.videoHeight || 960;
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0, width, height);
+        const quality = await getImageQuality(canvas);
+        setCaptureQuality(quality);
+      }, 700);
+    } catch (err: any) {
+      setCameraError(err.message || "Camera permission was denied. You can upload a photo instead.");
+      toast.error(err.message || "Camera permission was denied. You can upload a photo instead.");
+    } finally {
+      setCameraStarting(false);
+    }
+  };
+
+  const captureFromCamera = async () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2) {
+      toast.error("Camera is not ready yet.");
+      return;
+    }
+    const width = video.videoWidth || 720;
+    const height = video.videoHeight || 960;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, width, height);
+    const quality = await getImageQuality(canvas);
+    setCaptureQuality(quality);
+    if (!quality.ready) {
+      toast.error(quality.guidance);
+      return;
+    }
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+    if (!blob) {
+      toast.error("Could not capture the image. Please try again.");
+      return;
+    }
+    const file = new File([blob], `skin-scan-${Date.now()}.jpg`, { type: "image/jpeg" });
+    setSelectedFile(file);
+    setImageBase64(canvas.toDataURL("image/jpeg", 0.82));
+    stopCamera();
+    setStep(3);
+  };
+
+  useEffect(() => {
+    if (step !== 2) stopCamera();
+    return () => {
+      if (step !== 2) stopCamera();
+    };
+  }, [step]);
 
   useEffect(() => {
     const slug = activeScanSlug;
@@ -370,7 +586,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
         setMatchedProducts(formatted);
       } catch (err) {
-        console.error("Failed to match live catalog products:", err);
+        console.error("Failed to match live catalogue products:", err);
         setMatchedProducts([]);
       } finally {
         setMatchingProducts(false);
@@ -477,7 +693,16 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               vendor_id: vendorId,
               concern: resultData.concern,
               result: resultData.result,
-              city: filters.city || "Lagos"
+              city: filters.city || "Lagos",
+              score: resultData.score,
+              severity: resultData.severity || [],
+              benefits: resultData.benefits || [],
+              skin_area: selectedArea || "Face",
+              image_quality: {
+                brightness: captureQuality.brightness,
+                sharpness: captureQuality.sharpness,
+                guided_capture: Boolean(selectedFile?.name?.startsWith("skin-scan-")),
+              }
             }]).select().maybeSingle();
             await dispatchVendorWebhook(vendorId, "scan.completed", {
               scan_id: scanRow?.id,
@@ -500,7 +725,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
         setTimeout(() => setStep(4), 800);
       } catch (err: any) {
-        console.error("AI Analysis failed:", err);
+        console.error("AI analysis failed:", err);
         clearInterval(interval);
         
         let friendlyMsg = "We encountered a temporary connection issue. Please check your internet connection and try again.";
@@ -542,7 +767,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     setShowFilters(false);
   }
 
-  const STEP_LABELS = ["Select Area", "Upload", "Analyzing", "Skin Report", "Results"];
+  const STEP_LABELS = ["Select area", "Capture", "Analysing", "Skin report", "Results"];
 
   const activeFilters = Object.values(filters).filter(Boolean).length;
   const vendorOptions = Array.from(new Set(matchedProducts.map((product) => product.vendorName).filter(Boolean)));
@@ -560,10 +785,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <Lock className="w-8 h-8 text-amber-600 animate-pulse" />
         </div>
         <h2 className="text-2xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-          Diagnostic Tool Locked
+          Skin test unavailable
         </h2>
         <p className="text-sm text-muted-foreground max-w-sm mb-6 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          The trial period for this partner's website diagnostic widget has ended. Please upgrade the subscription plan to reactivate this tool.
+          This partner's 14-day trial access has ended, so their customer skin test link is temporarily unavailable.
         </p>
         {setView && (
           <button
@@ -585,7 +810,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-20">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => setView?.("landing")}
+              onClick={exitScan}
               className="flex items-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-lg p-1 transition-transform active:scale-95"
               aria-label="Anovra Home"
             >
@@ -598,7 +823,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             <div className="hidden sm:flex items-center gap-2 border-l border-border pl-4">
               <div>
                 <span className="block text-sm font-semibold text-foreground tracking-tight" style={{ fontFamily: "'Fraunces', serif" }}>
-                  {hasVendorBrand ? `${vendorDisplayName} Skin Test` : "Skin Test Engine"}
+                  {hasVendorBrand ? `${vendorDisplayName} skin test` : "Customer skin test"}
                 </span>
                 {hasVendorBrand && (
                   <span className="block text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -607,18 +832,18 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 )}
               </div>
               <span className="text-[10px] font-mono bg-[#008236]/15 text-[#008236] border border-[#008236]/30 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#008236] animate-pulse" /> AI ACTIVE
+                <span className="w-1.5 h-1.5 rounded-full bg-[#008236] animate-pulse" /> AI READY
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => setView?.("landing")} 
+              onClick={exitScan}
               className="text-xs sm:text-sm font-semibold text-muted-foreground hover:text-[#C86B3A] transition-colors cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              Cancel
+              Exit
             </button>
           </div>
         </div>
@@ -665,7 +890,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="mb-8 text-center sm:text-left">
             <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 1 of 5</p>
             <h2 className="text-3xl sm:text-4xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Select skin area to analyze
+              Select skin area to analyse
             </h2>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {hasVendorBrand
@@ -730,7 +955,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             )}
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
-            Continue to Upload
+            Continue to capture
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -742,59 +967,89 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="mb-6">
             <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 2 of 5 · {selectedArea}</p>
             <h2 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Upload your skin photo
+              Capture your skin photo
             </h2>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              High-quality, well-lit photos give the most accurate skin analysis.
+              This guided scan helps customers capture a clear image, then matches the result with approved products from the connected storefront.
             </p>
           </div>
 
-          {/* Viewfinder with scanner animation */}
+          {/* Guided camera viewfinder */}
           <div className="relative bg-foreground rounded-2xl overflow-hidden mb-5 border-2 border-border/80 shadow-lg" style={{ aspectRatio: "3/4", maxHeight: 340 }}>
-            <img
-              src={`https://images.unsplash.com/photo-${SKIN_AREAS.find((a) => a.name === selectedArea)?.photo ?? "1531746020798-e6953c6e8e04"}?w=480&h=640&fit=crop&auto=format`}
-              alt="Viewfinder"
-              className="w-full h-full object-cover opacity-75"
-            />
+            {cameraActive ? (
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                className={cn("w-full h-full object-cover", selectedArea === "Face" && "scale-x-[-1]")}
+              />
+            ) : (
+              <div className="relative w-full h-full overflow-hidden bg-[#101614] flex flex-col items-center justify-center text-center px-6">
+                <div className="absolute inset-0 opacity-45" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)", backgroundSize: "26px 26px" }} />
+                <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#008236]/25 to-transparent" />
+                <div className="absolute inset-x-8 top-12 bottom-12 rounded-[2rem] border border-white/10 shadow-[0_0_60px_rgba(0,130,54,0.22)]" />
+                <div className="absolute left-10 right-10 top-1/2 h-px bg-[#008236] shadow-[0_0_22px_rgba(0,130,54,0.9)] animate-scan" />
+                <div className="absolute top-4 left-4 flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1.5 backdrop-blur-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#008236] animate-pulse" />
+                  <span className="text-[10px] uppercase tracking-wider text-white/75" style={{ fontFamily: "'DM Mono', monospace" }}>Awaiting image</span>
+                </div>
+                <div className="relative z-10 w-24 h-28 rounded-full border border-white/45 bg-white/5 shadow-[inset_0_0_30px_rgba(255,255,255,0.05)] flex items-center justify-center mb-5">
+                  <div className="absolute -inset-3 rounded-full border border-dashed border-[#008236]/60 animate-spin" style={{ animationDuration: "9s" }} />
+                  <Camera className="w-9 h-9 text-white/85" />
+                </div>
+                <p className="relative z-10 text-sm text-white font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Live camera preview</p>
+                {cameraError && (
+                  <p className="relative z-10 text-xs text-red-200 bg-red-500/20 border border-red-300/20 rounded-lg px-3 py-2 mt-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {cameraError}
+                  </p>
+                )}
+              </div>
+            )}
             {/* Glowing Scan Line */}
-            <div className="animate-scan" />
+            {cameraActive && <div className="animate-scan" />}
 
             {/* Guide overlay */}
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               {SKIN_AREAS.find((a) => a.name === selectedArea)?.guide === "oval" ? (
-                <div className="border-2 border-white/60 rounded-full" style={{ width: 140, height: 180 }} />
+                <div className={cn("border-2 rounded-full transition-colors", captureQuality.ready ? "border-[#008236]" : "border-white/60")} style={{ width: 150, height: 190 }} />
               ) : (
-                <div className="border-2 border-white/60 rounded-xl" style={{ width: 180, height: 200 }} />
+                <div className={cn("border-2 rounded-xl transition-colors", captureQuality.ready ? "border-[#008236]" : "border-white/60")} style={{ width: 190, height: 210 }} />
               )}
             </div>
             <div className="absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-[#008236] rounded-tl" />
             <div className="absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-[#008236] rounded-tr" />
             <div className="absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-[#008236] rounded-bl" />
             <div className="absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-[#008236] rounded-br" />
-            <div className="absolute bottom-4 inset-x-0 flex justify-center">
-              <span className="text-xs text-white/90 bg-black/60 px-3.5 py-1.5 rounded-full font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {selectedArea === "Face" ? "Align face within oval guide" : `Position your ${selectedArea.toLowerCase()} within the frame`}
+            {cameraActive && <div className="absolute bottom-4 inset-x-0 flex justify-center">
+              <span className={cn("text-xs text-white bg-black/65 px-3.5 py-1.5 rounded-full font-medium border", captureQuality.ready ? "border-[#008236]/60" : "border-white/10")} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {captureQuality.guidance}
               </span>
-            </div>
+            </div>}
           </div>
+          <canvas ref={canvasRef} className="hidden" />
 
           {/* Quality checklist */}
-          <div className="bg-[#FAF7F2] border border-border/60 rounded-2xl p-4.5 mb-6">
-            <p className="text-xs font-bold text-foreground mb-3 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Image quality checklist</p>
+          {cameraActive && <div className="bg-[#FAF7F2] border border-border/60 rounded-2xl p-4.5 mb-6">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-xs font-bold text-foreground uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Image quality checklist</p>
+              <span className={cn("text-[10px] px-2 py-1 rounded-full font-mono", captureQuality.ready ? "bg-[#008236]/10 text-[#008236]" : "bg-[#C86B3A]/10 text-[#C86B3A]")}>
+                {captureQuality.ready ? "Ready" : "Adjust"}
+              </span>
+            </div>
             <div className="space-y-2.5">
               {[
-                "Good natural or ring-light lighting — avoid harsh shadows",
-                "Camera 20–30 cm from skin — close enough for detail",
-                "In focus and steady — no motion blur",
-                "Bare skin — remove makeup if possible for best accuracy",
+                { label: "Good natural or ring-light lighting", ok: !cameraActive || (captureQuality.brightness >= 70 && captureQuality.brightness <= 220) },
+                { label: "Camera 20-30 cm from skin", ok: !cameraActive || captureQuality.faceOk !== false },
+                { label: "In focus and steady", ok: !cameraActive || captureQuality.sharpness >= 9 },
+                { label: "Bare skin where possible for best accuracy", ok: true },
               ].map((tip) => (
-                <div key={tip} className="flex items-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-[#008236] flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{tip}</p>
+                <div key={tip.label} className="flex items-start gap-2">
+                  <CheckCircle className={cn("w-4 h-4 flex-shrink-0 mt-0.5", tip.ok ? "text-[#008236]" : "text-[#C86B3A]")} />
+                  <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{tip.label}</p>
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
 
           <input
             type="file"
@@ -804,15 +1059,27 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             className="hidden"
           />
 
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <button
-              onClick={triggerFileSelect}
-              className="flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold py-3.5 rounded-xl transition-all text-sm shadow-sm cursor-pointer"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              <Camera className="w-4 h-4 text-white" />
-              Take photo
-            </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            {cameraActive ? (
+              <button
+                onClick={captureFromCamera}
+                className="flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold py-3.5 rounded-xl transition-all text-sm shadow-sm cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                <Camera className="w-4 h-4 text-white" />
+                Capture photo
+              </button>
+            ) : (
+              <button
+                onClick={startCamera}
+                disabled={cameraStarting}
+                className="flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold py-3.5 rounded-xl transition-all text-sm shadow-sm cursor-pointer disabled:opacity-60"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                <Camera className="w-4 h-4 text-white" />
+                {cameraStarting ? "Opening camera…" : "Open camera"}
+              </button>
+            )}
             <button
               onClick={triggerFileSelect}
               className="flex items-center justify-center gap-2 bg-white border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/5 font-bold py-3.5 rounded-xl transition-colors text-sm cursor-pointer"
@@ -823,13 +1090,13 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground text-center mb-4 animate-fade-in" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Supported formats: PNG, JPG, JPEG, WEBP · Max size: 5MB
+            Supported formats: PNG, JPG, JPEG, WEBP · Maximum size: 5MB
           </p>
 
           <div className="flex items-start gap-2 p-3.5 bg-secondary/50 rounded-xl">
             <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Your image is analyzed in real-time and never stored. We do not share your data with any third party.
+              Your image is processed securely for this analysis and product match. Scan records are only available to the customer account and the connected vendor where applicable.
             </p>
           </div>
         </div>
@@ -843,7 +1110,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
               </div>
-              <h3 className="text-lg font-semibold text-red-900 dark:text-red-300 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>AI Scanning Interrupted</h3>
+              <h3 className="text-lg font-semibold text-red-900 dark:text-red-300 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>AI scan interrupted</h3>
               <p className="text-xs text-red-700 dark:text-red-400 mb-6 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 {analyzingError}
               </p>
@@ -886,9 +1153,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 </svg>
               </div>
 
-              <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>AI Engine Active</p>
+              <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>AI scan active</p>
               <h2 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-                Analyzing your {selectedArea.toLowerCase()}...
+                Analysing your {selectedArea.toLowerCase()}…
               </h2>
 
               <div className="min-h-[2rem] mb-6">
@@ -922,7 +1189,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               <p className="text-xs text-muted-foreground mt-2" style={{ fontFamily: "'DM Mono', monospace" }}>{Math.round(progress)}%</p>
 
               <p className="text-xs text-muted-foreground mt-8 max-w-xs mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Results are AI-powered personalized recommendations — not a medical diagnosis.
+                Results are AI-powered personalised recommendations — not a medical diagnosis.
               </p>
             </>
           )}
@@ -998,13 +1265,13 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             </div>
           </div>
 
-          {/* Personalized recommendations summary */}
+          {/* Personalised recommendations summary */}
           <div className="bg-[#008236]/10 border border-[#008236]/20 rounded-2xl p-4.5 mb-5">
             <div className="flex items-start gap-3">
               <Zap className="w-5 h-5 text-[#008236] flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-bold text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Personalized recommendations ready
+                  Personalised recommendations ready
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {scanResult 
@@ -1120,10 +1387,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               <div className="bg-card border border-border rounded-2xl p-8 text-center">
                 <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                 <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  No live catalog matches yet
+                  No live catalogue matches yet
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  This vendor does not have approved products matching your scan in the live catalog yet.
+                  This vendor does not have approved products matching your scan in the live catalogue yet.
                 </p>
               </div>
             )}
@@ -1167,7 +1434,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                       <p className="text-sm text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                         {rec.matchReasons.length > 0
                           ? `${rec.matchReasons.join(". ")}.`
-                          : `${rec.name} is in ${vendorDisplayName || "this vendor"}'s approved catalog and is the closest available match for ${scanResult?.concern.toLowerCase() || "your scan result"}.`}
+                          : `${rec.name} is in ${vendorDisplayName || "this vendor"}'s approved catalogue and is the closest available match for ${scanResult?.concern.toLowerCase() || "your scan result"}.`}
                       </p>
                     </div>
 
@@ -1175,7 +1442,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                     <div className="grid grid-cols-2 gap-0 border-b border-border/60">
                       {[
                         { label: "Suitable skin type", value: rec.skinTypes.length > 0 ? rec.skinTypes.join(", ") : "See product details" },
-                        { label: "Availability", value: "Approved catalog product" },
+                        { label: "Availability", value: "Approved catalogue product" },
                         { label: "Category", value: rec.category },
                         { label: "Price", value: rec.price },
                       ].map((item) => (
@@ -1239,7 +1506,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                       <div className="flex items-center gap-2 mb-3.5">
                         <Store className="w-4 h-4 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          Sold by <strong className="text-foreground">{rec.vendorName}</strong> · Live catalog item
+                          Sold by <strong className="text-foreground">{rec.vendorName}</strong> · Live catalogue item
                         </span>
                         <span className="ml-auto flex items-center gap-1 text-xs text-[#008236] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>
                           <CheckCircle className="w-3.5 h-3.5" /> In stock
