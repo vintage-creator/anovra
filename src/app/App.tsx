@@ -484,8 +484,23 @@ export default function App() {
           return;
         }
 
-        const role = user.user_metadata?.role;
+        let role = user.user_metadata?.role;
         const email = user.email?.toLowerCase();
+
+        // Resolve missing role from profiles for older vendor accounts
+        if (!role) {
+          try {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("business_name")
+              .eq("id", user.id)
+              .maybeSingle();
+            
+            if (profile?.business_name) {
+              role = "vendor";
+            }
+          } catch (err) {}
+        }
 
         // Resolve admin role
         const isAdmin = role === "admin" || email === "admin@anovra.africa" || email === "hello@anovra.africa";
