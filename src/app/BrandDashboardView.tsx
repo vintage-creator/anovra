@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ElementType } from "react";
 import {
-  Activity, AlertCircle, ArrowUpRight, BarChart2, Building2, Check, CheckCircle2, ChevronRight, Copy, CreditCard, Edit,
-  ExternalLink, Eye, Filter, GripVertical, HelpCircle, Image as ImageIcon, Info, Link as LinkIcon, Loader2,
-  LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Scan, Search, ShieldCheck, Sparkles,
+  Activity, AlertCircle, ArrowRight, ArrowUpRight, BarChart2, Building2, Check, CheckCircle2, ChevronRight, Copy, CreditCard, Edit,
+  ExternalLink, Eye, Filter, GripVertical, HelpCircle, Image as ImageIcon, Info, LayoutDashboard, LayoutGrid, Link as LinkIcon, List, Loader2,
+  LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, Scan, Search, ShieldCheck, Sparkles,
   Tag, Trash2, Upload, Users, X,
 } from "lucide-react";
 import type { View } from "./types";
@@ -120,10 +120,10 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
   const brandSlug = slugify(brandProfile?.slug || brandProfile?.business_name || brandProfile?.name || "brand");
   const brandUrl = `https://anovra.africa/#/brand/${brandSlug}`;
   const navItems = [
-    { id: "overview" as BrandTab, label: "Overview", icon: BarChart2 },
+    { id: "overview" as BrandTab, label: "Overview", icon: LayoutDashboard },
     { id: "branches" as BrandTab, label: "Branches", icon: Building2 },
     { id: "products" as BrandTab, label: "Products", icon: Package },
-    { id: "activity" as BrandTab, label: "Activity", icon: Users },
+    { id: "activity" as BrandTab, label: "Activity", icon: Activity },
   ];
 
   const selectTab = (nextTab: BrandTab) => {
@@ -613,10 +613,19 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                   })}
                 </section>
 
-                <BranchTable
-                  branches={enrichedBranches.slice(0, 5)}
-                  selectedBranchId={selectedBranchId}
-                  onSelect={(branchId) => { setSelectedBranchId(branchId); setTab("branches"); }}
+                <OverviewBranchDirectory
+                  branches={enrichedBranches}
+                  onSelectBranch={(branchId) => {
+                    setSelectedBranchId(branchId);
+                    setTab("branches");
+                  }}
+                  onAddBranch={() => {
+                    setTab("branches");
+                    setShowCreateBranch(true);
+                  }}
+                  onViewAll={() => setTab("branches")}
+                  copy={copy}
+                  copied={copied}
                 />
               </>
             )}
@@ -1009,6 +1018,358 @@ function EmptyState({ title, text }: { title: string; text: string }) {
   );
 }
 
+function OverviewBranchDirectory({
+  branches,
+  onSelectBranch,
+  onAddBranch,
+  onViewAll,
+  copy,
+  copied,
+}: {
+  branches: any[];
+  onSelectBranch: (branchId: string) => void;
+  onAddBranch: () => void;
+  onViewAll: () => void;
+  copy: (value: string, key: string) => void;
+  copied: string;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"revenue" | "scans" | "products" | "name">("revenue");
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+
+  const filteredAndSortedBranches = useMemo(() => {
+    return branches
+      .filter((branch) => {
+        const matchesQuery =
+          !searchQuery.trim() ||
+          branch.branch_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          branch.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          branch.branch_email?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesStatus = statusFilter === "all" || branch.status === statusFilter;
+        return matchesQuery && matchesStatus;
+      })
+      .sort((a, b) => {
+        if (sortBy === "revenue") return (b.revenue || 0) - (a.revenue || 0);
+        if (sortBy === "scans") return (b.scans || 0) - (a.scans || 0);
+        if (sortBy === "products") return (b.products || 0) - (a.products || 0);
+        if (sortBy === "name") return (a.branch_name || "").localeCompare(b.branch_name || "");
+        return 0;
+      });
+  }, [branches, searchQuery, statusFilter, sortBy]);
+
+  const activeCount = branches.filter((b) => b.status === "active").length;
+
+  return (
+    <section className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+      {/* Directory Header */}
+      <div className="px-5 sm:px-6 py-5 border-b border-border">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-xl sm:text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+            Branch directory & locations
+          </h2>
+          <span className="text-xs text-accent font-semibold bg-accent/10 px-2.5 py-0.5 rounded-full">
+            {branches.length} {branches.length === 1 ? "branch" : "branches"} ({activeCount} active)
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Overview of all registered branch storefronts, activity metrics, and direct links across your organisation.
+        </p>
+      </div>
+
+      {/* Filter and View Controls Bar */}
+      <div className="p-4 sm:p-5 bg-muted/20 border-b border-border flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        {/* Search & Status Filter */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by branch name, location, or email..."
+              className="w-full bg-background border border-border rounded-xl pl-9 pr-8 py-2 text-xs text-foreground outline-none focus:border-accent transition-colors"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-background border border-border rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-accent cursor-pointer"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            <option value="all">All statuses ({branches.length})</option>
+            <option value="active">Active only ({activeCount})</option>
+            <option value="suspended">Suspended</option>
+            <option value="inactive">Inactive</option>
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="bg-background border border-border rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-accent cursor-pointer"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            <option value="revenue">Sort: Highest Revenue</option>
+            <option value="scans">Sort: Most Scans</option>
+            <option value="products">Sort: Most Products</option>
+            <option value="name">Sort: Alphabetical (A-Z)</option>
+          </select>
+        </div>
+
+        {/* View Mode Toggle (Grid vs Table) */}
+        <div className="flex items-center gap-1 bg-background border border-border rounded-xl p-1 shrink-0 self-end md:self-auto">
+          <button
+            onClick={() => setViewMode("grid")}
+            className={cn(
+              "p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors",
+              viewMode === "grid" ? "bg-accent text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Grid view"
+            aria-label="Grid view"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span className="text-[11px] hidden sm:inline">Cards</span>
+          </button>
+          <button
+            onClick={() => setViewMode("table")}
+            className={cn(
+              "p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors",
+              viewMode === "table" ? "bg-accent text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Table view"
+            aria-label="Table view"
+          >
+            <List className="w-3.5 h-3.5" />
+            <span className="text-[11px] hidden sm:inline">Table</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Directory Content: Grid View or Table View */}
+      {filteredAndSortedBranches.length ? (
+        viewMode === "grid" ? (
+          <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-5 sm:gap-6">
+            {filteredAndSortedBranches.map((branch) => {
+              const isActive = branch.status === "active";
+              const isSuspended = branch.status === "suspended";
+
+              return (
+                <div
+                  key={branch.id || branch.branch_id}
+                  className="bg-background border border-border rounded-2xl p-5 sm:p-6 flex flex-col justify-between hover:border-accent/40 hover:shadow-sm transition-all group"
+                >
+                  <div className="space-y-3.5">
+                    {/* Top row: Name, Location & Status */}
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0">
+                        <h3 className="text-base font-semibold text-foreground truncate group-hover:text-accent transition-colors">
+                          {branch.branch_name}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1 truncate">
+                          <MapPin className="w-3 h-3 text-accent shrink-0" />
+                          <span className="truncate">{branch.location || "Location not set"}</span>
+                        </p>
+                      </div>
+
+                      <span
+                        className={cn(
+                          "text-[10px] uppercase font-mono font-semibold px-2 py-0.5 rounded-full shrink-0",
+                          isActive
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : isSuspended
+                            ? "bg-red-50 text-red-700 border border-red-200"
+                            : "bg-muted text-muted-foreground border border-border"
+                        )}
+                      >
+                        {branch.status || "active"}
+                      </span>
+                    </div>
+
+                    {/* Contact details */}
+                    <div className="text-xs text-muted-foreground space-y-1 pt-1 border-t border-border/60">
+                      <p className="truncate flex items-center gap-1.5">
+                        <Mail className="w-3 h-3 text-muted-foreground/70 shrink-0" />
+                        <span className="truncate">{branch.branch_email}</span>
+                      </p>
+                      {branch.phone && (
+                        <p className="truncate flex items-center gap-1.5 font-mono text-[11px]">
+                          <Phone className="w-3 h-3 text-muted-foreground/70 shrink-0" />
+                          <span>{branch.phone}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* 3 Metric Tiles */}
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <div className="bg-muted/30 border border-border/70 rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] text-muted-foreground uppercase font-mono">Products</p>
+                        <p className="text-sm font-semibold text-foreground mt-0.5">{branch.products || 0}</p>
+                        <span className="text-[9px] text-muted-foreground block">{branch.approvedProducts || 0} approved</span>
+                      </div>
+
+                      <div className="bg-muted/30 border border-border/70 rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] text-muted-foreground uppercase font-mono">Scans</p>
+                        <p className="text-sm font-semibold text-foreground mt-0.5">{branch.scans || 0}</p>
+                        <span className="text-[9px] text-muted-foreground block">Customer</span>
+                      </div>
+
+                      <div className="bg-muted/30 border border-border/70 rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] text-muted-foreground uppercase font-mono">Revenue</p>
+                        <p className="text-sm font-semibold text-foreground mt-0.5 font-mono">
+                          ₦{Number(branch.revenue || 0).toLocaleString()}
+                        </p>
+                        <span className="text-[9px] text-muted-foreground block">Tracked</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card Actions Footer */}
+                  <div className="pt-4 mt-4 border-t border-border flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => onSelectBranch(branch.branch_id)}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent/80 transition-colors"
+                    >
+                      <span>Manage branch</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => copy(branch.shopUrl, `shop-${branch.branch_id}`)}
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium transition-colors"
+                        title="Copy branch storefront URL"
+                      >
+                        {copied === `shop-${branch.branch_id}` ? (
+                          <span className="text-emerald-700 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Copied
+                          </span>
+                        ) : (
+                          "Shop link"
+                        )}
+                      </button>
+                      <button
+                        onClick={() => copy(branch.scanUrl, `scan-${branch.branch_id}`)}
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium transition-colors"
+                        title="Copy skin test QR URL"
+                      >
+                        {copied === `scan-${branch.branch_id}` ? (
+                          <span className="text-emerald-700 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Copied
+                          </span>
+                        ) : (
+                          "Scan link"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Table View */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-muted-foreground font-mono uppercase tracking-wider text-[10px]">
+                  <th className="py-3.5 px-5 font-semibold">Branch & Location</th>
+                  <th className="py-3.5 px-4 font-semibold">Contact</th>
+                  <th className="py-3.5 px-4 font-semibold text-center">Catalogue</th>
+                  <th className="py-3.5 px-4 font-semibold text-center">Scans</th>
+                  <th className="py-3.5 px-4 font-semibold text-right">Revenue Tracked</th>
+                  <th className="py-3.5 px-4 font-semibold text-center">Status</th>
+                  <th className="py-3.5 px-5 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredAndSortedBranches.map((branch) => {
+                  const isActive = branch.status === "active";
+                  const isSuspended = branch.status === "suspended";
+
+                  return (
+                    <tr key={branch.id || branch.branch_id} className="hover:bg-muted/15 transition-colors">
+                      <td className="py-3.5 px-5 min-w-44">
+                        <p className="font-semibold text-sm text-foreground">{branch.branch_name}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3 text-accent shrink-0" />
+                          <span>{branch.location || "Location not set"}</span>
+                        </p>
+                      </td>
+                      <td className="py-3.5 px-4 min-w-44">
+                        <p className="text-foreground">{branch.branch_email}</p>
+                        {branch.phone && <p className="text-muted-foreground font-mono text-[11px] mt-0.5">{branch.phone}</p>}
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="font-semibold text-foreground">{branch.products || 0}</span>
+                        <span className="text-muted-foreground block text-[10px]">{branch.approvedProducts || 0} approved</span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-semibold text-foreground">
+                        {branch.scans || 0}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-foreground">
+                        ₦{Number(branch.revenue || 0).toLocaleString()}
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={cn(
+                            "text-[10px] uppercase font-mono font-semibold px-2.5 py-0.5 rounded-full",
+                            isActive
+                              ? "bg-green-50 text-green-700 border border-green-200"
+                              : isSuspended
+                              ? "bg-red-50 text-red-700 border border-red-200"
+                              : "bg-muted text-muted-foreground border border-border"
+                          )}
+                        >
+                          {branch.status || "active"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => onSelectBranch(branch.branch_id)}
+                            className="px-3 py-1.5 rounded-lg bg-accent text-white font-semibold text-xs hover:bg-accent/90 transition-colors inline-flex items-center gap-1"
+                          >
+                            Manage
+                          </button>
+                          <button
+                            onClick={() => copy(branch.shopUrl, `shop-${branch.branch_id}`)}
+                            className="px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium text-xs transition-colors"
+                            title="Copy storefront link"
+                          >
+                            {copied === `shop-${branch.branch_id}` ? "Copied" : "Shop"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        <EmptyState
+          title={branches.length ? "No matching branches found" : "No branches registered yet"}
+          text={
+            branches.length
+              ? "Try adjusting your search keywords or status filter."
+              : "Add your first branch or retail outlet to start managing its performance."
+          }
+        />
+      )}
+    </section>
+  );
+}
+
 function BranchTable({
   branches,
   selectedBranchId,
@@ -1020,11 +1381,29 @@ function BranchTable({
   onSelect: (branchId: string) => void;
   onCollapse?: () => void;
 }) {
+  const [filterText, setFilterText] = useState("");
+
+  const visibleBranches = useMemo(() => {
+    if (!filterText.trim()) return branches;
+    const query = filterText.toLowerCase();
+    return branches.filter(
+      (b) =>
+        b.branch_name?.toLowerCase().includes(query) ||
+        b.location?.toLowerCase().includes(query) ||
+        b.branch_email?.toLowerCase().includes(query)
+    );
+  }, [branches, filterText]);
+
   return (
     <section className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm xl:sticky xl:top-28">
       <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Branches</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Branches</h2>
+            <span className="text-xs bg-muted font-mono px-2 py-0.5 rounded-md text-muted-foreground">
+              {branches.length}
+            </span>
+          </div>
           <p className="text-xs text-muted-foreground mt-1">Select a branch to review its catalogue, sales, scans, and access controls.</p>
         </div>
         {onCollapse && (
@@ -1038,13 +1417,38 @@ function BranchTable({
           </button>
         )}
       </div>
-      <div className="p-3 space-y-3">
-        {branches.length ? branches.map((branch) => (
+
+      {/* Quick Search for multiple branches */}
+      {branches.length > 2 && (
+        <div className="p-3 border-b border-border bg-muted/20">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder="Filter branches..."
+              className="w-full bg-background border border-border rounded-xl pl-8 pr-7 py-1.5 text-xs text-foreground outline-none focus:border-accent"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            />
+            {filterText && (
+              <button
+                onClick={() => setFilterText("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="p-3 space-y-3 max-h-[calc(100vh-18rem)] overflow-y-auto">
+        {visibleBranches.length ? visibleBranches.map((branch) => (
           <button
-            key={branch.id}
+            key={branch.id || branch.branch_id}
             onClick={() => onSelect(branch.branch_id)}
             className={cn(
-              "w-full rounded-2xl border p-4 transition-all text-left",
+              "w-full rounded-2xl border p-4 transition-all text-left group",
               selectedBranchId === branch.branch_id
                 ? "border-accent bg-accent/5 shadow-sm"
                 : "border-border bg-background hover:border-accent/35 hover:bg-muted/20"
@@ -1052,26 +1456,34 @@ function BranchTable({
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">{branch.branch_name}</p>
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1 min-w-0">
-                  <MapPin className="w-3 h-3 shrink-0" />
+                <p className="text-sm font-semibold text-foreground truncate group-hover:text-accent transition-colors">
+                  {branch.branch_name}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1 min-w-0">
+                  <MapPin className="w-3 h-3 text-accent shrink-0" />
                   <span className="truncate">{branch.location || "Location not set"}</span>
                 </p>
               </div>
-              <span className={cn("text-xs px-2 py-0.5 rounded-full capitalize shrink-0", branch.status === "active" ? "bg-green-50 text-green-700" : branch.status === "suspended" ? "bg-red-50 text-red-700" : "bg-muted text-muted-foreground")}>{branch.status}</span>
+              <span className={cn("text-[10px] uppercase font-mono font-semibold px-2 py-0.5 rounded-full capitalize shrink-0", branch.status === "active" ? "bg-green-50 text-green-700" : branch.status === "suspended" ? "bg-red-50 text-red-700" : "bg-muted text-muted-foreground")}>{branch.status}</span>
             </div>
             <p className="text-xs text-muted-foreground mt-2 truncate">{branch.branch_email}</p>
 
-            <div className="mt-4 border-t border-border pt-3 flex items-center justify-between gap-3">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
-                {selectedBranchId === branch.branch_id ? "Selected" : "Click to manage"}
+            {/* Mini metrics bar */}
+            <div className="mt-2.5 pt-2 border-t border-border/60 flex items-center justify-between text-[11px] text-muted-foreground font-mono">
+              <span>{branch.products || 0} products</span>
+              <span>₦{Number(branch.revenue || 0).toLocaleString()}</span>
+            </div>
+
+            <div className="mt-3 border-t border-border pt-2.5 flex items-center justify-between gap-3">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono font-semibold">
+                {selectedBranchId === branch.branch_id ? "Active selection" : "Click to manage"}
               </span>
               <span className="w-7 h-7 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
                 <ChevronIndicator selected={selectedBranchId === branch.branch_id} />
               </span>
             </div>
           </button>
-        )) : <EmptyState title="No branches yet" text="Create your first branch to start managing multi-location performance." />}
+        )) : <EmptyState title={branches.length ? "No matching branches" : "No branches yet"} text={branches.length ? "Try clearing your search term." : "Create your first branch to start managing multi-location performance."} />}
       </div>
     </section>
   );
