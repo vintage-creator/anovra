@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ElementType } from "react";
 import {
-  Activity, AlertCircle, ArrowRight, ArrowUpRight, BarChart2, Building2, Check, CheckCircle2, ChevronRight, Copy, CreditCard, Edit,
+  Activity, AlertCircle, Archive, ArrowRight, ArrowUpRight, BarChart2, Building2, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, CreditCard, Edit,
   ExternalLink, Eye, Filter, GripVertical, HelpCircle, Image as ImageIcon, Info, LayoutDashboard, LayoutGrid, Link as LinkIcon, List, Loader2,
-  LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, Scan, Search, ShieldCheck, Sparkles,
+  LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, Scan, Search, Settings, ShieldCheck, Sparkles,
   Tag, Trash2, Upload, Users, X,
 } from "lucide-react";
 import type { View } from "./types";
@@ -12,6 +12,13 @@ import { supabase } from "./utils/supabase";
 import { toast } from "sonner";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./components/ui/dropdown-menu";
 
 type BrandTab = "overview" | "branches" | "products" | "activity";
 type ProductFormState = {
@@ -296,8 +303,8 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
 
   const updateBranchStatus = async (branchId: string, status: "active" | "inactive" | "suspended") => {
     if (status !== "active") {
-      const label = status === "suspended" ? "suspend this branch" : "remove this branch from active access";
-      const confirmed = window.confirm(`Are you sure you want to ${label}? The branch team will not be able to sign in while this status is applied.`);
+      const label = status === "suspended" ? "suspend this branch" : "archive this branch";
+      const confirmed = window.confirm(`Are you sure you want to ${label}? All historical sales, scans, and catalogue records will be preserved, but the branch vendor team will not be able to sign in while archived.`);
       if (!confirmed) return;
     }
 
@@ -306,8 +313,8 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
       const { error } = await supabase.functions.invoke("manage-brand-branch", {
         body: { action: "update", branchId, status },
       });
-      if (error) throw new Error(await getFunctionErrorMessage(error, "Could not update branch access."));
-      toast.success(status === "active" ? "Branch access restored." : "Branch access updated.");
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Could not update branch status."));
+      toast.success(status === "active" ? "Branch restored to active status." : "Branch archived successfully.");
       await loadBrandData();
     } catch (error: any) {
       toast.error(error.message || "Could not update branch.");
@@ -784,6 +791,11 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                       onEditProduct={editProduct}
                       onDeleteProduct={deleteProduct}
                       onEditBranch={openBranchEdit}
+                      onAddProduct={(branchId) => {
+                        resetProductForm(branchId);
+                        setTab("products");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
                       onStatus={updateBranchStatus}
                       deletingProductId={deletingProductId}
                       savingBranchId={savingBranchId}
@@ -1498,6 +1510,7 @@ function BranchDetail({
   onEditProduct,
   onDeleteProduct,
   onEditBranch,
+  onAddProduct,
   onStatus,
   deletingProductId,
   savingBranchId,
@@ -1509,6 +1522,7 @@ function BranchDetail({
   onEditProduct: (product: any) => void;
   onDeleteProduct: (product: any) => void;
   onEditBranch: (branch: any) => void;
+  onAddProduct?: (branchId: string) => void;
   onStatus: (branchId: string, status: "active" | "inactive" | "suspended") => void;
   deletingProductId: string;
   savingBranchId: string;
@@ -1551,202 +1565,445 @@ function BranchDetail({
 
   const openShop = () => {
     sessionStorage.setItem("active_shop_slug", branch.slug);
-    setView("shop");
+    window.open(branch.shopUrl, "_blank", "noopener,noreferrer");
   };
 
   const openScan = () => {
     sessionStorage.setItem("active_scan_slug", branch.slug);
-    setView("skintest");
+    window.open(branch.scanUrl, "_blank", "noopener,noreferrer");
   };
 
+  const formattedCreatedDate = branch.created_at
+    ? new Date(branch.created_at).toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" })
+    : "Recently";
+
   return (
-    <section className="bg-card border border-border rounded-2xl overflow-hidden">
-      <div className="px-5 py-5 border-b border-border bg-muted/20">
+    <section className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+      {/* Branch Header with Real Metadata & Clean Actions */}
+      <div className="px-5 sm:px-6 py-5 border-b border-border bg-muted/20">
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Selected branch</p>
-          <h2 className="text-2xl font-light text-foreground mt-1" style={{ fontFamily: "'Fraunces', serif" }}>{branch.branch_name}</h2>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className={cn("px-2 py-1 rounded-full capitalize font-semibold", branch.status === "active" ? "bg-green-50 text-green-700" : branch.status === "suspended" ? "bg-red-50 text-red-700" : "bg-background text-muted-foreground border border-border")}>{branch.status} access</span>
-            <span>{branch.location || "Location not set"}</span>
-            <span className="hidden sm:inline">·</span>
-            <span>{branch.branch_email}</span>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Selected branch</p>
+              <span
+                className={cn(
+                  "px-2.5 py-0.5 rounded-full capitalize font-semibold text-[10px] font-mono",
+                  branch.status === "active"
+                    ? "bg-green-50 text-green-700 border border-green-200"
+                    : branch.status === "suspended"
+                    ? "bg-red-50 text-red-700 border border-red-200"
+                    : "bg-background text-muted-foreground border border-border"
+                )}
+              >
+                {branch.status} access
+              </span>
+            </div>
+
+            <h2 className="text-2xl font-light text-foreground mt-1" style={{ fontFamily: "'Fraunces', serif" }}>
+              {branch.branch_name}
+            </h2>
+
+            {/* Rich metadata tags */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-accent shrink-0" />
+                <span>{branch.location || "Location not set"}</span>
+              </span>
+
+              <span className="flex items-center gap-1">
+                <Mail className="w-3.5 h-3.5 text-muted-foreground/70 shrink-0" />
+                <span>{branch.branch_email}</span>
+              </span>
+
+              {branch.phone && (
+                <span className="flex items-center gap-1 font-mono text-[11px]">
+                  <Phone className="w-3.5 h-3.5 text-muted-foreground/70 shrink-0" />
+                  <span>{branch.phone}</span>
+                </span>
+              )}
+
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-muted-foreground/70 shrink-0" />
+                <span>Added {formattedCreatedDate}</span>
+              </span>
+
+              <span className="font-mono text-[11px] bg-muted/60 px-2 py-0.5 rounded-md text-muted-foreground">
+                #{branch.slug}
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 lg:justify-end">
-          <button onClick={openShop} className="text-xs px-3 py-2.5 rounded-xl bg-accent text-white inline-flex items-center justify-center gap-1.5 font-semibold">
-            <ExternalLink className="w-3.5 h-3.5" />
-            Open shop
-          </button>
-          <button onClick={openScan} className="text-xs px-3 py-2.5 rounded-xl bg-foreground text-primary-foreground inline-flex items-center justify-center gap-1.5 font-semibold">
-            <Scan className="w-3.5 h-3.5" />
-            Test scan
-          </button>
-        </div>
-        </div>
-        <div className="mt-4 grid sm:grid-cols-2 xl:grid-cols-4 gap-2">
-          <button onClick={() => onEditBranch(branch)} className="text-xs px-3 py-2.5 rounded-xl bg-background border border-border text-foreground inline-flex items-center justify-center gap-1.5 font-semibold">
-            <Edit className="w-3.5 h-3.5" />
-            Edit branch
-          </button>
-          <button onClick={() => copy(branch.shopUrl, `${branch.id}-detail-shop`)} className="text-xs px-3 py-2.5 rounded-xl bg-background border border-border text-foreground inline-flex items-center justify-center gap-1.5 font-semibold">
-            {copied === `${branch.id}-detail-shop` ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            Copy shop link
-          </button>
-          <button onClick={() => copy(branch.scanUrl, `${branch.id}-detail-scan`)} className="text-xs px-3 py-2.5 rounded-xl bg-background border border-border text-foreground inline-flex items-center justify-center gap-1.5 font-semibold">
-            {copied === `${branch.id}-detail-scan` ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            Copy scan link
-          </button>
-          {branch.status !== "inactive" && (
-            <button onClick={() => onStatus(branch.branch_id, "inactive")} disabled={savingBranchId === branch.branch_id} className="text-xs px-3 py-2.5 rounded-xl bg-amber-50 text-amber-800 inline-flex items-center justify-center gap-1.5 font-semibold disabled:opacity-60">
-              {savingBranchId === branch.branch_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-              Remove access
+
+          {/* Primary Action CTAs & Settings Dropdown */}
+          <div className="flex items-center gap-2 lg:justify-end shrink-0 flex-wrap">
+            <button
+              onClick={openShop}
+              className="text-xs px-3.5 py-2 rounded-xl bg-accent text-white inline-flex items-center justify-center gap-1.5 font-semibold hover:bg-accent/90 transition-all shadow-xs"
+              title="Open branch storefront in new tab"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Open storefront</span>
             </button>
-          )}
+            <button
+              onClick={openScan}
+              className="text-xs px-3.5 py-2 rounded-xl bg-foreground text-background inline-flex items-center justify-center gap-1.5 font-semibold hover:bg-foreground/90 transition-all shadow-xs"
+              title="Test customer skin scan consultation in new tab"
+            >
+              <Scan className="w-3.5 h-3.5" />
+              <span>Test scan</span>
+            </button>
+
+            {/* Branch Settings Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger className="text-xs px-3 py-2 rounded-xl bg-background border border-border text-foreground hover:bg-muted font-semibold inline-flex items-center gap-1.5 transition-colors focus:outline-none shadow-xs cursor-pointer">
+                <Settings className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="hidden sm:inline">Settings</span>
+                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-2xl shadow-lg border border-border bg-card">
+                <DropdownMenuItem
+                  onClick={() => onEditBranch(branch)}
+                  className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl cursor-pointer hover:bg-muted focus:bg-muted outline-none"
+                >
+                  <Edit className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span>Edit branch details</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => copy(branch.shopUrl, `${branch.id}-detail-shop`)}
+                  className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl cursor-pointer hover:bg-muted focus:bg-muted outline-none"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Copy className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span>Copy storefront link</span>
+                  </div>
+                  {copied === `${branch.id}-detail-shop` && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => copy(branch.scanUrl, `${branch.id}-detail-scan`)}
+                  className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl cursor-pointer hover:bg-muted focus:bg-muted outline-none"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Scan className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span>Copy skin scan link</span>
+                  </div>
+                  {copied === `${branch.id}-detail-scan` && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="my-1" />
+                {branch.status !== "inactive" ? (
+                  <DropdownMenuItem
+                    onClick={() => onStatus(branch.branch_id, "inactive")}
+                    disabled={savingBranchId === branch.branch_id}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl cursor-pointer text-amber-700 hover:bg-amber-50 focus:bg-amber-50 outline-none"
+                  >
+                    <Archive className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Archive branch</span>
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={() => onStatus(branch.branch_id, "active")}
+                    disabled={savingBranchId === branch.branch_id}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl cursor-pointer text-emerald-700 hover:bg-emerald-50 focus:bg-emerald-50 outline-none"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Restore active branch</span>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
-      <div className="p-5 grid xl:grid-cols-[0.9fr_1.1fr] gap-5">
-        <div className="space-y-4">
-          <div className="grid sm:grid-cols-3 xl:grid-cols-1 gap-3">
-            <Metric label="Products" value={branch.products} />
-            <Metric label="Approved products" value={branch.approvedProducts} />
-            <Metric label="Scans" value={branch.scans} />
-            <Metric label="Sales records" value={branch.paymentRows?.length || 0} />
-            <Metric label="Revenue" value={`₦${branch.revenue.toLocaleString()}`} />
-          </div>
-        </div>
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {[
-              { id: "products", label: "Products", icon: Package },
-              { id: "sales", label: "Sales", icon: CreditCard },
-              { id: "scans", label: "Scans", icon: Scan },
-              { id: "activity", label: "Activity", icon: Activity },
-            ].map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setDetailTab(item.id as typeof detailTab)}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition-colors",
-                    detailTab === item.id ? "bg-accent text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {item.label}
-                </button>
-              );
-            })}
+      {/* Main Full-Width Tabbed Workspace */}
+      <div className="p-5 sm:p-6 space-y-4">
+        {/* Full-width Responsive Tab Navigation Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar -mx-1 px-1">
+            <div className="flex items-center gap-1.5 p-1 bg-muted/40 border border-border rounded-xl w-max min-w-full sm:min-w-0">
+              {[
+                { id: "products", label: "Products", shortLabel: "Products", icon: Package, count: branch.productRows?.length || 0 },
+                { id: "sales", label: "Sales & Orders", shortLabel: "Sales", icon: CreditCard, count: branch.paymentRows?.length || 0 },
+                { id: "scans", label: "Customer Scans", shortLabel: "Scans", icon: Scan, count: branch.scanRows?.length || 0 },
+                { id: "activity", label: "Activity Timeline", shortLabel: "Activity", icon: Activity, count: activityRows.length },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setDetailTab(item.id as typeof detailTab)}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer",
+                      detailTab === item.id
+                        ? "bg-accent text-white shadow-xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      <span className="sm:hidden">{item.shortLabel}</span>
+                      <span className="hidden sm:inline">{item.label}</span>
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px] px-1.5 py-0.2 rounded-full font-mono font-medium shrink-0",
+                        detailTab === item.id ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {item.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {detailTab === "products" && (
-          <div>
-            <h3 className="text-sm font-semibold text-foreground mb-2">Branch products</h3>
-            <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
-              {branch.productRows?.length ? branch.productRows.map((product: any) => (
-                <div key={product.id} className="px-3 py-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    {product.image_url ? (
-                      <img src={product.image_url} alt="" className="w-10 h-10 rounded-lg object-cover border border-border bg-muted shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-muted border border-border flex items-center justify-center text-muted-foreground shrink-0">
-                        <Package className="w-3.5 h-3.5" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-foreground truncate">{product.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">₦{Number(product.price || 0).toLocaleString()} · {product.nafdac_status || "pending"}</p>
-                    </div>
+            <button
+              onClick={() => onAddProduct?.(branch.branch_id)}
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-accent text-white text-xs font-semibold hover:bg-accent/90 transition-all shadow-xs shrink-0 w-full sm:w-auto cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add product to branch</span>
+            </button>
+          )}
+        </div>
+
+        {/* Tab Content Workspace */}
+        <div className="min-h-[320px]">
+          {detailTab === "products" && (
+            <div>
+              {branch.productRows?.length ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+                    <span>{branch.productRows.length} items in this branch catalogue</span>
+                    <span>{branch.approvedProducts || 0} NAFDAC approved</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => onEditProduct(product)} className="w-8 h-8 rounded-lg bg-muted text-foreground flex items-center justify-center" aria-label={`Edit ${product.name}`}>
-                      <Edit className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => onDeleteProduct(product)} disabled={deletingProductId === product.id} className="w-8 h-8 rounded-lg bg-red-50 text-red-700 flex items-center justify-center disabled:opacity-60" aria-label={`Delete ${product.name}`}>
-                      {deletingProductId === product.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    </button>
+                  <div className="divide-y divide-border rounded-2xl border border-border bg-background overflow-hidden">
+                    {branch.productRows.map((product: any) => (
+                      <div key={product.id} className="px-4 py-3.5 flex items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          {product.image_url ? (
+                            <img src={product.image_url} alt="" className="w-11 h-11 rounded-xl object-cover border border-border bg-muted shrink-0" />
+                          ) : (
+                            <div className="w-11 h-11 rounded-xl bg-muted border border-border flex items-center justify-center text-muted-foreground shrink-0">
+                              <Package className="w-5 h-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground truncate">{product.name}</p>
+                            <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground font-mono">
+                              <span className="font-semibold text-foreground">₦{Number(product.price || 0).toLocaleString()}</span>
+                              <span>·</span>
+                              <span className="capitalize">{product.category || "Skincare"}</span>
+                              <span>·</span>
+                              <span className={cn(
+                                "px-2 py-0.2 rounded-full text-[10px] font-semibold uppercase",
+                                product.nafdac_status === "approved"
+                                  ? "bg-green-50 text-green-700 border border-green-200"
+                                  : "bg-amber-50 text-amber-700 border border-amber-200"
+                              )}>
+                                {product.nafdac_status || "pending"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => onEditProduct(product)}
+                            className="px-3 py-1.5 rounded-lg bg-muted hover:bg-secondary text-foreground text-xs font-semibold inline-flex items-center gap-1 transition-colors"
+                            title="Edit product"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => onDeleteProduct(product)}
+                            disabled={deletingProductId === product.id}
+                            className="w-8 h-8 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center disabled:opacity-60 transition-colors"
+                            aria-label={`Delete ${product.name}`}
+                            title="Delete product"
+                          >
+                            {deletingProductId === product.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )) : <div className="px-3 py-6 text-center text-xs text-muted-foreground">No products for this branch yet.</div>}
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border bg-muted/10 p-10 flex flex-col items-center justify-center text-center space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-accent/10 text-accent flex items-center justify-center mx-auto">
+                    <Package className="w-7 h-7" />
+                  </div>
+                  <div className="max-w-md">
+                    <h4 className="text-base font-semibold text-foreground">No branch products yet</h4>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      Products assigned to this branch storefront catalogue will appear here. You can add items directly from Brand HQ or let the branch vendor upload them.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onAddProduct?.(branch.branch_id)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-accent text-white text-xs font-semibold hover:bg-accent/90 transition-all shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add product to branch</span>
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
           )}
 
           {detailTab === "sales" && (
-          <div>
-            <h3 className="text-sm font-semibold text-foreground mb-2">Branch sales</h3>
-            <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
-              {branch.paymentRows?.length ? branch.paymentRows.map((payment: any) => (
-                <div key={payment.id} className="px-3 py-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-foreground truncate">{payment.reference || payment.status || "Payment"}</p>
-                    <p className="text-[10px] text-muted-foreground">{new Date(payment.created_at).toLocaleDateString("en-GB", { dateStyle: "medium" })}</p>
+            <div>
+              {branch.paymentRows?.length ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+                    <span>{branch.paymentRows.length} transactions recorded</span>
+                    <span>Total tracked: ₦{Number(branch.revenue || 0).toLocaleString()}</span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs font-semibold text-foreground">₦{Number(payment.amount || 0).toLocaleString()}</p>
-                    <p className="text-[10px] text-muted-foreground capitalize">{payment.status || "Tracked"}</p>
+                  <div className="divide-y divide-border rounded-2xl border border-border bg-background overflow-hidden">
+                    {branch.paymentRows.map((payment: any) => (
+                      <div key={payment.id} className="px-4 py-3.5 flex items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{payment.reference || payment.status || "Payment transaction"}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+                            {new Date(payment.created_at).toLocaleDateString("en-GB", { dateStyle: "long", timeStyle: "short" })}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-base font-semibold text-foreground font-mono">₦{Number(payment.amount || 0).toLocaleString()}</p>
+                          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-green-50 text-green-700 font-semibold uppercase font-mono">
+                            {payment.status || "Tracked"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )) : <div className="px-3 py-6 text-center text-xs text-muted-foreground">No sales records for this branch yet.</div>}
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border bg-muted/10 p-10 flex flex-col items-center justify-center text-center space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-accent/10 text-accent flex items-center justify-center mx-auto">
+                    <CreditCard className="w-7 h-7" />
+                  </div>
+                  <div className="max-w-md">
+                    <h4 className="text-base font-semibold text-foreground">No sales records yet</h4>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      Online customer purchases and checkout transactions completed through this branch's storefront will be automatically tracked and listed here.
+                    </p>
+                  </div>
+                  <button
+                    onClick={openShop}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-foreground text-background text-xs font-semibold hover:bg-foreground/90 transition-all shadow-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open branch storefront</span>
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
           )}
 
           {detailTab === "scans" && (
-          <div>
-            <h3 className="text-sm font-semibold text-foreground mb-2">Customer scan activity</h3>
-            <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
-              {branch.scanRows?.length ? branch.scanRows.map((scan: any) => (
-                <div key={scan.id} className="px-3 py-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold text-foreground">{scan.concern || "Skin scan"}</p>
-                    <p className="text-[10px] text-muted-foreground">{new Date(scan.created_at).toLocaleDateString("en-GB", { dateStyle: "medium" })}</p>
+            <div>
+              {branch.scanRows?.length ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+                    <span>{branch.scanRows.length} skin test consultations</span>
+                    <span>Live diagnostic log</span>
                   </div>
-                  <span className="text-[10px] bg-muted text-muted-foreground px-2 py-1 rounded-full">{scan.result || "Completed"}</span>
+                  <div className="divide-y divide-border rounded-2xl border border-border bg-background overflow-hidden">
+                    {branch.scanRows.map((scan: any) => (
+                      <div key={scan.id} className="px-4 py-3.5 flex items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{scan.concern || "Customer skin scan consultation"}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+                            {new Date(scan.created_at).toLocaleDateString("en-GB", { dateStyle: "long", timeStyle: "short" })}
+                          </p>
+                        </div>
+                        <span className="text-xs bg-accent/10 text-accent font-semibold px-3 py-1 rounded-full">
+                          {scan.result || "Completed"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              )) : <div className="px-3 py-6 text-center text-xs text-muted-foreground">No customer scans for this branch yet.</div>}
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border bg-muted/10 p-10 flex flex-col items-center justify-center text-center space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-accent/10 text-accent flex items-center justify-center mx-auto">
+                    <Scan className="w-7 h-7" />
+                  </div>
+                  <div className="max-w-md">
+                    <h4 className="text-base font-semibold text-foreground">No customer scans yet</h4>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      Customer skin consultations and QR code scans completed for this branch will show their diagnosed skin concerns and types in real time.
+                    </p>
+                  </div>
+                  <button
+                    onClick={openScan}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-foreground text-background text-xs font-semibold hover:bg-foreground/90 transition-all shadow-xs"
+                  >
+                    <Scan className="w-3.5 h-3.5" />
+                    <span>Test skin scan consultation</span>
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
           )}
 
           {detailTab === "activity" && (
-          <div>
-            <h3 className="text-sm font-semibold text-foreground mb-2">Branch activity timeline</h3>
-            <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
-              {activityRows.length ? activityRows.map((row) => {
-                const Icon = row.icon;
-                return (
-                  <div key={row.id} className="px-3 py-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
-                        <Icon className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-foreground truncate">{row.title}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{row.type} · {row.detail}</p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground whitespace-nowrap">{row.date ? new Date(row.date).toLocaleDateString("en-GB", { dateStyle: "medium" }) : "No date"}</p>
+            <div>
+              {activityRows.length ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+                    <span>{activityRows.length} events recorded</span>
+                    <span>Chronological order</span>
                   </div>
-                );
-              }) : <div className="px-3 py-6 text-center text-xs text-muted-foreground">No branch activity yet.</div>}
+                  <div className="divide-y divide-border rounded-2xl border border-border bg-background overflow-hidden">
+                    {activityRows.map((row) => {
+                      const Icon = row.icon;
+                      return (
+                        <div key={row.id} className="px-4 py-3.5 flex items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div className="w-9 h-9 rounded-xl bg-accent/10 text-accent flex items-center justify-center shrink-0">
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-foreground truncate">{row.title}</p>
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">{row.type} · {row.detail}</p>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground font-mono whitespace-nowrap">
+                            {row.date ? new Date(row.date).toLocaleDateString("en-GB", { dateStyle: "medium" }) : "No date"}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border bg-muted/10 p-10 flex flex-col items-center justify-center text-center space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-accent/10 text-accent flex items-center justify-center mx-auto">
+                    <Activity className="w-7 h-7" />
+                  </div>
+                  <div className="max-w-md">
+                    <h4 className="text-base font-semibold text-foreground">No branch activity yet</h4>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      Catalogue updates, customer skin tests, and sales records will build a live chronological timeline here as they happen.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onEditBranch(branch)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-muted text-foreground hover:bg-secondary text-xs font-semibold transition-all"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    <span>Edit branch profile</span>
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
           )}
         </div>
       </div>
     </section>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="bg-muted/50 rounded-xl px-2 py-2">
-      <p className="text-xs font-semibold text-foreground truncate">{value}</p>
-      <p className="text-[10px] text-muted-foreground">{label}</p>
-    </div>
   );
 }
 
