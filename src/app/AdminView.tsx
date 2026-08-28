@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  Store, AlertCircle, CreditCard, Calendar, Ban, Search, RefreshCw,
+  Store, Building2, AlertCircle, CreditCard, Calendar, Ban, Search, RefreshCw,
   Users, Package, Shield, BarChart2, CheckCircle, X, Check, Eye,
   ChevronDown, ChevronUp, AlertTriangle, Info, Activity, TrendingUp,
   ExternalLink, Upload, Download, MapPin, Scan, FileText, Star, Edit, Trash2, LogOut, Menu, ArrowUp,
@@ -16,7 +16,7 @@ import { toast } from "sonner";
 
 // ---- ADMIN VIEW ----
 
-type AdminTab = "overview" | "safety" | "ingredients" | "vendors" | "reviews" | "team" | "payments" | "onboarding" | "logs";
+type AdminTab = "overview" | "safety" | "ingredients" | "vendors" | "brands" | "reviews" | "team" | "payments" | "onboarding" | "logs";
 
 type TeamRole = "Marketing" | "Sales" | "Support" | "Representative" | "Operations" | "Manager";
 type TeamMember = {
@@ -58,6 +58,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
   // Live database states
   const [vendorsList, setVendorsList] = useState<any[]>([]);
+  const [brandBranchesList, setBrandBranchesList] = useState<any[]>([]);
   const [scansList, setScansList] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [paymentsList, setPaymentsList] = useState<any[]>([]);
@@ -131,6 +132,16 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           .from("products")
           .select("*");
         setProductsList(products || []);
+
+        try {
+          const { data: brandBranches } = await supabase
+            .from("brand_branches")
+            .select("*")
+            .order("created_at", { ascending: false });
+          setBrandBranchesList(brandBranches || []);
+        } catch (brandBranchError) {
+          setBrandBranchesList([]);
+        }
 
         try {
           const { data: reviews } = await supabase
@@ -548,13 +559,18 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   }
 
   // Calculate dynamic telemetry and statistics
-  const totalVendors = vendorsList.length;
+  const brandAccounts = vendorsList.filter((v) => v.account_type === "brand");
+  const branchAccounts = vendorsList.filter((v) => v.account_type === "branch");
+  const independentVendors = vendorsList.filter((v) => v.account_type !== "brand" && v.account_type !== "branch");
+  const vendorAccounts = vendorsList.filter((v) => v.account_type !== "brand");
+  const totalVendors = vendorAccounts.length;
+  const totalPartnerAccounts = vendorsList.length;
   const scansPlatformWide = scansList.length;
   const productsPending = productsList.filter(p => p.nafdac_status === "flagged" || p.nafdac_status === "pending").length;
 
   const basicCount = vendorsList.filter(v => v.plan === "basic").length;
   const premiumCount = vendorsList.filter(v => v.plan === "premium").length;
-  const brandCount = vendorsList.filter(v => v.plan === "brand").length;
+  const brandCount = brandAccounts.length;
   const freeCount = vendorsList.filter(v => v.plan === "free" || !v.plan).length;
   const successfulPayments = paymentsList.filter((p) => p.status === "success");
   const currentMonthPayments = successfulPayments.filter((p) => {
@@ -570,14 +586,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     : "No tracked Paystack payments this month";
 
   const dynamicStats = [
-    { label: "Total vendors", value: String(totalVendors), delta: `+${vendorsList.filter(v => new Date(v.created_at || Date.now()).getMonth() === new Date().getMonth()).length} this month`, icon: <Store className="w-4 h-4" />, warn: false },
-    { label: "Scans platform-wide", value: String(scansPlatformWide), delta: `Across all vendors`, icon: <Scan className="w-4 h-4" />, warn: false },
+    { label: "Partner accounts", value: String(totalPartnerAccounts), delta: `${independentVendors.length} vendors · ${brandCount} brands · ${branchAccounts.length} branches`, icon: <Store className="w-4 h-4" />, warn: false },
+    { label: "Scans platform-wide", value: String(scansPlatformWide), delta: `Across vendors and branches`, icon: <Scan className="w-4 h-4" />, warn: false },
     { label: "Products pending safety review", value: String(productsPending), delta: productsPending > 0 ? "Requires action" : "All cleared", icon: <AlertCircle className="w-4 h-4" />, warn: productsPending > 0 },
     { label: "MRR (₦)", value: formattedMrr, delta: revenueDelta, icon: <CreditCard className="w-4 h-4" />, warn: false },
   ];
 
   // Dynamic mapped vendor representations
-  const dynamicVendors = vendorsList.map(v => {
+  const dynamicVendors = vendorAccounts.map(v => {
     const vendorProds = productsList.filter(p => p.vendor_id === v.id);
     const vendorScans = scansList.filter(s => s.vendor_id === v.id).length;
     const vendorPayments = successfulPayments.filter((p) => p.vendor_id === v.id);
@@ -618,6 +634,32 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       v.owner.toLowerCase().includes(search.toLowerCase()) ||
       v.city.toLowerCase().includes(search.toLowerCase())
   );
+
+  const dynamicBrands = brandAccounts.map((brand) => {
+    const branches = brandBranchesList.filter((branch) => branch.brand_id === brand.id);
+    const branchIds = branches.map((branch) => branch.branch_id);
+    const brandProducts = productsList.filter((product) => branchIds.includes(product.vendor_id));
+    const brandScans = scansList.filter((scan) => branchIds.includes(scan.vendor_id));
+    const brandPayments = successfulPayments.filter((payment) => branchIds.includes(payment.vendor_id));
+    const revenue = brandPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    return {
+      id: brand.id,
+      name: brand.business_name || brand.name || "Brand",
+      owner: brand.name || "Brand Admin",
+      status: vendorStatuses[brand.id] ?? (brand.is_verified ? "active" : "pending"),
+      publicUrl: `https://anovra.africa/#/brand/${brand.slug || String(brand.business_name || brand.name || "brand").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`,
+      branches,
+      activeBranches: branches.filter((branch) => branch.status === "active").length,
+      products: brandProducts.length,
+      scans: brandScans.length,
+      revenue,
+    };
+  });
+
+  const filteredBrands = dynamicBrands.filter((brand) => {
+    const q = search.toLowerCase();
+    return !q || brand.name.toLowerCase().includes(q) || brand.owner.toLowerCase().includes(q);
+  });
   const filteredPayments = paymentsList.filter((p) => {
     if (search === "") return true;
     const vendor = vendorsList.find((v) => v.id === p.vendor_id);
@@ -887,6 +929,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     { id: "safety", label: "Safety Queue", badge: activeFlaggedQueue.filter((f) => f.status === "pending" || f.status === "under_review").length },
     { id: "ingredients", label: "Ingredient DB" },
     { id: "vendors", label: "Vendors" },
+    { id: "brands", label: "Brands" },
     { id: "reviews", label: "Reviews", badge: reviewsList.filter((r) => r.status === "pending").length },
     { id: "team", label: "Team" },
     { id: "payments", label: "Payments" },
@@ -956,6 +999,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     {t.id === "safety" && <Shield className="w-4 h-4" />}
                     {t.id === "ingredients" && <Package className="w-4 h-4" />}
                     {t.id === "vendors" && <Store className="w-4 h-4" />}
+                    {t.id === "brands" && <Building2 className="w-4 h-4" />}
                     {t.id === "reviews" && <Star className="w-4 h-4" />}
                     {t.id === "team" && <Users className="w-4 h-4" />}
                     {t.id === "payments" && <CreditCard className="w-4 h-4" />}
@@ -1067,6 +1111,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                         {t.id === "safety" && <Shield className="w-4 h-4" />}
                         {t.id === "ingredients" && <Package className="w-4 h-4" />}
                         {t.id === "vendors" && <Store className="w-4 h-4" />}
+                        {t.id === "brands" && <Building2 className="w-4 h-4" />}
                         {t.id === "reviews" && <Star className="w-4 h-4" />}
                         {t.id === "team" && <Users className="w-4 h-4" />}
                         {t.id === "payments" && <CreditCard className="w-4 h-4" />}
@@ -1153,7 +1198,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     plan: "Basic Plan",
                     price: "₦12,500 / mo",
                     count: basicCount,
-                    total: totalVendors || 1,
+                    total: totalPartnerAccounts || 1,
                     mrr: `₦${(basicCount * 12500).toLocaleString()}`,
                     color: "bg-accent",
                     textColor: "text-accent",
@@ -1164,7 +1209,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     plan: "Vendor Pro Plan",
                     price: "₦25,000 / mo",
                     count: premiumCount,
-                    total: totalVendors || 1,
+                    total: totalPartnerAccounts || 1,
                     mrr: `₦${(premiumCount * 25000).toLocaleString()}`,
                     color: "bg-emerald-600",
                     textColor: "text-emerald-600",
@@ -1175,7 +1220,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     plan: "Brand Tier Plan",
                     price: "₦75,000 / mo",
                     count: brandCount,
-                    total: totalVendors || 1,
+                    total: totalPartnerAccounts || 1,
                     mrr: `₦${(brandCount * 75000).toLocaleString()}`,
                     color: "bg-indigo-600",
                     textColor: "text-indigo-600",
@@ -2190,6 +2235,113 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
               {filteredVendors.length === 0 && (
                 <div className="px-4 py-8 text-center">
                   <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No vendors match your search.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ---- BRANDS ---- */}
+        {tab === "brands" && (
+          <div>
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Brand accounts
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {brandAccounts.length} brands · {brandBranchesList.length} branches · {brandBranchesList.filter((branch) => branch.status === "active").length} active branches
+                </p>
+              </div>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search brands..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="bg-input-background border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-52"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+              </div>
+            </div>
+
+            <div className="grid xl:grid-cols-2 gap-4">
+              {filteredBrands.map((brand) => (
+                <article key={brand.id} className="bg-card border border-border rounded-2xl p-5 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {brand.name}
+                        </h3>
+                        <span className={cn(
+                          "text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize",
+                          brand.status === "active" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"
+                        )}>
+                          {brand.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{brand.owner}</p>
+                      <a href={brand.publicUrl} target="_blank" rel="noreferrer" className="text-xs text-accent font-mono mt-2 inline-flex items-center gap-1 hover:underline">
+                        {brand.publicUrl.replace("https://", "")}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(brand.publicUrl, brand.id)}
+                      className="inline-flex items-center justify-center gap-1.5 text-xs bg-muted text-foreground px-3 py-2 rounded-lg font-semibold"
+                    >
+                      {copiedField === brand.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      Copy
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-5">
+                    {[
+                      { label: "Branches", value: `${brand.activeBranches}/${brand.branches.length}` },
+                      { label: "Products", value: brand.products },
+                      { label: "Scans", value: brand.scans },
+                      { label: "Revenue", value: `₦${brand.revenue.toLocaleString()}` },
+                    ].map((metric) => (
+                      <div key={metric.label} className="rounded-xl bg-secondary/50 border border-border px-3 py-3">
+                        <p className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>{metric.value}</p>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">{metric.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-xl border border-border overflow-hidden">
+                    <div className="px-3 py-2 bg-secondary/50 border-b border-border flex items-center justify-between">
+                      <p className="text-xs font-semibold text-foreground">Branches</p>
+                      <span className="text-[10px] text-muted-foreground font-mono">{brand.branches.length} total</span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {brand.branches.length ? brand.branches.slice(0, 4).map((branch: any) => (
+                        <div key={branch.id} className="px-3 py-2 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-foreground truncate">{branch.branch_name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{branch.location || "Location not set"}</p>
+                          </div>
+                          <span className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize",
+                            branch.status === "active" ? "bg-green-50 text-green-700" : branch.status === "suspended" ? "bg-red-50 text-red-700" : "bg-muted text-muted-foreground"
+                          )}>
+                            {branch.status}
+                          </span>
+                        </div>
+                      )) : (
+                        <div className="px-3 py-6 text-center text-xs text-muted-foreground">No branches created yet.</div>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {filteredBrands.length === 0 && (
+                <div className="xl:col-span-2 bg-card border border-dashed border-border rounded-2xl p-10 text-center">
+                  <Building2 className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-sm font-semibold text-foreground">No brand accounts found</p>
+                  <p className="text-xs text-muted-foreground mt-1">Approved Brand HQ accounts will appear here once registered.</p>
                 </div>
               )}
             </div>

@@ -13,6 +13,7 @@ import {
   Info,
   Mail,
   ArrowRight,
+  ArrowUp,
   Scan,
 } from "lucide-react";
 import { type View, cn } from "./types";
@@ -29,6 +30,8 @@ import { supabase } from "./utils/supabase";
 import { AboutView, ContactView } from "./ContentViews";
 import { AdminView } from "./AdminView";
 import { UserDashboardView } from "./UserDashboardView";
+import { BrandDashboardView } from "./BrandDashboardView";
+import { BrandPublicView } from "./BrandPublicView";
 import { Footer } from "./Footer";
 import {
   Sheet,
@@ -124,6 +127,13 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                   <Store className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="text-sm font-medium">Sign in as a Vendor</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setView("signin")}
+                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700 focus:bg-emerald-500/10 focus:text-emerald-700 data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-700 outline-none"
+                >
+                  <Users className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-sm font-medium">Sign in as a Brand HQ</span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -139,11 +149,14 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
 
             {/* Join as Vendor Button (Green with White Text) */}
             <button
-              onClick={() => setView("signup")}
+              onClick={() => {
+                sessionStorage.setItem("signup_account_kind", "vendor");
+                setView("signup");
+              }}
               className="text-sm px-4 py-2 rounded-lg bg-[#008236] hover:bg-[#006c2c] text-white font-bold shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              <span>Join as a Vendor</span>
+              <span>Join as Vendor / Brand</span>
               <ArrowRight className="w-3.5 h-3.5 text-white" />
             </button>
           </div>
@@ -227,6 +240,13 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                     <Store className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Sign in as a Vendor</span>
                   </button>
+                  <button
+                    onClick={() => handleNavClick("signin")}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary text-left"
+                  >
+                    <Users className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Sign in as a Brand HQ</span>
+                  </button>
                 </div>
 
                 {/* CTA Buttons */}
@@ -239,10 +259,13 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                     <Scan className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleNavClick("signup")}
+                    onClick={() => {
+                      sessionStorage.setItem("signup_account_kind", "vendor");
+                      handleNavClick("signup");
+                    }}
                     className="w-full py-3 rounded-xl bg-[#008236] text-white font-bold hover:bg-[#006c2c] transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>Join as a Vendor</span>
+                    <span>Join as Vendor / Brand</span>
                     <ArrowRight className="w-4 h-4 text-white" />
                   </button>
                 </div>
@@ -253,6 +276,33 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
         </div>
       </div>
     </header>
+  );
+}
+
+function ScrollToTopButton({ hidden }: { hidden?: boolean }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setVisible(window.scrollY > 360);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  if (hidden) return null;
+
+  return (
+    <button
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      className={cn(
+        "fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 w-11 h-11 rounded-full bg-accent text-white shadow-lg shadow-black/10 border border-white/20 flex items-center justify-center transition-all duration-300 hover:bg-accent/95 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-ring active:scale-95",
+        visible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-4 scale-90 pointer-events-none"
+      )}
+      aria-label="Scroll to top"
+      title="Scroll to top"
+    >
+      <ArrowUp className="w-5 h-5" />
+    </button>
   );
 }
 
@@ -282,6 +332,12 @@ export default function App() {
       window.location.href = window.location.origin + `/#/scan/${slug}`;
       return "skintest";
     }
+    if (path.startsWith("/brand/")) {
+      const slug = path.replace("/brand/", "").split("/")[0];
+      sessionStorage.setItem("active_brand_slug", slug);
+      window.location.href = window.location.origin + `/#/brand/${slug}`;
+      return "brand";
+    }
 
     const hash = window.location.hash.replace("#", "").replace(/^\//, "");
     if (hash.startsWith("shop/")) {
@@ -294,6 +350,11 @@ export default function App() {
       sessionStorage.setItem("active_scan_slug", slug);
       return "skintest";
     }
+    if (hash.startsWith("brand/")) {
+      const slug = hash.replace("brand/", "").split("?")[0];
+      sessionStorage.setItem("active_brand_slug", slug);
+      return "brand";
+    }
     if (hash.startsWith("team/")) {
       const slug = hash.replace("team/", "").split("?")[0];
       sessionStorage.setItem("active_team_slug", slug);
@@ -301,8 +362,8 @@ export default function App() {
     }
     const validViews: View[] = [
       "landing", "dashboard", "catalog", "skintest", "admin",
-      "adminlogin", "shop", "signin", "signup", "customersignup", "forgotpassword",
-      "resetpassword", "teamlogin", "teamdashboard", "about", "contact",
+      "adminlogin", "shop", "brand", "signin", "signup", "customersignup", "forgotpassword",
+      "resetpassword", "teamlogin", "teamdashboard", "branddashboard", "about", "contact",
       "userdashboard"
     ];
     
@@ -315,7 +376,7 @@ export default function App() {
   };
 
   const [view, setViewState] = useState<View>(getViewFromHash);
-  const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard", "skintest"];
+  const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard", "branddashboard", "skintest"];
   const [isValidatingRoute, setIsValidatingRoute] = useState(() => protectedViews.includes(getViewFromHash()));
 
   const setView = (v: View) => {
@@ -327,6 +388,9 @@ export default function App() {
     } else if (v === "shop") {
       const slug = sessionStorage.getItem("active_shop_slug");
       window.location.hash = slug ? `#/shop/${slug}` : "#/shop";
+    } else if (v === "brand") {
+      const slug = sessionStorage.getItem("active_brand_slug");
+      window.location.hash = slug ? `#/brand/${slug}` : "#/brand";
     } else if (v === "skintest") {
       const slug = sessionStorage.getItem("active_scan_slug");
       window.location.hash = slug ? `#/scan/${slug}` : "#/skintest";
@@ -359,7 +423,7 @@ export default function App() {
     const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"];
     const setupInactivityTracker = () => {
       const currentHash = window.location.hash.replace("#", "").replace(/^\//, "");
-      const isDashboardView = ["dashboard", "userdashboard", "teamdashboard", "admin", "catalog"].includes(currentHash);
+      const isDashboardView = ["dashboard", "userdashboard", "teamdashboard", "branddashboard", "admin", "catalog"].includes(currentHash);
       if (isDashboardView) {
         events.forEach((event) => document.addEventListener(event, resetTimer));
         resetTimer();
@@ -395,7 +459,9 @@ export default function App() {
           }
 
           const role = user.user_metadata?.role || "customer";
-          if (role === "vendor") {
+          if (role === "brand") {
+            setView("branddashboard");
+          } else if (role === "vendor") {
             setView("dashboard");
           } else if (teamMemberRole === "Manager" || teamMemberRole === "Viewer") {
             setView("dashboard");
@@ -492,11 +558,13 @@ export default function App() {
           try {
             const { data: profile } = await supabase
               .from("profiles")
-              .select("business_name")
+              .select("business_name, account_type")
               .eq("id", user.id)
               .maybeSingle();
             
-            if (profile?.business_name) {
+            if (profile?.account_type === "brand") {
+              role = "brand";
+            } else if (profile?.business_name) {
               role = "vendor";
             }
           } catch (err) {}
@@ -532,7 +600,10 @@ export default function App() {
         const userRole = role || "customer";
 
         const redirectLoggedInUserToDashboard = () => {
-          if (role === "vendor" || isTeamStaff) {
+          if (role === "brand") {
+            setViewState("branddashboard");
+            window.location.hash = "#/branddashboard";
+          } else if (role === "vendor" || isTeamStaff) {
             setViewState("dashboard");
             window.location.hash = "#/dashboard";
           } else if (isStaff) {
@@ -563,9 +634,32 @@ export default function App() {
             redirectLoggedInUserToDashboard();
             return;
           }
+          if (role === "vendor") {
+            const { data: vendorProfile } = await supabase
+              .from("profiles")
+              .select("account_type, branch_status")
+              .eq("id", user.id)
+              .maybeSingle();
+            if (vendorProfile?.account_type === "branch" && vendorProfile.branch_status !== "active") {
+              await supabase.auth.signOut();
+              toast.error("This branch workspace is not active. Contact your Brand Admin.");
+              setViewState("signin");
+              window.location.hash = "#/signin";
+              return;
+            }
+          }
         }
 
-        // 3. Admin views (admin) -> Only admin profiles
+        // 3. Brand organisation views -> Only brand profiles
+        if (view === "branddashboard") {
+          if (role !== "brand" && !isAdmin) {
+            toast.error("Brand workspace access restricted. Redirecting to your account dashboard.");
+            redirectLoggedInUserToDashboard();
+            return;
+          }
+        }
+
+        // 4. Admin views (admin) -> Only admin profiles
         if (view === "admin") {
           if (!isAdmin && !isStaff) {
             toast.error("Administrative access required. Redirecting to your account dashboard.");
@@ -574,7 +668,7 @@ export default function App() {
           }
         }
 
-        // 4. Team field staff views (teamdashboard) -> Only staff members
+        // 5. Team field staff views (teamdashboard) -> Only staff members
         if (view === "teamdashboard") {
           const { data: membership } = await supabase
             .from("team_members")
@@ -612,6 +706,7 @@ export default function App() {
     "catalog",
     "admin",
     "shop",
+    "brand",
     "signin",
     "signup",
     "customersignup",
@@ -620,6 +715,7 @@ export default function App() {
     "adminlogin",
     "teamlogin",
     "teamdashboard",
+    "branddashboard",
   ].includes(view) || !isSystemDomain;
 
   if (isValidatingRoute) {
@@ -650,6 +746,7 @@ export default function App() {
         {view === "adminlogin" && <SignInView setView={setView} />}
         {view === "admin" && <AdminView setView={setView} />}
         {view === "shop" && <ShopView setView={setView} />}
+        {view === "brand" && <BrandPublicView setView={setView} />}
         {view === "signin" && <SignInView setView={setView} />}
         {view === "signup" && <SignUpView setView={setView} />}
         {view === "customersignup" && <CustomerSignUpView setView={setView} />}
@@ -657,8 +754,10 @@ export default function App() {
         {view === "resetpassword" && <ResetPasswordView setView={setView} />}
         {view === "teamlogin" && <TeamLoginView setView={setView} />}
         {view === "teamdashboard" && <TeamDashboardView setView={setView} />}
+        {view === "branddashboard" && <BrandDashboardView setView={setView} />}
         {view === "userdashboard" && <UserDashboardView setView={setView} />}
       </div>
+      <ScrollToTopButton hidden={view === "admin"} />
       {!hideNav && <Footer setView={setView} />}
     </div>
   );

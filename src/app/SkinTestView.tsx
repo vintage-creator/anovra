@@ -435,25 +435,30 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       }
       const fetchVendor = async () => {
         try {
-          let query = supabase.from("profiles").select("id, name, business_name, white_label, plan, phone, created_at");
+          let query = supabase.from("profiles").select("id, name, business_name, white_label, plan, phone, created_at, slug, account_type, branch_status");
           
           if (!isSystemDomain) {
             query = query.eq("custom_domain", hostname);
           } else {
-            query = query.ilike("business_name", slug.replace(/-/g, " "));
+            query = query.or(`slug.eq.${slug},business_name.ilike.${slug.replace(/-/g, " ")}`);
           }
 
           const { data, error } = await query.maybeSingle();
             
           if (error && error.message.includes("white_label")) {
             // Fallback: Query base columns only if settings columns do not exist
-            let fallbackQuery = supabase.from("profiles").select("id, name, business_name, plan, phone, created_at");
+            let fallbackQuery = supabase.from("profiles").select("id, name, business_name, plan, phone, created_at, slug, account_type, branch_status");
             if (!isSystemDomain) {
               fallbackQuery = fallbackQuery.eq("custom_domain", hostname);
             } else {
-              fallbackQuery = fallbackQuery.ilike("business_name", slug.replace(/-/g, " "));
+              fallbackQuery = fallbackQuery.or(`slug.eq.${slug},business_name.ilike.${slug.replace(/-/g, " ")}`);
             }
             const { data: baseData } = await fallbackQuery.maybeSingle();
+            if (baseData?.account_type === "branch" && baseData.branch_status !== "active") {
+              setVendorProfile(null);
+              setTrialExpired(true);
+              return;
+            }
             if (baseData) {
               setVendorProfile({
                 ...baseData,
@@ -466,6 +471,11 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               }
             }
           } else if (data) {
+            if (data.account_type === "branch" && data.branch_status !== "active") {
+              setVendorProfile(null);
+              setTrialExpired(true);
+              return;
+            }
             setVendorProfile(data);
             const joinedYear = data.created_at ? new Date(data.created_at) : new Date();
             const daysDiff = (Date.now() - joinedYear.getTime()) / (1000 * 60 * 60 * 24);

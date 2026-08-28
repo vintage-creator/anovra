@@ -75,11 +75,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [tagline, setTagline] = useState("");
   const [location, setLocation] = useState("");
   const [since, setSince] = useState("");
+  const [profileSlug, setProfileSlug] = useState("");
   const [isSavingStore, setIsSavingStore] = useState(false);
   const [storeSaved, setStoreSaved] = useState(false);
   const [isEditingStorefront, setIsEditingStorefront] = useState(false);
+  const [isBranchAccount, setIsBranchAccount] = useState(false);
 
-  const shopSlug = (brandName || "your-brand").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "your-brand";
+  const shopSlug = profileSlug || (brandName || "your-brand").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "your-brand";
   const shopLink = `https://anovra.africa/#/shop/${shopSlug}`;
   const testLink = `https://anovra.africa/#/scan/${shopSlug}`;
   const [apiKey, setApiKey] = useState("");
@@ -200,7 +202,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         try {
           const { data, error } = await supabase
             .from("profiles")
-            .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url, tagline, location, since")
+            .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url, tagline, location, since, slug, account_type, parent_brand_id, branch_status")
             .eq("id", effectiveVendorId)
             .maybeSingle();
           if (error) {
@@ -216,7 +218,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           // Fallback to base columns if query failed due to missing settings columns
           const { data: baseData } = await supabase
             .from("profiles")
-            .select("name, plan, is_verified, business_name")
+            .select("name, plan, is_verified, business_name, slug, account_type, parent_brand_id, branch_status")
             .eq("id", effectiveVendorId)
             .maybeSingle();
           profile = baseData;
@@ -239,7 +241,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             const { data } = await supabase
               .from("profiles")
               .insert([fallbackProfile])
-              .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url, tagline, location, since")
+              .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url, tagline, location, since, slug, account_type, parent_brand_id, branch_status")
               .maybeSingle();
             insertedData = data;
           } catch (e) {
@@ -247,7 +249,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             const { data } = await supabase
               .from("profiles")
               .insert([fallbackProfile])
-              .select("name, plan, is_verified, business_name")
+              .select("name, plan, is_verified, business_name, slug, account_type, parent_brand_id, branch_status")
               .maybeSingle();
             insertedData = data;
           }
@@ -257,6 +259,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         }
 
         if (profile) {
+          const branchAccount = profile.account_type === "branch";
+          setIsBranchAccount(branchAccount);
           setIsVerified(profile.is_verified);
           setVendorPlan(profile.plan as any);
           if (isPlaceholderBusinessName(profile.business_name)) {
@@ -267,6 +271,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           if (profile.tagline) setTagline(profile.tagline);
           if (profile.location) setLocation(profile.location);
           if (profile.since) setSince(profile.since);
+          if (profile.slug) setProfileSlug(profile.slug);
           if (profile.custom_domain) {
             setCustomDomain(profile.custom_domain);
             setDomainSaved(true);
@@ -844,6 +849,17 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     { id: "support", label: "Support", icon: LifeBuoy },
     { id: "settings", label: "Settings", icon: Settings },
   ];
+  const workspaceLabel = isBranchAccount ? "BRAND BRANCH" : "ACTIVE PARTNER";
+  const workspaceNameFallback = isBranchAccount ? "Branch profile not named" : "Store profile not named";
+  const dashboardSubtitle = {
+    overview: isBranchAccount ? "Branch storefront performance, scans, and sales" : "Branded skincare intelligence & store statistics",
+    catalog: isBranchAccount ? "Manage this branch's live safety-screened product catalogue" : "Manage your live safety-screened product catalogue",
+    analytics: isBranchAccount ? "Branch customer scan reports & conversion activity" : "Live customer scan reports & product funnel conversions",
+    settings: isBranchAccount ? "Branch profile, test link, billing, and storefront settings" : "Custom domains, compliance logs & partner profiles",
+    team: isBranchAccount ? "Manage branch operators and permissions" : "Manage vendor account operators & permissions",
+    api: isBranchAccount ? "Branch API credentials, webhooks, and developer endpoints" : "Access credentials, webhooks & developer endpoints",
+    support: isBranchAccount ? "Get branch setup and launch support from Anovra" : "Connect with Anovra account specialists",
+  } satisfies Record<DashTab, string>;
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
@@ -878,8 +894,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
           {/* Brand Profile Pane */}
           <div className="p-5 border-b border-border bg-[#FAF7F2]/45">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>ACTIVE PARTNER</p>
-            <h4 className="font-bold text-foreground text-sm leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{brandName || "Store profile not named"}</h4>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{workspaceLabel}</p>
+            <h4 className="font-bold text-foreground text-sm leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{brandName || workspaceNameFallback}</h4>
             
             {/* Plan badge */}
             <div className="flex flex-wrap gap-1.5 mt-2">
@@ -897,6 +913,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
 
             {/* Segmented Switch Toggle for Role Simulation */}
+            {!isBranchAccount && (
             <div className="mt-3.5 bg-[#FAF7F2] dark:bg-zinc-900 border border-border/80 rounded-xl p-2 shadow-2xs">
               <div className="flex items-center justify-between mb-1.5 px-1">
                 <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Simulate Role View</span>
@@ -934,6 +951,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 ))}
               </div>
             </div>
+            )}
 
             <div className="mt-3.5 bg-card border border-border/80 rounded-lg p-2 flex items-center justify-between gap-1.5 shadow-2xs">
               <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[130px]" title={shopLink}>
@@ -1063,13 +1081,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               {tabs.find((t) => t.id === tab)?.label}
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {tab === "overview" && "Branded skincare intelligence & store statistics"}
-              {tab === "catalog" && "Manage your live safety-screened product catalogue"}
-              {tab === "analytics" && "Live customer scan reports & product funnel conversions"}
-              {tab === "settings" && "Custom domains, compliance logs & partner profiles"}
-              {tab === "team" && "Manage vendor account operators & permissions"}
-              {tab === "api" && "Access credentials, webhooks & developer endpoints"}
-              {tab === "support" && "Connect with Anovra account specialists"}
+              {dashboardSubtitle[tab]}
             </p>
           </div>
           
@@ -1078,7 +1090,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             className="flex items-center gap-1.5 text-xs bg-[#008236] text-white px-4 py-2.5 rounded-xl hover:bg-[#006c2c] transition-colors font-bold shadow-xs cursor-pointer self-start sm:self-auto"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
-            <Store className="w-4 h-4" /> Preview Live Shop
+            <Store className="w-4 h-4" /> {isBranchAccount ? "Preview Branch Shop" : "Preview Live Shop"}
           </button>
         </div>
 
@@ -1089,6 +1101,34 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       {/* ── OVERVIEW ── */}
       {tab === "overview" && (
         <div className="space-y-6">
+          {isBranchAccount && (
+            <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-[#008236]/10 text-[#008236] flex items-center justify-center shrink-0">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Branch workspace</p>
+                    <h3 className="text-lg font-semibold text-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {brandName || "This branch"} manages its own storefront, scans, catalogue, and sales.
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      Brand HQ can monitor this branch, but the data shown here belongs to this branch account only.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleGenerateShop}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#008236] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#006c2c] transition-colors"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Open branch shop
+                </button>
+              </div>
+            </div>
+          )}
           {/* Setup Profile Warning Banner */}
           {(!tagline || tagline === "Science-backed skincare for African skin" || !location || location === "Lagos, Nigeria") && (
             <div className="bg-[#008236]/10 border border-[#008236]/15 p-4 rounded-2xl flex items-center justify-between gap-4 flex-wrap animate-fade-in">
@@ -1891,7 +1931,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
                     <div>
                       <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Storefront Customization</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Customize your storefront preview tagline, location, and metadata details.</p>
+                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Customise your storefront preview tagline, location, and metadata details.</p>
                     </div>
                     <button
                       onClick={async () => {
@@ -3013,7 +3053,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 {simulatedRoleInfo === "Vendor" ? "About the Vendor (Owner) role:" : "Why invite team members under this role?"}
               </p>
               {simulatedRoleInfo === "Vendor" && (
-                <p>As the primary Vendor, you are the direct partner of Anovra who registered this organization. You hold full ownership access and can invite other team members (like Managers or Viewers) to collaborate.</p>
+                <p>As the primary Vendor, you are the direct partner of Anovra who registered this organisation. You hold full ownership access and can invite other team members (like Managers or Viewers) to collaborate.</p>
               )}
               {simulatedRoleInfo === "Manager" && (
                 <p>Invite managers (like store supervisors or product catalogue leads) to actively curate your brand catalogue and review customer skin scans. Their access excludes changing billing or developer settings.</p>

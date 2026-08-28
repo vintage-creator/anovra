@@ -73,7 +73,7 @@ function bodyFor(template: string, payload: any) {
     return htmlShell(subjects[template] || "Admin alert", `<p>${escapeHtml(payload.message || "A new admin action needs attention.")}</p><pre style="white-space:pre-wrap;background:#f6f7f5;border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:12px;">${escapeHtml(JSON.stringify(payload.metadata || {}, null, 2))}</pre>`);
   }
   if (template === "vendor_signup_trial_started") {
-    return htmlShell(subjects[template], `<p>Hi ${name},</p><p>Your 14-day Anovra trial for <strong>${brand}</strong> has started. During trial, you can test storefront, scan, team, API preview, webhooks, analytics, and catalog workflows.</p>`);
+    return htmlShell(subjects[template], `<p>Hi ${name},</p><p>Your 14-day Anovra trial for <strong>${brand}</strong> has started. During trial, you can test storefront, scan, team, API preview, webhooks, analytics, and catalogue workflows.</p>`);
   }
   if (template === "product_submitted") {
     return htmlShell(subjects[template], `<p>Hi ${name},</p><p><strong>${product}</strong> has been submitted for Anovra safety review. It will show publicly after approval by Anovra.</p>`);

@@ -110,11 +110,11 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         window.location.hostname.includes("webcontainer") || 
         window.location.hostname.includes("stackblitz");
 
-        // 1. Fetch profiles to match by business name slug or custom domain
+        // 1. Fetch profiles to match by stored slug, business name slug, or custom domain
         const { data: profiles } = await supabase.from("profiles").select("*");
         const marketplaceProfiles = (profiles || [])
-          .filter((p) => p.business_name && !isPlaceholderName(p.business_name))
-          .map((p) => ({ id: p.id, name: p.business_name, slug: slugify(p.business_name), verified: p.is_verified }));
+          .filter((p) => p.business_name && !isPlaceholderName(p.business_name) && p.account_type !== "brand")
+          .map((p) => ({ id: p.id, name: p.business_name, slug: p.slug || slugify(p.business_name), verified: p.is_verified }));
         setVendorOptions(marketplaceProfiles);
         let targetProfile = profiles?.find((p) => {
           if (!isSystemDomain && p.custom_domain === window.location.hostname) {
@@ -122,7 +122,8 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           }
           const businessName = isPlaceholderName(p.business_name) ? "" : p.business_name || "";
           const fallbackName = isPlaceholderName(p.name) ? "" : p.name || "";
-          return [businessName, fallbackName].some((name) => slugify(name) === activeSlug);
+          const storedSlug = p.slug || "";
+          return storedSlug === activeSlug || [businessName, fallbackName].some((name) => slugify(name) === activeSlug);
         });
 
         // Dashboard previews should use the signed-in vendor. Public shop links should not.
@@ -138,6 +139,12 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           }
         }
         if (!targetProfile && !isMarketplace) {
+          setProfileNotFound(true);
+          setVendorProfileId(null);
+          setGenerating(false);
+          return;
+        }
+        if (targetProfile?.account_type === "branch" && targetProfile.branch_status !== "active") {
           setProfileNotFound(true);
           setVendorProfileId(null);
           setGenerating(false);

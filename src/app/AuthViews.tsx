@@ -74,7 +74,10 @@ function isSocialUrl(url: string): boolean {
 }
 
 export function SignUpView({ setView }: { setView: (v: View) => void }) {
-  const selectedRole = "vendor";
+  const [accountKind, setAccountKind] = useState<"vendor" | "brand">(() =>
+    sessionStorage.getItem("signup_account_kind") === "brand" ? "brand" : "vendor"
+  );
+  const selectedRole = accountKind;
   
   // Vendor state
   const [currentStep, setCurrentStep] = useState(1);
@@ -151,13 +154,13 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
 
   const handleFormSubmit = async () => {
     if (selectedRole === "customer" && !isCustomerValid) return;
-    if (selectedRole === "vendor" && !canSubmitVendor) return;
+    if ((selectedRole === "vendor" || selectedRole === "brand") && !canSubmitVendor) return;
 
     setLoading(true);
     try {
-      // 1. Upload CAC Document to Supabase Storage if vendor
+      // 1. Upload CAC Document to Supabase Storage if vendor or brand
       let documentUrl = "";
-      if (selectedRole === "vendor" && cacDocFile) {
+      if ((selectedRole === "vendor" || selectedRole === "brand") && cacDocFile) {
         try {
           const fileExt = cacDocFile.name.split('.').pop();
           const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
@@ -194,11 +197,13 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
             full_name: form.fullName,
             email: form.email,
             role: selectedRole,
-            cac_number: selectedRole === "vendor" ? form.cac : null,
-            cac_document_url: selectedRole === "vendor" ? documentUrl : null,
-            business_name: selectedRole === "vendor" ? form.businessName : null,
-            phone: selectedRole === "vendor" ? "+234" + form.whatsapp : null,
+            account_type: selectedRole,
+            cac_number: selectedRole === "vendor" || selectedRole === "brand" ? form.cac : null,
+            cac_document_url: selectedRole === "vendor" || selectedRole === "brand" ? documentUrl : null,
+            business_name: selectedRole === "vendor" || selectedRole === "brand" ? form.businessName : null,
+            phone: selectedRole === "vendor" || selectedRole === "brand" ? "+234" + form.whatsapp : null,
             nafdac_number: selectedRole === "vendor" ? form.referralCode : null,
+            slug: form.businessName,
           },
         },
       });
@@ -206,8 +211,8 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
       if (error) throw error;
       if (!data.user) throw new Error("Registration failed: User details could not be generated.");
 
-      // 3. Trigger onboarding email Edge Function for vendors
-      if (selectedRole === "vendor") {
+      // 3. Trigger onboarding email Edge Function for vendors and brand accounts
+      if (selectedRole === "vendor" || selectedRole === "brand") {
         try {
           await sendEmailNotification("vendor_signup_trial_started", {
             name: form.fullName,
@@ -215,11 +220,12 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
             brand: form.businessName,
           });
           await sendEmailNotification("admin_cac_submitted", {
-            message: `${form.businessName || form.fullName} created a vendor account and submitted onboarding compliance details.`,
+            message: `${form.businessName || form.fullName} created a ${selectedRole === "brand" ? "brand" : "vendor"} account and submitted onboarding compliance details.`,
             metadata: {
               name: form.fullName,
               email: form.email,
               business_name: form.businessName,
+              account_type: selectedRole,
               cac_document_url: form.cacDoc || null,
               nafdac_number: form.referralCode || null,
             },
@@ -290,7 +296,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
             </button>
 
             <p className="text-xs tracking-[0.2em] uppercase text-[#008236] font-bold mb-1.5" style={{ fontFamily: "'DM Mono', monospace" }}>
-              Vendor Registration
+              {accountKind === "brand" ? "Brand Registration" : "Vendor Registration"}
             </p>
             <h1 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
               Join the Platform
@@ -309,6 +315,25 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
             
              {/* VENDOR REGISTER FLOW (Multi-Step Wizard) */}
              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-2 p-1 bg-muted/60 border border-border rounded-2xl">
+                  {[
+                    { id: "vendor" as const, title: "Independent Vendor", desc: "Single storefront" },
+                    { id: "brand" as const, title: "Brand HQ", desc: "Multi-branch organisation" },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        sessionStorage.setItem("signup_account_kind", item.id);
+                        setAccountKind(item.id);
+                      }}
+                      className={`rounded-xl px-3 py-3 text-left transition-all ${accountKind === item.id ? "bg-card shadow-sm border border-border text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      <span className="block text-xs font-bold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.title}</span>
+                      <span className="block text-[10px] mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{item.desc}</span>
+                    </button>
+                  ))}
+                </div>
                 {/* Multi-step progress indicator */}
                 <div className="flex items-center gap-2 mb-2">
                   {[
@@ -385,10 +410,10 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                     </div>
 
                     <div>
-                      <label className={labelCls}>Business / Company Name *</label>
+                      <label className={labelCls}>{accountKind === "brand" ? "Brand / Company Name *" : "Business / Company Name *"}</label>
                       <input
                         className={inputCls}
-                        placeholder="e.g. Radiant Skin Co."
+                        placeholder={accountKind === "brand" ? "e.g. Tulip Skincare Group" : "e.g. Radiant Skin Co."}
                         value={form.businessName}
                         onChange={(e) => set("businessName", e.target.value)}
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -600,7 +625,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                           <span>Submitting…</span>
                         </>
                       ) : (
-                        "Submit Vendor Application"
+                        accountKind === "brand" ? "Submit Brand Application" : "Submit Vendor Application"
                       )}
                     </button>
                   )}
@@ -1014,6 +1039,8 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
 
       if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
         setView("admin");
+      } else if (userRole === "brand") {
+        setView("branddashboard");
       } else if (isStaff) {
         setView("teamdashboard");
       } else if (teamMemberRole === "Manager" || teamMemberRole === "Viewer") {
@@ -1027,11 +1054,13 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       } else {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("business_name")
+          .select("business_name, account_type")
           .eq("id", data.user.id)
           .single();
 
-        if (profile?.business_name) {
+        if (profile?.account_type === "brand") {
+          setView("branddashboard");
+        } else if (profile?.business_name) {
           setView("dashboard");
         } else {
           setView("userdashboard");
@@ -1105,6 +1134,8 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
 
       if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
         setView("admin");
+      } else if (userRole === "brand") {
+        setView("branddashboard");
       } else if (isStaff) {
         setView("teamdashboard");
       } else if (teamMemberRole === "Manager" || teamMemberRole === "Viewer") {
@@ -1118,11 +1149,13 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       } else {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("business_name")
+          .select("business_name, account_type")
           .eq("id", data.user.id)
           .single();
 
-        if (profile?.business_name) {
+        if (profile?.account_type === "brand") {
+          setView("branddashboard");
+        } else if (profile?.business_name) {
           setView("dashboard");
         } else {
           setView("userdashboard");

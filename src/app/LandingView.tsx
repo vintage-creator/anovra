@@ -27,14 +27,14 @@ const SKIN_CONDITIONS = [
 
   // Cycle 3: Face -> Upper body -> Full body
   { name: "Dark Spots", desc: "Post-inflammatory marks & spots", image: "/concerns/dark-spots.jpg" },
-  { name: "Premature Aging", desc: "Early texture & firmness loss", image: "/concerns/premature-aging.jpg" },
+  { name: "Premature Ageing", desc: "Early texture & firmness loss", image: "/concerns/premature-aging.jpg" },
   { name: "Skin Irritation", desc: "Redness, stinging & inflammation", image: "/concerns/skin-irritation.jpg" },
 
   // Interleaved Remaining: Face -> Full body -> Face -> Full body -> Face -> Face -> Face
   { name: "Melasma", desc: "Hormonal pigmentation patches", image: "/concerns/melasma.jpg" },
   { name: "Sensitive Skin", desc: "Reactive, easily irritated skin", image: "/concerns/sensitive-skin.jpg" },
-  { name: "Fine Lines & Wrinkles", desc: "Early signs of skin aging", image: "/concerns/fine-lines-wrinkles.jpg" },
-  { name: "Sun Damage", desc: "UV-induced discoloration & aging", image: "/concerns/sun-damage.jpg" },
+  { name: "Fine Lines & Wrinkles", desc: "Early signs of skin ageing", image: "/concerns/fine-lines-wrinkles.jpg" },
+  { name: "Sun Damage", desc: "UV-induced discolouration & ageing", image: "/concerns/sun-damage.jpg" },
   { name: "Enlarged Pores", desc: "Visibly open pores & rough texture", image: "/concerns/enlarged-pores.jpg" },
   { name: "Oily Skin", desc: "Excess sebum & shine", image: "/concerns/oily-skin.jpg" },
   { name: "Combination Skin", desc: "Mixed oily & dry skin zones", image: "/concerns/combination-skin.jpg" },
@@ -466,6 +466,11 @@ function RecommendationEngineSection() {
 // ---- LANDING ----
 
 export function LandingView({ setView }: { setView: (v: View) => void }) {
+  const openSignup = (kind: "vendor" | "brand" = "vendor") => {
+    sessionStorage.setItem("signup_account_kind", kind);
+    setView("signup");
+  };
+
   const features = [
     {
       icon: <Scan className="w-5 h-5" />,
@@ -577,11 +582,18 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                 <ArrowRight className="w-4 h-4 text-white" />
               </button>
               <button
-                onClick={() => setView("dashboard")}
+                onClick={() => openSignup("vendor")}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 border-2 border-[#008236] bg-transparent hover:bg-[#008236]/10 text-[#008236] dark:text-emerald-400 font-bold px-6 py-3.5 rounded-xl transition-all text-center cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                Explore for Vendors
+                Start Vendor Storefront
+              </button>
+              <button
+                onClick={() => openSignup("brand")}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 border border-border bg-card hover:bg-muted text-foreground font-bold px-6 py-3.5 rounded-xl transition-all text-center cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                Register Brand HQ
               </button>
             </div>
           </div>
@@ -764,6 +776,101 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
       {/* AI Recommendation Engine */}
       <RecommendationEngineSection />
 
+      {/* Brand HQ */}
+      <section className="py-20 bg-background border-y border-border/60">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-10 items-center">
+          <div>
+            <span
+              className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[#008236] font-semibold mb-4"
+              style={{ fontFamily: "'DM Mono', monospace" }}
+            >
+              <Users className="w-4 h-4" />
+              For established brands
+            </span>
+            <h2
+              className="text-3xl sm:text-4xl font-light text-foreground leading-tight mb-4"
+              style={{ fontFamily: "'Fraunces', serif" }}
+            >
+              Register your skincare brand. Manage every outlet from one HQ.
+            </h2>
+            <p className="text-muted-foreground leading-relaxed max-w-xl mb-7" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Give each branch its own storefront and skin test link while HQ tracks performance, controls access, and keeps product quality consistent.
+            </p>
+
+            <div className="grid sm:grid-cols-3 gap-3 mb-8">
+              {[
+                { icon: <Store className="w-4 h-4" />, title: "Branch storefronts", text: "Dedicated shop and scan links for each outlet." },
+                { icon: <BarChart2 className="w-4 h-4" />, title: "HQ analytics", text: "Compare scans, catalogue activity, and revenue." },
+                { icon: <Shield className="w-4 h-4" />, title: "Access control", text: "Add, pause, or reactivate branch accounts." },
+              ].map((item) => (
+                <div key={item.title} className="rounded-2xl border border-border bg-card p-4 shadow-xs">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-700 flex items-center justify-center mb-3">
+                    {item.icon}
+                  </div>
+                  <h3 className="text-sm font-bold text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {item.title}
+                  </h3>
+                  <p className="text-xs leading-relaxed text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {item.text}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => openSignup("brand")}
+                className="inline-flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold px-6 py-3.5 rounded-xl shadow-md transition-all"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                Register your brand
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-border bg-[#FAF7F2] p-5 sm:p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  Brand network
+                </p>
+                <h3 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Tulip Naturals HQ
+                </h3>
+              </div>
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
+                14-day trial
+              </span>
+            </div>
+            <div className="space-y-3">
+              {[
+                { name: "Tulip Lagos Island", slug: "tulip-lagos-island", scans: "128 scans", status: "Active" },
+                { name: "Tulip Abuja", slug: "tulip-abuja", scans: "94 scans", status: "Active" },
+                { name: "Tulip Port Harcourt", slug: "tulip-port-harcourt", scans: "41 scans", status: "Review" },
+              ].map((branch) => (
+                <div key={branch.slug} className="rounded-2xl border border-border bg-white p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {branch.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>
+                        anovra.africa/#/shop/{branch.slug}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 font-semibold">{branch.scans}</span>
+                      <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-semibold">{branch.status}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Pricing Section with Brand Color Background */}
       <section className="py-20 max-w-7xl mx-auto px-4 sm:px-6">
         <div className="bg-[#FAF7F2] text-foreground rounded-3xl p-6 sm:p-12 shadow-sm border border-border/80">
@@ -821,7 +928,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     ))}
                   </ul>
                   <button
-                    onClick={() => setView("signup")}
+                    onClick={() => openSignup(t.name === "Brand" ? "brand" : "vendor")}
                     className={cn(
                       "w-full py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm",
                       t.highlight
