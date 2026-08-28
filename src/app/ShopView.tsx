@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import {
-  Star, ChevronRight, X, Check, CheckCircle, MessageCircle, ExternalLink,
-  Search, Store, Globe, MapPin, Shield, Zap, Lock, Package, Scan, AlertCircle,
+  Award, Building2, Check, CheckCircle, CheckCircle2, ChevronRight, ExternalLink,
+  Globe, Lock, MapPin, MessageCircle, Package, Scan, Search, Shield, ShieldCheck,
+  Star, Store, X, Zap, AlertCircle,
 } from "lucide-react";
 import type { View } from "./types";
 import { supabase } from "./utils/supabase";
@@ -191,14 +192,63 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             reviewsVal = 0;
           }
 
+          let parentBrandData: any = null;
+          try {
+            const parentId = targetProfile.parent_brand_id || targetProfile.brand_id;
+            if (parentId) {
+              const { data: brandRow } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", parentId)
+                .maybeSingle();
+              if (brandRow) parentBrandData = brandRow;
+            }
+
+            if (!parentBrandData) {
+              const { data: branchLink } = await supabase
+                .from("brand_branches")
+                .select("brand_id, branch_name, location")
+                .or(`branch_id.eq."${targetProfile.id}",id.eq."${targetProfile.id}"`)
+                .maybeSingle();
+              if (branchLink?.brand_id) {
+                const { data: brandRow } = await supabase
+                  .from("profiles")
+                  .select("*")
+                  .eq("id", branchLink.brand_id)
+                  .maybeSingle();
+                if (brandRow) parentBrandData = brandRow;
+              }
+            }
+          } catch (e) {
+            console.warn("Could not resolve parent brand for branch:", e);
+          }
+
+          const isBranch = targetProfile.account_type === "branch" || Boolean(parentBrandData);
+          const isBrandHQ = targetProfile.account_type === "brand";
+          const brandDisplayName = parentBrandData?.business_name || parentBrandData?.name || null;
+          const resolvedLogo = targetProfile.logo_url || parentBrandData?.logo_url || null;
+
+          // Only show actual tagline if explicitly saved in database (no synthetic hardcoded fallbacks)
+          const cleanTagline = taglineVal && taglineVal !== "Personalised skincare recommendations from this vendor"
+            ? taglineVal
+            : (parentBrandData?.tagline || "");
+
           setVendor({
+            id: targetProfile.id,
             name: displayName || titleFromSlug(activeSlug),
-            tagline: taglineVal,
+            tagline: cleanTagline,
             location: locationVal,
             rating: ratingVal,
             reviews: reviewsVal,
             since: sinceVal,
-            is_verified: targetProfile.is_verified || false
+            is_verified: targetProfile.is_verified || false,
+            logo_url: resolvedLogo,
+            account_type: targetProfile.account_type,
+            isBranch,
+            isBrandHQ,
+            parent_brand_name: brandDisplayName,
+            parent_brand_logo: parentBrandData?.logo_url || null,
+            parent_brand_slug: parentBrandData?.slug || null,
           });
         } else {
           setVendor({
@@ -209,6 +259,12 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             reviews: 0,
             since: "",
             is_verified: true,
+            logo_url: null,
+            isBranch: false,
+            isBrandHQ: false,
+            parent_brand_name: null,
+            parent_brand_logo: null,
+            parent_brand_slug: null,
           });
         }
 
@@ -316,6 +372,13 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
     }
     sessionStorage.setItem("active_scan_slug", activeSlug);
     setView("skintest");
+  };
+
+  const openParentBrand = () => {
+    if (!vendor.parent_brand_name) return;
+    const brandSlug = vendor.parent_brand_slug || slugify(vendor.parent_brand_name);
+    sessionStorage.setItem("active_brand_slug", brandSlug);
+    setView("brand");
   };
 
   const handleAddToCart = async (product: any) => {
@@ -534,42 +597,90 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         </div>
       )}
 
-      {/* Shop Header */}
-      <div className="bg-foreground text-primary-foreground py-10">
+      {/* Luxury Brand / Vendor Storefront Hero Header */}
+      <div className="bg-gradient-to-br from-[#1B120B] via-[#24170F] to-[#120B06] text-amber-50 py-10 sm:py-12 border-b border-amber-950/60 relative overflow-hidden">
+        {/* Subtle Luxury Ambient Glow */}
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top_left,rgba(0,130,54,0.18),transparent_50%),radial-gradient(ellipse_at_bottom_right,rgba(217,119,6,0.12),transparent_50%)]" />
+
         <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-              {/* Logo container */}
-              <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center flex-shrink-0 shadow-lg">
-                <span className="text-2xl font-bold text-white" style={{ fontFamily: "'Fraunces', serif" }}>
-                  {vendor.name[0]}
-                </span>
-              </div>
-              <div className="space-y-1">
+              {/* Brand Logo container */}
+              {vendor.logo_url ? (
+                <div className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl bg-white p-2.5 border border-white/20 shadow-2xl flex items-center justify-center flex-shrink-0 overflow-hidden group">
+                  <img
+                    src={vendor.logo_url}
+                    alt={vendor.name}
+                    className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                  />
+                </div>
+              ) : (
+                <div className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl bg-gradient-to-br from-amber-700 via-amber-800 to-stone-900 border border-amber-500/40 text-amber-100 flex items-center justify-center flex-shrink-0 shadow-2xl">
+                  <span className="text-3xl font-light tracking-wider" style={{ fontFamily: "'Fraunces', serif" }}>
+                    {vendor.name[0]}
+                  </span>
+                </div>
+              )}
+
+              <div className="space-y-2">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-2xl font-light" style={{ fontFamily: "'Fraunces', serif" }}>
+                  <h1 className="text-2xl sm:text-3xl font-light text-amber-50" style={{ fontFamily: "'Fraunces', serif" }}>
                     {vendor.name}
                   </h1>
-                  {vendor.is_verified && (
-                    <span className="flex items-center gap-1 text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium">
-                      <CheckCircle className="w-3 h-3" /> Verified vendor
+                  {vendor.isBranch ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-0.5 rounded-full font-medium shadow-xs">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Verified Branch</span>
                     </span>
-                  )}
+                  ) : vendor.isBrandHQ ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-0.5 rounded-full font-medium shadow-xs">
+                      <Award className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Official Brand HQ</span>
+                    </span>
+                  ) : vendor.is_verified ? (
+                    <span className="inline-flex items-center gap-1 text-xs bg-green-500/20 text-green-300 border border-green-500/30 px-2.5 py-0.5 rounded-full font-medium">
+                      <CheckCircle2 className="w-3 h-3 text-green-400" />
+                      <span>Verified Skincare Partner</span>
+                    </span>
+                  ) : null}
                 </div>
-                <p className="text-sm opacity-60" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {vendor.tagline}
-                </p>
-                <div className="flex items-center gap-4 text-xs opacity-50 flex-wrap" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{vendor.location}</span>
+
+                {vendor.parent_brand_name && (
+                  <p className="text-xs text-amber-200/90 font-medium flex items-center gap-1.5 flex-wrap">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>
+                      Official Regional Outlet of{" "}
+                      <button
+                        type="button"
+                        onClick={openParentBrand}
+                        className="text-amber-100 font-bold underline decoration-amber-400/40 underline-offset-2 hover:text-emerald-200 transition-colors cursor-pointer"
+                      >
+                        {vendor.parent_brand_name}
+                      </button>
+                    </span>
+                  </p>
+                )}
+
+                {vendor.tagline && (
+                  <p className="text-sm text-amber-100/75 max-w-2xl font-light leading-relaxed">
+                    {vendor.tagline}
+                  </p>
+                )}
+
+                <div className="flex items-center gap-4 text-xs text-amber-100/60 flex-wrap pt-0.5">
+                  <span className="flex items-center gap-1 font-sans text-xs text-amber-100/80">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>{vendor.location}</span>
+                  </span>
                   {vendor.rating && vendor.reviews > 0 && (
-                    <span className="flex items-center gap-1">
-                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                      {vendor.rating} ({vendor.reviews} reviews)
+                    <span className="flex items-center gap-1 font-sans text-xs text-amber-200">
+                      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
+                      <span>{vendor.rating} ({vendor.reviews} verified reviews)</span>
                     </span>
                   )}
-                  <span>
-                    {activeProducts.length} product{activeProducts.length !== 1 ? "s" : ""}
-                    {vendor.since ? ` · Since ${vendor.since}` : ""}
+                  <span className="text-amber-100/60">
+                    {activeProducts.length} certified product{activeProducts.length !== 1 ? "s" : ""}
+                    {vendor.since ? ` · Established ${vendor.since}` : ""}
                   </span>
                 </div>
               </div>
@@ -578,36 +689,60 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             {!isMarketplace && (
               <button
                 onClick={openSkinTest}
-                className="flex-shrink-0 flex items-center gap-2 bg-accent text-white px-5 py-3 rounded-xl font-medium text-sm hover:bg-accent/90 transition-colors shadow-lg cursor-pointer"
+                className="flex-shrink-0 flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white px-5 py-3 rounded-xl font-semibold text-sm transition-all shadow-lg hover:shadow-xl active:scale-98 cursor-pointer w-full md:w-auto"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 <Scan className="w-4 h-4" />
-                Get my skin match
+                <span>Get my skin match</span>
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* AI skin test banner */}
-      {!isMarketplace && <div className="bg-accent/8 border-b border-accent/20 py-3 px-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <Zap className="w-4 h-4 text-accent shrink-0" />
-            <p className="text-sm text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              <span className="font-medium">Not sure which product is right for you?</span>{" "}
-              <span className="text-muted-foreground">Take a 90-second AI skin test and get matched to the exact products your skin needs.</span>
-            </p>
+      {/* Brand Trust & Authority Ribbon */}
+      <div className="bg-[#140C07] border-b border-amber-900/40 py-3 px-4 text-amber-100/80">
+        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-[11px] sm:text-xs"><strong>NAFDAC Approved</strong> catalogue</span>
           </div>
-          <button
-            onClick={openSkinTest}
-            className="text-xs font-medium text-accent border border-accent/40 px-3 py-1.5 rounded-lg hover:bg-accent hover:text-white transition-colors cursor-pointer"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
-            Start free skin test →
-          </button>
+          <div className="flex items-center gap-2">
+            <Scan className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-[11px] sm:text-xs"><strong>AI Skin Match</strong> diagnostics</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Package className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-[11px] sm:text-xs"><strong>Authentic Formulations</strong> only</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-[11px] sm:text-xs"><strong>Direct Regional</strong> inventory</span>
+          </div>
         </div>
-      </div>}
+      </div>
+
+      {/* AI skin test banner */}
+      {!isMarketplace && (
+        <div className="bg-accent/8 border-b border-accent/20 py-3 px-4">
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <Zap className="w-4 h-4 text-accent shrink-0" />
+              <p className="text-sm text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <span className="font-semibold">Not sure which formulation is right for your skin?</span>{" "}
+                <span className="text-muted-foreground">Take a 90-second AI dermatological scan and get matched to verified products from this storefront.</span>
+              </p>
+            </div>
+            <button
+              onClick={openSkinTest}
+              className="text-xs font-semibold text-accent border border-accent/40 px-3.5 py-1.5 rounded-lg hover:bg-accent hover:text-white transition-colors cursor-pointer shrink-0"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              Start free skin test →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">

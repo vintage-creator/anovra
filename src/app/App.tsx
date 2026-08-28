@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import {
   Menu,
   ChevronDown,
-  Sparkles,
   User,
   Store,
   ShieldCheck,

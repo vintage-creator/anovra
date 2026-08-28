@@ -876,7 +876,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       {/* Left Sidebar Frame */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border flex flex-col justify-between transform transition-transform duration-300 md:translate-x-0 md:sticky md:top-0 md:h-screen shrink-0",
+          "fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border flex flex-col justify-between transform-gpu transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform md:translate-x-0 md:sticky md:top-0 md:h-screen shrink-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -1021,7 +1021,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
       {/* Mobile Overlay Background */}
       {sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/35 backdrop-blur-xs md:hidden" />
+        <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/35 backdrop-blur-xs md:hidden animate-in fade-in duration-300" />
       )}
 
       {/* Right Viewport Content */}

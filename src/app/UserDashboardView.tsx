@@ -656,7 +656,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           <>
         <div className="lg:pl-72">
           <aside className={cn(
-            "fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border p-3 shadow-xl transform transition-transform duration-300 lg:z-20 lg:translate-x-0 lg:top-24 lg:left-0 lg:h-[calc(100vh-6rem)] lg:rounded-r-xl lg:rounded-l-none lg:border-y lg:border-r lg:shadow-sm overflow-y-auto",
+            "fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border p-3 shadow-xl transform-gpu transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform lg:z-20 lg:translate-x-0 lg:top-24 lg:left-0 lg:h-[calc(100vh-6rem)] lg:rounded-r-xl lg:rounded-l-none lg:border-y lg:border-r lg:shadow-sm overflow-y-auto",
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           )}>
             <div className="px-3 py-3 border-b border-border mb-3 flex items-center justify-between gap-3">
@@ -759,7 +759,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
           </aside>
           {sidebarOpen && (
-            <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/35 backdrop-blur-xs lg:hidden" />
+            <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/35 backdrop-blur-xs lg:hidden animate-in fade-in duration-300" />
           )}
 
           <main className="min-w-0 animate-in fade-in duration-300">

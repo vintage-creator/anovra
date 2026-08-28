@@ -1061,16 +1061,17 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             </div>
 
             {/* Mobile Navigation Drawer Overlay */}
-            {isMobileMenuOpen && (
-              <div 
-                className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] transition-opacity duration-300"
-                onClick={() => setIsMobileMenuOpen(false)}
-              />
-            )}
+            <div
+              className={cn(
+                "fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] transition-[opacity,visibility] duration-500 ease-out lg:hidden",
+                isMobileMenuOpen ? "visible opacity-100" : "invisible opacity-0 pointer-events-none"
+              )}
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
 
             {/* Mobile Navigation Drawer Panel */}
             <aside className={cn(
-              "fixed top-0 left-0 bottom-0 z-50 w-72 max-w-[85vw] bg-card border-r border-border p-5 flex flex-col justify-between transition-transform duration-300 ease-out transform",
+              "fixed top-0 left-0 bottom-0 z-50 w-72 max-w-[85vw] bg-card border-r border-border p-5 flex flex-col justify-between transform-gpu transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
               isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
             )}>
               <div>

@@ -3,7 +3,7 @@ import type { ElementType } from "react";
 import {
   Activity, AlertCircle, Archive, ArrowRight, ArrowUpRight, BarChart2, Building2, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, CreditCard, Edit,
   ExternalLink, Eye, Filter, GripVertical, HelpCircle, Image as ImageIcon, Info, LayoutDashboard, LayoutGrid, Link as LinkIcon, List, Loader2,
-  LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, Scan, Search, Settings, ShieldCheck, Sparkles,
+  LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, Scan, Search, Settings, ShieldCheck,
   Tag, Trash2, Upload, Users, X,
 } from "lucide-react";
 import type { View } from "./types";
@@ -153,7 +153,15 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
         .eq("id", user.id)
         .maybeSingle();
       if (profileError) throw profileError;
-      setBrandProfile(profile);
+      
+      const mergedProfile = {
+        ...profile,
+        logo_url: profile?.logo_url || user.user_metadata?.logo_url || null,
+        tagline: profile?.tagline || user.user_metadata?.tagline || "",
+        location: profile?.location || user.user_metadata?.location || "",
+        business_name: profile?.business_name || user.user_metadata?.business_name || profile?.name,
+      };
+      setBrandProfile(mergedProfile);
 
       const { data: branchRows, error: branchError } = await supabase
         .from("brand_branches")
@@ -241,6 +249,103 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
     { label: "Customer scans", value: String(scans.length), sub: "Across all branches", icon: Scan },
     { label: "Revenue tracked", value: `₦${payments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toLocaleString()}`, sub: "Successful branch payments", icon: BarChart2 },
   ];
+
+  const [showEditBrandIdentity, setShowEditBrandIdentity] = useState(false);
+  const [brandIdentityForm, setBrandIdentityForm] = useState({
+    businessName: "",
+    tagline: "",
+    location: "",
+    logoUrl: "",
+  });
+  const [brandLogoFile, setBrandLogoFile] = useState<File | null>(null);
+  const [savingBrandIdentity, setSavingBrandIdentity] = useState(false);
+
+  const openEditBrandIdentity = () => {
+    setBrandIdentityForm({
+      businessName: brandProfile?.business_name || brandProfile?.name || "",
+      tagline: brandProfile?.tagline || "",
+      location: brandProfile?.location || "",
+      logoUrl: brandProfile?.logo_url || "",
+    });
+    setBrandLogoFile(null);
+    setShowEditBrandIdentity(true);
+  };
+
+  const uploadBrandLogo = async (): Promise<string | null> => {
+    if (brandLogoFile) {
+      if (brandLogoFile.size > 5 * 1024 * 1024) {
+        throw new Error("Logo image must be smaller than 5MB.");
+      }
+      const fileExt = brandLogoFile.name.split(".").pop() || "png";
+      const fileName = `brand-logos/${brandProfile?.id || "brand"}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from("product-images")
+        .upload(fileName, brandLogoFile, { cacheControl: "3600", upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from("product-images").getPublicUrl(fileName);
+      return publicUrl;
+    }
+
+    const trimmedUrl = brandIdentityForm.logoUrl.trim();
+    if (!trimmedUrl) return null;
+    return trimmedUrl;
+  };
+
+  const saveBrandIdentity = async () => {
+    if (!brandProfile?.id) return;
+    if (brandIdentityForm.businessName.trim().length < 2) {
+      toast.error("Enter a valid brand name.");
+      return;
+    }
+
+    setSavingBrandIdentity(true);
+    try {
+      const logoUrl = await uploadBrandLogo();
+      const metadataUpdates: any = {
+        business_name: brandIdentityForm.businessName.trim(),
+        full_name: brandIdentityForm.businessName.trim(),
+        tagline: brandIdentityForm.tagline.trim(),
+        location: brandIdentityForm.location.trim(),
+      };
+      if (logoUrl) {
+        metadataUpdates.logo_url = logoUrl;
+      }
+
+      // 1. Update auth user_metadata
+      await supabase.auth.updateUser({
+        data: metadataUpdates,
+      });
+
+      // 2. Update profiles table
+      const profilePayload: any = {
+        business_name: brandIdentityForm.businessName.trim(),
+        name: brandIdentityForm.businessName.trim(),
+        tagline: brandIdentityForm.tagline.trim(),
+        location: brandIdentityForm.location.trim(),
+      };
+      if (logoUrl) {
+        profilePayload.logo_url = logoUrl;
+      }
+
+      const { error: profileErr } = await supabase
+        .from("profiles")
+        .update(profilePayload)
+        .eq("id", brandProfile.id);
+
+      if (profileErr) {
+        throw profileErr;
+      }
+
+      toast.success("Brand profile updated successfully!");
+      setShowEditBrandIdentity(false);
+      await loadBrandData();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update brand profile.");
+    } finally {
+      setSavingBrandIdentity(false);
+    }
+  };
 
   const copy = async (value: string, key: string) => {
     await navigator.clipboard?.writeText(value).catch(() => {});
@@ -520,59 +625,39 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
         badgeText="Brand Admin"
         role="admin"
         showShopLink={false}
+        onMenuClick={() => setMobileMenuOpen(true)}
+        menuLabel="Brand menu"
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
-        <div className="lg:hidden mb-4 flex items-center justify-between gap-3 bg-card border border-border rounded-2xl p-3 shadow-sm">
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Brand workspace</p>
-            <p className="text-sm font-semibold text-foreground truncate">{brandProfile?.business_name || brandProfile?.name}</p>
-          </div>
+        <div className={cn("fixed inset-0 z-50 lg:hidden transition-[visibility] duration-500", mobileMenuOpen ? "visible" : "invisible")}>
           <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center shrink-0"
-            aria-label="Open brand menu"
+            className={cn(
+              "absolute inset-0 bg-black/45 transition-opacity duration-500 ease-out",
+              mobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+            )}
+            aria-label="Close brand menu"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div
+            className={cn(
+              "absolute left-0 top-0 bottom-0 w-[min(86vw,320px)] bg-card border-r border-border shadow-2xl p-4 transform-gpu transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+              mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+            )}
           >
-            <Menu className="w-5 h-5" />
-          </button>
-        </div>
-
-        {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <button
-              className="absolute inset-0 bg-black/45"
-              aria-label="Close brand menu"
-              onClick={() => setMobileMenuOpen(false)}
-            />
-            <div className="absolute left-0 top-0 bottom-0 w-[min(86vw,320px)] bg-card border-r border-border shadow-2xl p-4 animate-in slide-in-from-left duration-200">
-              <div className="flex items-center justify-between mb-4">
-                <img src="/logo.png" alt="Anovra" className="h-11 w-auto object-contain" />
-                <button
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="w-9 h-9 rounded-xl bg-muted text-foreground flex items-center justify-center"
-                  aria-label="Close brand menu"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <BrandSidebar
-                brandName={brandProfile?.business_name || brandProfile?.name}
-                navItems={navItems}
-                tab={tab}
-                copied={copied}
-                brandUrl={brandUrl}
-                copy={copy}
-                setTab={selectTab}
-                signOut={signOut}
-              />
+            <div className="flex items-center justify-between mb-4">
+              <img src="/logo.png" alt="Anovra" className="h-11 w-auto object-contain" />
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-9 h-9 rounded-xl bg-muted text-foreground flex items-center justify-center"
+                aria-label="Close brand menu"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          </div>
-        )}
-
-        <div className="grid lg:grid-cols-[248px_1fr] gap-6 items-start">
-          <aside className="hidden lg:block self-start lg:sticky lg:top-24 h-[calc(100vh-7.5rem)] bg-card border border-border rounded-2xl p-3 flex flex-col justify-between overflow-hidden shadow-xs">
             <BrandSidebar
               brandName={brandProfile?.business_name || brandProfile?.name}
+              brandLogo={brandProfile?.logo_url}
               navItems={navItems}
               tab={tab}
               copied={copied}
@@ -580,13 +665,31 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
               copy={copy}
               setTab={selectTab}
               signOut={signOut}
+              onEditBrandIdentity={openEditBrandIdentity}
+            />
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-[248px_1fr] gap-6 items-start">
+          <aside className="hidden lg:block self-start lg:sticky lg:top-24 h-[calc(100vh-7.5rem)] bg-card border border-border rounded-2xl p-3 flex flex-col justify-between overflow-hidden shadow-xs">
+            <BrandSidebar
+              brandName={brandProfile?.business_name || brandProfile?.name}
+              brandLogo={brandProfile?.logo_url}
+              navItems={navItems}
+              tab={tab}
+              copied={copied}
+              brandUrl={brandUrl}
+              copy={copy}
+              setTab={selectTab}
+              signOut={signOut}
+              onEditBrandIdentity={openEditBrandIdentity}
             />
           </aside>
 
           <main className="space-y-6">
             {tab === "overview" && (
               <>
-                <section className="bg-card border border-border rounded-2xl p-5 sm:p-6">
+                <section className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-xs">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                     <div>
                       <p className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Organisation command centre</p>
@@ -597,10 +700,23 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                         Add branches once, let each branch operate as a vendor, and monitor scans, products, and sales from one brand-level dashboard.
                       </p>
                     </div>
-                    <button onClick={() => { setTab("branches"); setShowCreateBranch(true); }} className="inline-flex items-center justify-center gap-2 bg-accent text-white px-4 py-3 rounded-xl text-sm font-semibold">
-                      <Plus className="w-4 h-4" />
-                      Add branch
-                    </button>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <button
+                        onClick={openEditBrandIdentity}
+                        className="w-11 h-11 rounded-xl bg-card border border-border text-foreground hover:bg-muted inline-flex items-center justify-center transition-colors shadow-xs cursor-pointer"
+                        aria-label="Open brand settings"
+                        title="Brand settings"
+                      >
+                        <Edit className="w-4 h-4 text-accent" />
+                      </button>
+                      <button
+                        onClick={() => { setTab("branches"); setShowCreateBranch(true); }}
+                        className="inline-flex items-center justify-center gap-2 bg-accent text-white px-4 py-3 rounded-xl text-sm font-semibold shadow-xs cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add branch</span>
+                      </button>
+                    </div>
                   </div>
                 </section>
 
@@ -788,6 +904,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                     )}
                     <BranchDetail
                       branch={enrichedBranches.find((branch) => branch.branch_id === selectedBranchId) || enrichedBranches[0]}
+                      brandProfile={brandProfile}
                       onEditProduct={editProduct}
                       onDeleteProduct={deleteProduct}
                       onEditBranch={openBranchEdit}
@@ -853,6 +970,139 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
           </main>
         </div>
       </div>
+
+      {/* Edit Brand Profile Modal */}
+      {showEditBrandIdentity && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-accent font-semibold mb-1">
+                  <ShieldCheck className="w-4 h-4" /> Brand settings
+                </span>
+                <h2 className="text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Brand identity
+                </h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Update the name, logo, tagline, and headquarters shown on your Brand HQ, public brand page, and branch storefronts.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowEditBrandIdentity(false)}
+                className="w-9 h-9 rounded-xl bg-muted text-foreground flex items-center justify-center shrink-0 hover:bg-muted/80 transition-colors cursor-pointer"
+                aria-label="Close brand profile editor"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Logo Upload & Preview Section */}
+              <div className="p-4 bg-muted/30 border border-border rounded-2xl">
+                <label className="block text-xs font-semibold text-foreground mb-2">
+                  Official Brand Logo
+                </label>
+                <div className="flex items-center gap-4">
+                  {/* Live Logo Preview Container */}
+                  <div className="w-20 h-20 rounded-2xl bg-white p-2 border border-border shadow-md flex items-center justify-center shrink-0 overflow-hidden">
+                    {brandLogoFile ? (
+                      <img
+                        src={URL.createObjectURL(brandLogoFile)}
+                        alt="Logo preview"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : brandIdentityForm.logoUrl ? (
+                      <img
+                        src={brandIdentityForm.logoUrl}
+                        alt="Logo preview"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full rounded-xl bg-gradient-to-br from-amber-700 to-stone-900 text-amber-100 flex items-center justify-center font-bold text-xl">
+                        {(brandIdentityForm.businessName || "B")[0]}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-2">
+                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-accent text-white text-xs font-semibold cursor-pointer hover:bg-accent/90 transition-all shadow-xs">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload logo image</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setBrandLogoFile(file);
+                        }}
+                      />
+                    </label>
+                    <p className="text-[11px] text-muted-foreground">
+                      PNG, SVG, or high-res WebP/JPG (transparent background recommended, max 5MB).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <span className="block text-[10px] uppercase font-mono text-muted-foreground mb-1">Or paste high-res image URL</span>
+                  <input
+                    type="url"
+                    value={brandIdentityForm.logoUrl}
+                    onChange={(e) => setBrandIdentityForm((prev) => ({ ...prev, logoUrl: e.target.value }))}
+                    placeholder="https://your-cdn.com/logo.png"
+                    className="w-full bg-input-background border border-border rounded-xl px-3 py-2 text-xs outline-none focus:border-accent"
+                  />
+                </div>
+              </div>
+
+              {/* Brand Metadata Inputs */}
+              <Input
+                label="Brand Name / Trading Name"
+                value={brandIdentityForm.businessName}
+                onChange={(value) => setBrandIdentityForm((prev) => ({ ...prev, businessName: value }))}
+                placeholder="e.g. Tulip Beauty Skincare"
+              />
+
+              <Input
+                label="Brand Tagline / Mission"
+                value={brandIdentityForm.tagline}
+                onChange={(value) => setBrandIdentityForm((prev) => ({ ...prev, tagline: value }))}
+                placeholder="e.g. Clinical dermatological formulations backed by science"
+              />
+
+              <Input
+                label="Headquarters / Origin Location"
+                value={brandIdentityForm.location}
+                onChange={(value) => setBrandIdentityForm((prev) => ({ ...prev, location: value }))}
+                placeholder="e.g. Lagos & Abuja, Nigeria"
+              />
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-border flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowEditBrandIdentity(false)}
+                className="px-4 py-2.5 rounded-xl bg-muted text-foreground text-xs font-semibold hover:bg-muted/80 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveBrandIdentity}
+                disabled={savingBrandIdentity}
+                className="px-5 py-2.5 rounded-xl bg-accent text-white text-xs font-semibold hover:bg-accent/90 transition-all shadow-xs disabled:opacity-60 inline-flex items-center gap-2 cursor-pointer"
+              >
+                {savingBrandIdentity ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                <span>Save brand identity</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -946,6 +1196,7 @@ function LinkCopyCard({
 
 function BrandSidebar({
   brandName,
+  brandLogo,
   navItems,
   tab,
   copied,
@@ -953,8 +1204,10 @@ function BrandSidebar({
   copy,
   setTab,
   signOut,
+  onEditBrandIdentity,
 }: {
   brandName?: string;
+  brandLogo?: string | null;
   navItems: { id: BrandTab; label: string; icon: ElementType }[];
   tab: BrandTab;
   copied: string;
@@ -962,17 +1215,43 @@ function BrandSidebar({
   copy: (value: string, key: string) => void;
   setTab: (tab: BrandTab) => void;
   signOut: () => void;
+  onEditBrandIdentity?: () => void;
 }) {
   return (
     <div className="h-full flex flex-col justify-between">
       <div className="space-y-3">
         <div className="px-3 py-3 border-b border-border mb-3">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Brand workspace</p>
-          <p className="text-sm font-semibold text-foreground mt-1 truncate">{brandName || "Brand"}</p>
-          <button onClick={() => copy(brandUrl, "brand-url")} className="mt-2 text-xs text-accent inline-flex items-center gap-1 font-semibold">
-            {copied === "brand-url" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-            Copy brand page
-          </button>
+          <div className="flex items-center gap-2.5">
+            {brandLogo ? (
+              <div className="w-10 h-10 rounded-xl bg-white p-1 border border-border shadow-xs flex items-center justify-center shrink-0 overflow-hidden">
+                <img src={brandLogo} alt={brandName || "Brand"} className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-700 to-stone-900 text-amber-100 flex items-center justify-center shrink-0 font-bold text-base shadow-xs">
+                {(brandName || "B")[0]}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Brand workspace</p>
+              <p className="text-sm font-semibold text-foreground truncate">{brandName || "Brand"}</p>
+            </div>
+          </div>
+          <div className="mt-2.5 flex items-center justify-between gap-2 pt-2 border-t border-border/60">
+            <button onClick={() => copy(brandUrl, "brand-url")} className="text-xs text-accent hover:text-accent/80 inline-flex items-center gap-1 font-semibold cursor-pointer">
+              {copied === "brand-url" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+              <span>Brand link</span>
+            </button>
+            {onEditBrandIdentity && (
+              <button
+                onClick={onEditBrandIdentity}
+                className="w-8 h-8 rounded-lg bg-muted text-muted-foreground hover:text-foreground hover:bg-secondary inline-flex items-center justify-center cursor-pointer"
+                title="Brand settings"
+                aria-label="Open brand settings"
+              >
+                <Edit className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         </div>
         <nav className="space-y-1.5">
           {navItems.map((item) => {
@@ -982,7 +1261,7 @@ function BrandSidebar({
                 key={item.id}
                 onClick={() => setTab(item.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors cursor-pointer",
                   tab === item.id ? "bg-accent text-white font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
               >
@@ -997,7 +1276,7 @@ function BrandSidebar({
       <div className="pt-3 border-t border-border mt-auto">
         <button
           onClick={signOut}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium cursor-pointer"
         >
           <LogOut className="w-4 h-4" />
           Sign out
@@ -1289,83 +1568,168 @@ function OverviewBranchDirectory({
           </div>
         ) : (
           /* Table View */
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-border bg-muted/40 text-muted-foreground font-mono uppercase tracking-wider text-[10px]">
-                  <th className="py-3.5 px-5 font-semibold">Branch & Location</th>
-                  <th className="py-3.5 px-4 font-semibold">Contact</th>
-                  <th className="py-3.5 px-4 font-semibold text-center">Catalogue</th>
-                  <th className="py-3.5 px-4 font-semibold text-center">Scans</th>
-                  <th className="py-3.5 px-4 font-semibold text-right">Revenue Tracked</th>
-                  <th className="py-3.5 px-4 font-semibold text-center">Status</th>
-                  <th className="py-3.5 px-5 font-semibold text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredAndSortedBranches.map((branch) => {
-                  const isActive = branch.status === "active";
-                  const isSuspended = branch.status === "suspended";
+          <div>
+            <div className="md:hidden p-4 space-y-3">
+              {filteredAndSortedBranches.map((branch) => {
+                const isActive = branch.status === "active";
+                const isSuspended = branch.status === "suspended";
 
-                  return (
-                    <tr key={branch.id || branch.branch_id} className="hover:bg-muted/15 transition-colors">
-                      <td className="py-3.5 px-5 min-w-44">
-                        <p className="font-semibold text-sm text-foreground">{branch.branch_name}</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                return (
+                  <article
+                    key={branch.id || branch.branch_id}
+                    className="bg-background border border-border rounded-2xl p-4 space-y-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-semibold text-foreground truncate">{branch.branch_name}</h3>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1 min-w-0">
                           <MapPin className="w-3 h-3 text-accent shrink-0" />
-                          <span>{branch.location || "Location not set"}</span>
+                          <span className="truncate">{branch.location || "Location not set"}</span>
                         </p>
-                      </td>
-                      <td className="py-3.5 px-4 min-w-44">
-                        <p className="text-foreground">{branch.branch_email}</p>
-                        {branch.phone && <p className="text-muted-foreground font-mono text-[11px] mt-0.5">{branch.phone}</p>}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-semibold text-foreground">{branch.products || 0}</span>
-                        <span className="text-muted-foreground block text-[10px]">{branch.approvedProducts || 0} approved</span>
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-semibold text-foreground">
-                        {branch.scans || 0}
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-foreground">
-                        ₦{Number(branch.revenue || 0).toLocaleString()}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span
-                          className={cn(
-                            "text-[10px] uppercase font-mono font-semibold px-2.5 py-0.5 rounded-full",
-                            isActive
-                              ? "bg-green-50 text-green-700 border border-green-200"
-                              : isSuspended
-                              ? "bg-red-50 text-red-700 border border-red-200"
-                              : "bg-muted text-muted-foreground border border-border"
-                          )}
-                        >
-                          {branch.status || "active"}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => onSelectBranch(branch.branch_id)}
-                            className="px-3 py-1.5 rounded-lg bg-accent text-white font-semibold text-xs hover:bg-accent/90 transition-colors inline-flex items-center gap-1"
+                      </div>
+                      <span
+                        className={cn(
+                          "text-[10px] uppercase font-mono font-semibold px-2.5 py-0.5 rounded-full shrink-0",
+                          isActive
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : isSuspended
+                            ? "bg-red-50 text-red-700 border border-red-200"
+                            : "bg-muted text-muted-foreground border border-border"
+                        )}
+                      >
+                        {branch.status || "active"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs text-muted-foreground">
+                      <p className="flex items-center gap-1.5 min-w-0">
+                        <Mail className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{branch.branch_email}</span>
+                      </p>
+                      {branch.phone && (
+                        <p className="flex items-center gap-1.5 font-mono text-[11px]">
+                          <Phone className="w-3.5 h-3.5 shrink-0" />
+                          <span>{branch.phone}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-xl bg-muted/30 border border-border/70 p-2 text-center">
+                        <p className="text-[10px] uppercase font-mono text-muted-foreground">Products</p>
+                        <p className="text-sm font-semibold text-foreground">{branch.products || 0}</p>
+                        <p className="text-[9px] text-muted-foreground">{branch.approvedProducts || 0} approved</p>
+                      </div>
+                      <div className="rounded-xl bg-muted/30 border border-border/70 p-2 text-center">
+                        <p className="text-[10px] uppercase font-mono text-muted-foreground">Scans</p>
+                        <p className="text-sm font-semibold text-foreground">{branch.scans || 0}</p>
+                      </div>
+                      <div className="rounded-xl bg-muted/30 border border-border/70 p-2 text-center">
+                        <p className="text-[10px] uppercase font-mono text-muted-foreground">Revenue</p>
+                        <p className="text-sm font-semibold text-foreground font-mono">
+                          ₦{Number(branch.revenue || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => onSelectBranch(branch.branch_id)}
+                        className="min-h-10 rounded-xl bg-accent text-white font-semibold text-xs hover:bg-accent/90 transition-colors"
+                      >
+                        Manage
+                      </button>
+                      <button
+                        onClick={() => copy(branch.shopUrl, `shop-${branch.branch_id}`)}
+                        className="min-h-10 rounded-xl bg-muted text-muted-foreground hover:text-foreground font-semibold text-xs transition-colors"
+                        title="Copy storefront link"
+                      >
+                        {copied === `shop-${branch.branch_id}` ? "Copied" : "Copy shop link"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full min-w-[860px] text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40 text-muted-foreground font-mono uppercase tracking-wider text-[10px]">
+                    <th className="py-3.5 px-5 font-semibold">Branch & Location</th>
+                    <th className="py-3.5 px-4 font-semibold">Contact</th>
+                    <th className="py-3.5 px-4 font-semibold text-center">Catalogue</th>
+                    <th className="py-3.5 px-4 font-semibold text-center">Scans</th>
+                    <th className="py-3.5 px-4 font-semibold text-right">Revenue Tracked</th>
+                    <th className="py-3.5 px-4 font-semibold text-center">Status</th>
+                    <th className="py-3.5 px-5 font-semibold text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredAndSortedBranches.map((branch) => {
+                    const isActive = branch.status === "active";
+                    const isSuspended = branch.status === "suspended";
+
+                    return (
+                      <tr key={branch.id || branch.branch_id} className="hover:bg-muted/15 transition-colors">
+                        <td className="py-3.5 px-5 min-w-44">
+                          <p className="font-semibold text-sm text-foreground">{branch.branch_name}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 text-accent shrink-0" />
+                            <span>{branch.location || "Location not set"}</span>
+                          </p>
+                        </td>
+                        <td className="py-3.5 px-4 min-w-44">
+                          <p className="text-foreground">{branch.branch_email}</p>
+                          {branch.phone && <p className="text-muted-foreground font-mono text-[11px] mt-0.5">{branch.phone}</p>}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="font-semibold text-foreground">{branch.products || 0}</span>
+                          <span className="text-muted-foreground block text-[10px]">{branch.approvedProducts || 0} approved</span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-semibold text-foreground">
+                          {branch.scans || 0}
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-mono font-semibold text-foreground">
+                          ₦{Number(branch.revenue || 0).toLocaleString()}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span
+                            className={cn(
+                              "text-[10px] uppercase font-mono font-semibold px-2.5 py-0.5 rounded-full",
+                              isActive
+                                ? "bg-green-50 text-green-700 border border-green-200"
+                                : isSuspended
+                                ? "bg-red-50 text-red-700 border border-red-200"
+                                : "bg-muted text-muted-foreground border border-border"
+                            )}
                           >
-                            Manage
-                          </button>
-                          <button
-                            onClick={() => copy(branch.shopUrl, `shop-${branch.branch_id}`)}
-                            className="px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium text-xs transition-colors"
-                            title="Copy storefront link"
-                          >
-                            {copied === `shop-${branch.branch_id}` ? "Copied" : "Shop"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            {branch.status || "active"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => onSelectBranch(branch.branch_id)}
+                              className="px-3 py-1.5 rounded-lg bg-accent text-white font-semibold text-xs hover:bg-accent/90 transition-colors inline-flex items-center gap-1"
+                            >
+                              Manage
+                            </button>
+                            <button
+                              onClick={() => copy(branch.shopUrl, `shop-${branch.branch_id}`)}
+                              className="px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium text-xs transition-colors"
+                              title="Copy storefront link"
+                            >
+                              {copied === `shop-${branch.branch_id}` ? "Copied" : "Shop"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )
       ) : (
@@ -1507,6 +1871,7 @@ function ChevronIndicator({ selected }: { selected: boolean }) {
 
 function BranchDetail({
   branch,
+  brandProfile,
   onEditProduct,
   onDeleteProduct,
   onEditBranch,
@@ -1519,6 +1884,7 @@ function BranchDetail({
   setView,
 }: {
   branch: any;
+  brandProfile?: any;
   onEditProduct: (product: any) => void;
   onDeleteProduct: (product: any) => void;
   onEditBranch: (branch: any) => void;
