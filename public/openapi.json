@@ -1,523 +1,510 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Anovra Vendor API",
-    "version": "1.0.0",
-    "description": "Interactive documentation for vendor and Brand HQ integrations. The API is served by Supabase Edge Functions and uses live Anovra API keys for vendor data access."
+    "title": "Anovra Platform API",
+    "version": "1.1.0",
+    "description": "Interactive API documentation for Anovra authentication, role-based dashboards, vendor integrations, Brand HQ branch management, customer scan flows, admin operations, and Supabase Edge Functions. The backend is hosted on Supabase; frontend deployments on Vercel can serve this Swagger page as a static asset."
   },
   "servers": [
     {
-      "url": "https://ejpdrcbgqelxlopivwld.supabase.co/functions/v1",
-      "description": "Production Supabase Edge Functions"
+      "url": "https://ejpdrcbgqelxlopivwld.supabase.co",
+      "description": "Anovra Supabase project"
     }
   ],
   "tags": [
-    {
-      "name": "Vendor API",
-      "description": "Authenticated endpoints for scans, recommendations, and catalogue sync."
-    },
-    {
-      "name": "Webhooks",
-      "description": "Outbound events sent by Anovra to configured vendor webhook endpoints."
-    },
-    {
-      "name": "Developer setup",
-      "description": "Session-authenticated helper functions for API key and custom domain setup."
-    }
+    { "name": "Authentication", "description": "Supabase Auth endpoints used by customers, vendors, Brand HQ, branches, team members, and admins." },
+    { "name": "Profiles & RBAC", "description": "Account profiles and role-segregated dashboard routing." },
+    { "name": "Customer", "description": "Customer dashboard, analyses, family profiles, recommendations, reviews, and carts." },
+    { "name": "Vendor & Branch", "description": "Vendor and branch catalogue, scans, payments, webhooks, settings, and storefront flows." },
+    { "name": "Brand HQ", "description": "Parent brand account, branches, branch products, branch scans, branch sales, and public brand pages." },
+    { "name": "Admin", "description": "Platform admin review, safety ingredients, vendors, brands, reviews, payments, email logs, webhook logs, and team operations." },
+    { "name": "AI & Edge Functions", "description": "Gemini-powered analysis, product label extraction, skin advisor chat, email, webhook, API key, domain, and branch management functions." },
+    { "name": "Developer API", "description": "External vendor API endpoints authenticated by Anovra live API keys." },
+    { "name": "Storage", "description": "Supabase Storage buckets used for product images, scan images, logos, and compliance documents." },
+    { "name": "Webhooks", "description": "Outbound events sent by Anovra to vendor webhook endpoints." }
   ],
   "paths": {
-    "/vendor-api/scans": {
+    "/auth/v1/signup": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Create a customer, vendor, or Brand HQ account",
+        "description": "Creates a Supabase Auth user. Role and account metadata determine whether the app routes the user to the customer dashboard, vendor dashboard, or Brand HQ dashboard.",
+        "security": [{ "SupabaseAnonKey": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "$ref": "#/components/requestBodies/SignupBody" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthSession" },
+          "400": { "$ref": "#/components/responses/AuthError" }
+        }
+      }
+    },
+    "/auth/v1/token": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Sign in with email and password",
+        "description": "Pass query parameter `grant_type=password`. The returned access token is used for dashboard table access and session-authenticated Edge Functions.",
+        "security": [{ "SupabaseAnonKey": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "name": "grant_type", "in": "query", "required": true, "schema": { "type": "string", "enum": ["password"] } }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordLoginBody" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthSession" },
+          "400": { "$ref": "#/components/responses/AuthError" }
+        }
+      }
+    },
+    "/auth/v1/user": {
       "get": {
-        "tags": ["Vendor API"],
-        "security": [
-          {
-            "VendorApiKey": []
-          }
-        ],
-        "summary": "List recent skin analysis reports",
-        "description": "Returns up to 100 recent scan records for the vendor connected to the bearer API key.",
-        "operationId": "listVendorScans",
+        "tags": ["Authentication"],
+        "summary": "Get the current authenticated user",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
         "responses": {
-          "200": {
-            "description": "Recent scans returned successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScanListResponse"
-                },
-                "example": {
-                  "data": [
-                    {
-                      "id": "scan_123",
-                      "vendor_id": "vendor_uuid",
-                      "area": "Face",
-                      "score": 78,
-                      "skin_type": "Oily/Combination Skin",
-                      "condition": "Acne & Hyperpigmentation",
-                      "created_at": "2026-08-29T10:15:00Z"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorised"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          }
+          "200": { "description": "Current user returned.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthUser" } } } },
+          "401": { "$ref": "#/components/responses/AuthError" }
+        }
+      },
+      "put": {
+        "tags": ["Authentication"],
+        "summary": "Update current user's auth profile or password",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthUserUpdate" } } } },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthSession" },
+          "400": { "$ref": "#/components/responses/AuthError" }
         }
       }
     },
-    "/vendor-api/catalog": {
+    "/auth/v1/logout": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Sign out current session",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "responses": { "204": { "description": "Signed out." } }
+      }
+    },
+    "/auth/v1/recover": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Send password reset email",
+        "security": [{ "SupabaseAnonKey": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "$ref": "#/components/requestBodies/EmailBody" },
+        "responses": {
+          "200": { "description": "Recovery email queued." },
+          "400": { "$ref": "#/components/responses/AuthError" }
+        }
+      }
+    },
+    "/rest/v1/profiles": {
       "get": {
-        "tags": ["Vendor API"],
-        "security": [
-          {
-            "VendorApiKey": []
-          }
+        "tags": ["Profiles & RBAC"],
+        "summary": "List or fetch profiles by role, slug, or id",
+        "description": "Used across routing and dashboards. RLS restricts rows by role: customers see themselves; vendors/branches see themselves; Brand HQ sees its organisation; admins see platform records.",
+        "security": [{ "SupabaseAnonKey": [] }, { "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "$ref": "#/components/parameters/AuthorizationHeaderOptional" },
+          { "name": "select", "in": "query", "schema": { "type": "string", "default": "*" } },
+          { "name": "id", "in": "query", "schema": { "type": "string", "example": "eq.user_uuid" } },
+          { "name": "slug", "in": "query", "schema": { "type": "string", "example": "eq.vintage" } },
+          { "name": "account_type", "in": "query", "schema": { "type": "string", "example": "eq.brand" } }
         ],
-        "summary": "List approved catalogue products",
-        "description": "Returns approved products for the vendor connected to the bearer API key. Pending safety review products are excluded.",
-        "operationId": "listVendorCatalog",
-        "responses": {
-          "200": {
-            "description": "Approved catalogue returned successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProductListResponse"
-                },
-                "example": {
-                  "data": [
-                    {
-                      "id": "product_123",
-                      "vendor_id": "vendor_uuid",
-                      "name": "Niacinamide 10% Serum",
-                      "brand": "Vintage",
-                      "category": "Serum",
-                      "price": 4500,
-                      "nafdac_status": "approved",
-                      "image_url": "https://example.com/product.jpg",
-                      "created_at": "2026-08-29T10:15:00Z"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorised"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          }
-        }
+        "responses": { "200": { "$ref": "#/components/responses/ProfileRows" }, "403": { "$ref": "#/components/responses/PostgrestError" } }
+      },
+      "patch": {
+        "tags": ["Profiles & RBAC"],
+        "summary": "Update profile, storefront settings, plan, custom domain, webhook URL, or brand identity",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "name": "id", "in": "query", "required": true, "schema": { "type": "string", "example": "eq.user_uuid" } }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/ProfilePatchBody" },
+        "responses": { "200": { "$ref": "#/components/responses/ProfileRows" }, "403": { "$ref": "#/components/responses/PostgrestError" } }
       }
     },
-    "/vendor-api/recommendations": {
-      "post": {
-        "tags": ["Vendor API"],
-        "security": [
-          {
-            "VendorApiKey": []
-          }
+    "/rest/v1/products": {
+      "get": {
+        "tags": ["Customer", "Vendor & Branch", "Brand HQ", "Admin"],
+        "summary": "List catalogue products",
+        "description": "Used by storefronts, customer product shop, vendor catalogue, Brand HQ branch products, and admin safety review.",
+        "security": [{ "SupabaseAnonKey": [] }, { "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "$ref": "#/components/parameters/AuthorizationHeaderOptional" },
+          { "name": "select", "in": "query", "schema": { "type": "string", "default": "*" } },
+          { "name": "vendor_id", "in": "query", "schema": { "type": "string", "example": "eq.vendor_uuid" } },
+          { "name": "nafdac_status", "in": "query", "schema": { "type": "string", "example": "eq.approved" } },
+          { "name": "order", "in": "query", "schema": { "type": "string", "example": "created_at.desc" } }
         ],
-        "summary": "Get product recommendations",
-        "description": "Ranks the vendor's approved products against a supplied concern or skin concern.",
-        "operationId": "createVendorRecommendations",
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RecommendationRequest"
-              },
-              "example": {
-                "concern": "hyperpigmentation"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Recommendations returned successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProductListResponse"
-                },
-                "example": {
-                  "data": [
-                    {
-                      "id": "product_123",
-                      "name": "Niacinamide 10% Serum",
-                      "brand": "Vintage",
-                      "category": "Serum",
-                      "price": 4500,
-                      "nafdac_status": "approved",
-                      "match_score": 94
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorised"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          }
-        }
+        "responses": { "200": { "$ref": "#/components/responses/ProductRows" }, "403": { "$ref": "#/components/responses/PostgrestError" } }
+      },
+      "post": {
+        "tags": ["Vendor & Branch", "Brand HQ"],
+        "summary": "Create product",
+        "description": "Vendors create their own products. Brand HQ may create products for branches under its organisation. New products enter Anovra safety review before public display.",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "$ref": "#/components/requestBodies/ProductBody" },
+        "responses": { "201": { "$ref": "#/components/responses/ProductRows" }, "403": { "$ref": "#/components/responses/PostgrestError" } }
+      },
+      "patch": {
+        "tags": ["Vendor & Branch", "Brand HQ", "Admin"],
+        "summary": "Update product details or safety status",
+        "description": "Vendors/Brand HQ update catalogue details. Admins approve, reject, or flag NAFDAC/safety status.",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "name": "id", "in": "query", "required": true, "schema": { "type": "string", "example": "eq.product_uuid" } }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/ProductBody" },
+        "responses": { "200": { "$ref": "#/components/responses/ProductRows" }, "403": { "$ref": "#/components/responses/PostgrestError" } }
+      },
+      "delete": {
+        "tags": ["Vendor & Branch", "Brand HQ", "Admin"],
+        "summary": "Delete product",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "name": "id", "in": "query", "required": true, "schema": { "type": "string", "example": "eq.product_uuid" } }
+        ],
+        "responses": { "204": { "description": "Product deleted." }, "403": { "$ref": "#/components/responses/PostgrestError" } }
       }
     },
-    "/manage-api-key": {
-      "post": {
-        "tags": ["Developer setup"],
-        "security": [
-          {
-            "SupabaseSessionJwt": []
-          }
+    "/rest/v1/scans": {
+      "get": {
+        "tags": ["Customer", "Vendor & Branch", "Brand HQ", "Admin"],
+        "summary": "List skin analysis records",
+        "description": "Customers see their own analyses. Vendors/branches see scan activity for their storefront. Brand HQ sees scans from branches under the brand. Admins see platform-wide scans.",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "name": "select", "in": "query", "schema": { "type": "string", "default": "*" } },
+          { "name": "customer_id", "in": "query", "schema": { "type": "string", "example": "eq.customer_uuid" } },
+          { "name": "vendor_id", "in": "query", "schema": { "type": "string", "example": "eq.vendor_uuid" } },
+          { "name": "order", "in": "query", "schema": { "type": "string", "example": "created_at.desc" } }
         ],
-        "summary": "Generate or rotate a live vendor API key",
-        "description": "Creates a new live API key for the authenticated vendor or Brand HQ session. Existing active keys for that account are revoked. The full key is returned once.",
-        "operationId": "createVendorApiKey",
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApiKeyRequest"
-              },
-              "example": {
-                "action": "create",
-                "name": "Live API key"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "API key generated successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiKeyResponse"
-                },
-                "example": {
-                  "key": "ak_live_000000000000000000000000000000000000000000000000",
-                  "key_prefix": "ak_live_000000..."
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          }
-        }
+        "responses": { "200": { "$ref": "#/components/responses/ScanRows" }, "403": { "$ref": "#/components/responses/PostgrestError" } }
+      },
+      "post": {
+        "tags": ["Customer"],
+        "summary": "Persist completed skin analysis",
+        "description": "Called after `analyse-skin` returns AI results. The row connects customer, vendor or branch, selected area, image URL, AI output, and recommendations.",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "$ref": "#/components/requestBodies/ScanBody" },
+        "responses": { "201": { "$ref": "#/components/responses/ScanRows" }, "403": { "$ref": "#/components/responses/PostgrestError" } }
       }
     },
-    "/verify-domain": {
-      "post": {
-        "tags": ["Developer setup"],
-        "security": [],
-        "summary": "Check custom domain DNS status",
-        "description": "Validates a custom domain and checks whether DNS points to Anovra using the supported CNAME or A record.",
-        "operationId": "verifyCustomDomain",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DomainVerificationRequest"
-              },
-              "example": {
-                "domain": "skin.example.com"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Domain checked successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DomainVerificationResponse"
-                },
-                "example": {
-                  "status": "pending",
-                  "domain": "skin.example.com",
-                  "message": "Domain format is valid, but DNS is not pointing to Anovra yet.",
-                  "expected": {
-                    "cname": {
-                      "type": "CNAME",
-                      "host": "skin",
-                      "value": "anovra.africa"
-                    },
-                    "a": {
-                      "type": "A",
-                      "host": "skin",
-                      "value": "198.54.115.240"
-                    },
-                    "recommended_domain": "skin.example.com"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          }
-        }
+    "/rest/v1/brand_branches": {
+      "get": {
+        "tags": ["Brand HQ", "Vendor & Branch", "Admin"],
+        "summary": "List Brand HQ branches",
+        "description": "Brand HQ sees its branches. Branch users can read their own membership. Admins can inspect all brand/branch relationships.",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "name": "select", "in": "query", "schema": { "type": "string", "default": "*" } },
+          { "name": "brand_id", "in": "query", "schema": { "type": "string", "example": "eq.brand_uuid" } },
+          { "name": "branch_id", "in": "query", "schema": { "type": "string", "example": "eq.branch_uuid" } }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/BrandBranchRows" }, "403": { "$ref": "#/components/responses/PostgrestError" } }
       }
+    },
+    "/rest/v1/cart_items": {
+      "get": {
+        "tags": ["Customer", "Vendor & Branch"],
+        "summary": "List customer cart or purchase-intent records",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "name": "select", "in": "query", "schema": { "type": "string", "default": "*" } },
+          { "name": "customer_id", "in": "query", "schema": { "type": "string", "example": "eq.customer_uuid" } },
+          { "name": "vendor_id", "in": "query", "schema": { "type": "string", "example": "eq.vendor_uuid" } }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/GenericRows" } }
+      },
+      "post": {
+        "tags": ["Customer"],
+        "summary": "Add product to cart or tracked purchase intent",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CartItem" } } } },
+        "responses": { "201": { "$ref": "#/components/responses/GenericRows" } }
+      }
+    },
+    "/rest/v1/storefront_reviews": {
+      "get": {
+        "tags": ["Customer", "Vendor & Branch", "Admin"],
+        "summary": "List storefront reviews and ratings",
+        "description": "Approved reviews feed storefront rating display. Admins can review pending submissions.",
+        "security": [{ "SupabaseAnonKey": [] }, { "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "$ref": "#/components/parameters/AuthorizationHeaderOptional" },
+          { "name": "vendor_id", "in": "query", "schema": { "type": "string", "example": "eq.vendor_uuid" } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "example": "eq.approved" } }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/ReviewRows" } }
+      },
+      "post": {
+        "tags": ["Customer"],
+        "summary": "Submit storefront review",
+        "description": "Customers submit ratings and reviews. Reviews become public after Anovra review.",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "$ref": "#/components/requestBodies/ReviewBody" },
+        "responses": { "201": { "$ref": "#/components/responses/ReviewRows" } }
+      },
+      "patch": {
+        "tags": ["Admin"],
+        "summary": "Approve or reject storefront review",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "name": "id", "in": "query", "required": true, "schema": { "type": "string", "example": "eq.review_uuid" } }
+        ],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string", "enum": ["approved", "rejected"] } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/ReviewRows" } }
+      }
+    },
+    "/rest/v1/customer_family_profiles": {
+      "get": {
+        "tags": ["Customer"],
+        "summary": "List family skin profiles for customer dashboard",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }, { "name": "customer_id", "in": "query", "schema": { "type": "string", "example": "eq.customer_uuid" } }],
+        "responses": { "200": { "$ref": "#/components/responses/GenericRows" } }
+      },
+      "post": {
+        "tags": ["Customer"],
+        "summary": "Create family skin profile",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FamilyProfile" } } } },
+        "responses": { "201": { "$ref": "#/components/responses/GenericRows" } }
+      }
+    },
+    "/rest/v1/payments": {
+      "get": {
+        "tags": ["Vendor & Branch", "Brand HQ", "Admin"],
+        "summary": "List tracked payments and subscription events",
+        "description": "Vendor sees own payments. Brand HQ sees branch payments. Admin sees all revenue records.",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKeyHeader" },
+          { "name": "vendor_id", "in": "query", "schema": { "type": "string", "example": "eq.vendor_uuid" } },
+          { "name": "order", "in": "query", "schema": { "type": "string", "example": "created_at.desc" } }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/GenericRows" } }
+      },
+      "post": {
+        "tags": ["Vendor & Branch"],
+        "summary": "Record payment or plan activation after Paystack callback",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Payment" } } } },
+        "responses": { "201": { "$ref": "#/components/responses/GenericRows" } }
+      }
+    },
+    "/rest/v1/safety_ingredients": {
+      "get": {
+        "tags": ["Customer", "Admin"],
+        "summary": "List ingredient safety table",
+        "description": "Customers read safety guidance. Admins curate ingredient status, concentration limits, and copy.",
+        "security": [{ "SupabaseAnonKey": [] }, { "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }, { "name": "select", "in": "query", "schema": { "type": "string", "default": "*" } }],
+        "responses": { "200": { "$ref": "#/components/responses/IngredientRows" } }
+      },
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Create ingredient safety record",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }],
+        "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SafetyIngredient" } } } },
+        "responses": { "201": { "$ref": "#/components/responses/IngredientRows" } }
+      },
+      "patch": {
+        "tags": ["Admin"],
+        "summary": "Update ingredient safety record",
+        "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }, { "name": "id", "in": "query", "required": true, "schema": { "type": "string", "example": "eq.ingredient_uuid" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SafetyIngredient" } } } },
+        "responses": { "200": { "$ref": "#/components/responses/IngredientRows" } }
+      }
+    },
+    "/rest/v1/team_members": {
+      "get": { "tags": ["Vendor & Branch"], "summary": "List vendor team members", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }, { "name": "vendor_id", "in": "query", "schema": { "type": "string", "example": "eq.vendor_uuid" } }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } },
+      "post": { "tags": ["Vendor & Branch"], "summary": "Invite or add vendor team member", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeamMember" } } } }, "responses": { "201": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/rest/v1/admin_team": {
+      "get": { "tags": ["Admin"], "summary": "List platform admin/sales team accounts", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/rest/v1/team_referral_events": {
+      "get": { "tags": ["Admin"], "summary": "List salesperson referral and attribution events", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/rest/v1/team_announcements": {
+      "get": { "tags": ["Admin"], "summary": "List team announcements", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } },
+      "post": { "tags": ["Admin"], "summary": "Create team announcement", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "201": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/rest/v1/team_resources": {
+      "get": { "tags": ["Admin"], "summary": "List team resource library records", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } },
+      "post": { "tags": ["Admin"], "summary": "Create team resource record", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "201": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/rest/v1/team_targets": {
+      "get": { "tags": ["Admin"], "summary": "List salesperson/team targets", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } },
+      "post": { "tags": ["Admin"], "summary": "Create or assign team target", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "201": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/rest/v1/vendor_api_keys": {
+      "get": { "tags": ["Developer API", "Vendor & Branch"], "summary": "List API key metadata", "description": "Only prefixes and metadata are readable. Full API keys are returned once by `manage-api-key`.", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }, { "name": "vendor_id", "in": "query", "schema": { "type": "string", "example": "eq.vendor_uuid" } }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/rest/v1/onboarding_requests": {
+      "get": { "tags": ["Vendor & Branch", "Brand HQ", "Admin"], "summary": "List onboarding/session requests", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } },
+      "post": { "tags": ["Vendor & Branch", "Brand HQ"], "summary": "Request onboarding or launch support", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OnboardingRequest" } } } }, "responses": { "201": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/rest/v1/email_delivery_logs": {
+      "get": { "tags": ["Admin"], "summary": "List email delivery logs", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/rest/v1/webhook_delivery_logs": {
+      "get": { "tags": ["Admin", "Webhooks"], "summary": "List webhook delivery attempts", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }, { "name": "vendor_id", "in": "query", "schema": { "type": "string", "example": "eq.vendor_uuid" } }], "responses": { "200": { "$ref": "#/components/responses/GenericRows" } } }
+    },
+    "/functions/v1/analyse-skin": {
+      "post": { "tags": ["AI & Edge Functions", "Customer"], "summary": "Analyse skin image with AI", "description": "Accepts base64 image data or a storage image URL plus selected skin area. Returns structured skin concern, result, score, severity array, and benefits.", "security": [{ "SupabaseAnonKey": [] }], "parameters": [{ "$ref": "#/components/parameters/AuthorizationHeaderOptional" }], "requestBody": { "$ref": "#/components/requestBodies/AnalyseSkinBody" }, "responses": { "200": { "$ref": "#/components/responses/AnalyseSkinResponse" }, "400": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/chat-advisor": {
+      "post": { "tags": ["AI & Edge Functions", "Customer"], "summary": "Ask the AI skin advisor", "description": "Answers skincare-only questions using a constrained Gemini prompt. Unrelated topics are declined.", "security": [{ "SupabaseAnonKey": [] }], "requestBody": { "$ref": "#/components/requestBodies/ChatAdvisorBody" }, "responses": { "200": { "$ref": "#/components/responses/ChatAdvisorResponse" }, "400": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/extract-product-label": {
+      "post": { "tags": ["AI & Edge Functions", "Vendor & Branch"], "summary": "Extract product data from a label image", "description": "Used by catalogue forms to extract ingredients, benefits, usage, disadvantages, and warnings from uploaded product labels.", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "requestBody": { "$ref": "#/components/requestBodies/ExtractProductLabelBody" }, "responses": { "200": { "$ref": "#/components/responses/GenericObject" }, "400": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/manage-api-key": {
+      "post": { "tags": ["AI & Edge Functions", "Developer API", "Vendor & Branch"], "summary": "Generate or rotate live vendor API key", "description": "Requires a Supabase session bearer token. Revokes existing active key for the account and returns the full new key once.", "security": [{ "SupabaseSessionJwt": [] }], "requestBody": { "$ref": "#/components/requestBodies/ApiKeyRequestBody" }, "responses": { "200": { "$ref": "#/components/responses/ApiKeyResponse" }, "400": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/manage-brand-branch": {
+      "post": { "tags": ["AI & Edge Functions", "Brand HQ"], "summary": "Create or update Brand HQ branch account", "description": "Brand admins create branch/vendor accounts under their brand and can update branch profile, email, phone, location, and access status.", "security": [{ "SupabaseSessionJwt": [] }], "requestBody": { "$ref": "#/components/requestBodies/ManageBranchBody" }, "responses": { "200": { "$ref": "#/components/responses/ManageBranchResponse" }, "400": { "$ref": "#/components/responses/FunctionError" } } },
+      "patch": { "tags": ["AI & Edge Functions", "Brand HQ"], "summary": "Update Brand HQ branch account", "security": [{ "SupabaseSessionJwt": [] }], "requestBody": { "$ref": "#/components/requestBodies/ManageBranchBody" }, "responses": { "200": { "$ref": "#/components/responses/ManageBranchResponse" }, "400": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/send-onboarding-email": {
+      "post": { "tags": ["AI & Edge Functions", "Admin"], "summary": "Send transactional/admin email", "description": "Sends configured email templates through Resend and logs delivery status. Admin alert templates route to admin@anovra.africa.", "security": [{ "SupabaseAnonKey": [] }], "requestBody": { "$ref": "#/components/requestBodies/EmailFunctionBody" }, "responses": { "200": { "$ref": "#/components/responses/GenericObject" }, "400": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/dispatch-webhook": {
+      "post": { "tags": ["AI & Edge Functions", "Webhooks"], "summary": "Dispatch webhook event to vendor endpoint", "description": "Internal function used after scans, purchases, product flags, and catalogue updates. Attempts are written to webhook_delivery_logs.", "security": [{ "SupabaseAnonKey": [] }], "requestBody": { "$ref": "#/components/requestBodies/DispatchWebhookBody" }, "responses": { "200": { "$ref": "#/components/responses/GenericObject" }, "400": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/verify-domain": {
+      "post": { "tags": ["AI & Edge Functions", "Vendor & Branch"], "summary": "Verify custom domain DNS", "description": "Checks domain format and DNS records against Anovra's supported CNAME or A record.", "security": [{ "SupabaseAnonKey": [] }], "requestBody": { "$ref": "#/components/requestBodies/DomainVerificationBody" }, "responses": { "200": { "$ref": "#/components/responses/DomainVerificationResponse" }, "400": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/vendor-api/scans": {
+      "get": { "tags": ["Developer API"], "summary": "External API: list vendor scans", "security": [{ "VendorApiKey": [] }], "responses": { "200": { "$ref": "#/components/responses/ScanRowsObject" }, "401": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/vendor-api/catalog": {
+      "get": { "tags": ["Developer API"], "summary": "External API: list approved vendor catalogue", "security": [{ "VendorApiKey": [] }], "responses": { "200": { "$ref": "#/components/responses/ProductRowsObject" }, "401": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/functions/v1/vendor-api/recommendations": {
+      "post": { "tags": ["Developer API"], "summary": "External API: get vendor product recommendations", "security": [{ "VendorApiKey": [] }], "requestBody": { "$ref": "#/components/requestBodies/RecommendationBody" }, "responses": { "200": { "$ref": "#/components/responses/ProductRowsObject" }, "401": { "$ref": "#/components/responses/FunctionError" } } }
+    },
+    "/storage/v1/object/product-images/{path}": {
+      "post": { "tags": ["Storage"], "summary": "Upload product image or brand logo", "description": "Used for catalogue product images and Brand HQ logos. Actual permissions are enforced by Supabase Storage policies.", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }, { "name": "path", "in": "path", "required": true, "schema": { "type": "string", "example": "products/vendor-id/file.jpg" } }], "requestBody": { "content": { "image/jpeg": { "schema": { "type": "string", "format": "binary" } }, "image/png": { "schema": { "type": "string", "format": "binary" } }, "image/webp": { "schema": { "type": "string", "format": "binary" } } } }, "responses": { "200": { "$ref": "#/components/responses/GenericObject" } } }
+    },
+    "/storage/v1/object/skin-scans/{path}": {
+      "post": { "tags": ["Storage", "Customer"], "summary": "Upload customer scan image", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }, { "name": "path", "in": "path", "required": true, "schema": { "type": "string", "example": "customer-id/scan.jpg" } }], "requestBody": { "content": { "image/jpeg": { "schema": { "type": "string", "format": "binary" } } } }, "responses": { "200": { "$ref": "#/components/responses/GenericObject" } } }
+    },
+    "/storage/v1/object/vendor-documents/{path}": {
+      "post": { "tags": ["Storage", "Vendor & Branch", "Admin"], "summary": "Upload CAC, ID, headshot, or compliance document", "security": [{ "SupabaseAnonKey": [], "SupabaseSessionJwt": [] }], "parameters": [{ "$ref": "#/components/parameters/ApiKeyHeader" }, { "name": "path", "in": "path", "required": true, "schema": { "type": "string", "example": "cac/vendor-id/document.pdf" } }], "requestBody": { "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } }, "image/jpeg": { "schema": { "type": "string", "format": "binary" } }, "image/png": { "schema": { "type": "string", "format": "binary" } } } }, "responses": { "200": { "$ref": "#/components/responses/GenericObject" } } }
     }
   },
   "components": {
     "securitySchemes": {
-      "VendorApiKey": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "Anovra API key",
-        "description": "Use the live key generated in the vendor dashboard API & Dev section. Example: ak_live_xxxxxxxxx"
-      },
-      "SupabaseSessionJwt": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "Use the authenticated Supabase session access token for dashboard-only functions."
-      }
+      "SupabaseAnonKey": { "type": "apiKey", "in": "header", "name": "apikey", "description": "Supabase anon key. This is public in browser apps but required by Supabase REST/Auth requests." },
+      "SupabaseSessionJwt": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT", "description": "Authenticated Supabase session access token returned by sign-in." },
+      "VendorApiKey": { "type": "http", "scheme": "bearer", "bearerFormat": "Anovra API key", "description": "Live vendor API key generated from the vendor dashboard. Example: ak_live_xxxxxxxxx." }
+    },
+    "parameters": {
+      "ApiKeyHeader": { "name": "apikey", "in": "header", "required": true, "schema": { "type": "string", "example": "SUPABASE_ANON_KEY" } },
+      "AuthorizationHeaderOptional": { "name": "Authorization", "in": "header", "required": false, "schema": { "type": "string", "example": "Bearer SUPABASE_SESSION_JWT" } }
+    },
+    "requestBodies": {
+      "SignupBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SignupRequest" }, "examples": { "customer": { "value": { "email": "customer@example.com", "password": "StrongPassword123", "data": { "role": "customer", "full_name": "Shula Vera" } } }, "vendor": { "value": { "email": "vendor@example.com", "password": "StrongPassword123", "data": { "role": "vendor", "full_name": "Vendor Owner", "business_name": "Vintage", "phone": "+2348012345678" } } }, "brand": { "value": { "email": "brand@example.com", "password": "StrongPassword123", "data": { "role": "brand", "account_type": "brand", "full_name": "Brand Admin", "business_name": "Tulip", "slug": "tulip" } } } } } } },
+      "PasswordLoginBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "format": "password" } } } } } },
+      "EmailBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["email"], "properties": { "email": { "type": "string", "format": "email" } } } } } },
+      "ProfilePatchBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Profile" } } } },
+      "ProductBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Product" } } } },
+      "ScanBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Scan" } } } },
+      "ReviewBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StorefrontReview" } } } },
+      "AnalyseSkinBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnalyseSkinRequest" }, "example": { "imageUrl": "https://example.com/scan.jpg", "mimeType": "image/jpeg", "skinArea": "Face" } } } },
+      "ChatAdvisorBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatAdvisorRequest" }, "example": { "contents": [{ "role": "user", "parts": [{ "text": "How do I care for hyperpigmentation?" }] }] } } } },
+      "ExtractProductLabelBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["imageBase64"], "properties": { "imageBase64": { "type": "string" }, "type": { "type": "string", "enum": ["ingredients", "benefits", "usage", "warnings", "disadvantages"] } } } } } },
+      "ApiKeyRequestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "action": { "type": "string", "enum": ["create"], "default": "create" }, "name": { "type": "string", "example": "Live API key" } } } } } },
+      "ManageBranchBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ManageBranchRequest" }, "examples": { "create": { "value": { "action": "create", "branch_name": "Tulip Abuja", "branch_email": "abuja@example.com", "location": "Abuja, Nigeria", "phone": "+2348012345678", "password": "TemporaryPassword123" } }, "suspend": { "value": { "action": "update", "branch_id": "branch_uuid", "status": "suspended" } } } } } },
+      "EmailFunctionBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmailFunctionRequest" } } } },
+      "DispatchWebhookBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WebhookDispatchRequest" } } } },
+      "DomainVerificationBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DomainVerificationRequest" }, "example": { "domain": "skin.yourbrand.com" } } } },
+      "RecommendationBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RecommendationRequest" }, "example": { "concern": "hyperpigmentation" } } } }
     },
     "responses": {
-      "Unauthorised": {
-        "description": "Missing or invalid API key.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorResponse"
-            },
-            "example": {
-              "error": "Invalid API key."
-            }
-          }
-        }
-      },
-      "BadRequest": {
-        "description": "The request could not be processed.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorResponse"
-            },
-            "example": {
-              "error": "Endpoint not found."
-            }
-          }
-        }
-      }
+      "AuthSession": { "description": "Supabase auth user/session response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+      "AuthError": { "description": "Authentication error.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "PostgrestError": { "description": "PostgREST/RLS error.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "FunctionError": { "description": "Edge Function error.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "GenericRows": { "description": "Rows returned.", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object", "additionalProperties": true } } } } },
+      "GenericObject": { "description": "Object returned.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+      "ProfileRows": { "description": "Profile rows returned.", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Profile" } } } } },
+      "ProductRows": { "description": "Product rows returned.", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } } } } },
+      "ProductRowsObject": { "description": "Product list returned.", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } } } } } } },
+      "ScanRows": { "description": "Scan rows returned.", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Scan" } } } } },
+      "ScanRowsObject": { "description": "Scan list returned.", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Scan" } } } } } } },
+      "BrandBranchRows": { "description": "Brand branch rows returned.", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/BrandBranch" } } } } },
+      "ReviewRows": { "description": "Review rows returned.", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/StorefrontReview" } } } } },
+      "IngredientRows": { "description": "Ingredient rows returned.", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/SafetyIngredient" } } } } },
+      "AnalyseSkinResponse": { "description": "AI skin analysis result.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnalyseSkinResult" } } } },
+      "ChatAdvisorResponse": { "description": "AI advisor reply.", "content": { "application/json": { "schema": { "type": "object", "properties": { "reply": { "type": "string" }, "model": { "type": "string" }, "degraded": { "type": "boolean" } } } } } },
+      "ApiKeyResponse": { "description": "Live key generated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "key": { "type": "string" }, "key_prefix": { "type": "string" } } } } } },
+      "ManageBranchResponse": { "description": "Branch action completed.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+      "DomainVerificationResponse": { "description": "Domain verification status.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DomainVerificationResponse" } } } }
     },
     "schemas": {
-      "ScanListResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Scan"
-            }
-          }
-        }
-      },
-      "ProductListResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Product"
-            }
-          }
-        }
-      },
-      "RecommendationRequest": {
-        "type": "object",
-        "properties": {
-          "concern": {
-            "type": "string",
-            "description": "Primary skin concern to match against approved catalogue products.",
-            "example": "hyperpigmentation"
-          },
-          "skinConcern": {
-            "type": "string",
-            "description": "Alternative field name accepted by the recommendation endpoint.",
-            "example": "acne"
-          }
-        }
-      },
-      "ApiKeyRequest": {
-        "type": "object",
-        "properties": {
-          "action": {
-            "type": "string",
-            "enum": ["create"],
-            "default": "create"
-          },
-          "name": {
-            "type": "string",
-            "example": "Live API key"
-          }
-        }
-      },
-      "ApiKeyResponse": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "example": "ak_live_000000000000000000000000000000000000000000000000"
-          },
-          "key_prefix": {
-            "type": "string",
-            "example": "ak_live_000000..."
-          }
-        }
-      },
-      "DomainVerificationRequest": {
-        "type": "object",
-        "required": ["domain"],
-        "properties": {
-          "domain": {
-            "type": "string",
-            "example": "skin.example.com"
-          }
-        }
-      },
-      "DomainVerificationResponse": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": ["verified", "pending", "invalid", "error"]
-          },
-          "domain": {
-            "type": "string"
-          },
-          "record": {
-            "type": "string",
-            "example": "CNAME"
-          },
-          "target": {
-            "type": "string",
-            "example": "anovra.africa"
-          },
-          "message": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "object",
-            "additionalProperties": true
-          }
-        }
-      },
-      "Scan": {
-        "type": "object",
-        "additionalProperties": true,
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "vendor_id": {
-            "type": "string"
-          },
-          "area": {
-            "type": "string",
-            "example": "Face"
-          },
-          "score": {
-            "type": "number",
-            "example": 78
-          },
-          "skin_type": {
-            "type": "string",
-            "example": "Oily/Combination Skin"
-          },
-          "condition": {
-            "type": "string",
-            "example": "Acne & Hyperpigmentation"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "Product": {
-        "type": "object",
-        "additionalProperties": true,
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "vendor_id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string",
-            "example": "Niacinamide 10% Serum"
-          },
-          "brand": {
-            "type": "string",
-            "example": "Vintage"
-          },
-          "category": {
-            "type": "string",
-            "example": "Serum"
-          },
-          "price": {
-            "type": "number",
-            "example": 4500
-          },
-          "nafdac_status": {
-            "type": "string",
-            "example": "approved"
-          },
-          "image_url": {
-            "type": "string",
-            "format": "uri"
-          },
-          "match_score": {
-            "type": "number",
-            "example": 94
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "ErrorResponse": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "x-webhook-events": {
-      "scan.completed": {
-        "description": "Sent after a customer scan is completed."
-      },
-      "purchase.created": {
-        "description": "Sent when a purchase/cart event is recorded."
-      },
-      "product.flagged": {
-        "description": "Sent when a product requires safety attention."
-      },
-      "catalog.updated": {
-        "description": "Sent when catalogue data changes."
-      }
+      "SignupRequest": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "format": "password" }, "data": { "type": "object", "properties": { "role": { "type": "string", "enum": ["customer", "vendor", "brand", "admin", "staff"] }, "account_type": { "type": "string", "enum": ["customer", "vendor", "brand", "branch", "admin", "staff"] }, "full_name": { "type": "string" }, "business_name": { "type": "string" }, "phone": { "type": "string" }, "slug": { "type": "string" }, "parent_brand_id": { "type": "string", "format": "uuid" }, "cac_number": { "type": "string" }, "cac_document_url": { "type": "string", "format": "uri" } } } } },
+      "AuthUser": { "type": "object", "additionalProperties": true, "properties": { "id": { "type": "string", "format": "uuid" }, "email": { "type": "string", "format": "email" }, "user_metadata": { "type": "object", "additionalProperties": true } } },
+      "AuthUserUpdate": { "type": "object", "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "format": "password" }, "data": { "type": "object", "additionalProperties": true } } },
+      "Profile": { "type": "object", "additionalProperties": true, "properties": { "id": { "type": "string", "format": "uuid" }, "email": { "type": "string", "format": "email" }, "name": { "type": "string" }, "business_name": { "type": "string" }, "account_type": { "type": "string", "enum": ["customer", "vendor", "brand", "branch", "admin", "staff"] }, "parent_brand_id": { "type": "string", "format": "uuid" }, "slug": { "type": "string" }, "plan": { "type": "string" }, "is_verified": { "type": "boolean" }, "verification_status": { "type": "string" }, "branch_status": { "type": "string", "enum": ["active", "inactive", "suspended"] }, "logo_url": { "type": "string", "format": "uri" }, "tagline": { "type": "string" }, "location": { "type": "string" }, "custom_domain": { "type": "string" }, "webhook_url": { "type": "string", "format": "uri" } } },
+      "Product": { "type": "object", "additionalProperties": true, "properties": { "id": { "type": "string", "format": "uuid" }, "vendor_id": { "type": "string", "format": "uuid" }, "name": { "type": "string" }, "brand": { "type": "string" }, "category": { "type": "string" }, "price": { "type": "number" }, "description": { "type": "string" }, "image_url": { "type": "string", "format": "uri" }, "ingredients": { "type": "string" }, "benefits": { "type": "string" }, "usage": { "type": "string" }, "warnings": { "type": "string" }, "nafdac_status": { "type": "string", "enum": ["pending", "approved", "rejected", "flagged"] }, "created_at": { "type": "string", "format": "date-time" } } },
+      "Scan": { "type": "object", "additionalProperties": true, "properties": { "id": { "type": "string", "format": "uuid" }, "customer_id": { "type": "string", "format": "uuid" }, "vendor_id": { "type": "string", "format": "uuid" }, "skin_area": { "type": "string" }, "image_url": { "type": "string", "format": "uri" }, "result": { "type": "string" }, "condition": { "type": "string" }, "score": { "type": "number" }, "severity": { "type": "array", "items": { "$ref": "#/components/schemas/SeverityItem" } }, "recommendations": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "created_at": { "type": "string", "format": "date-time" } } },
+      "SeverityItem": { "type": "object", "properties": { "label": { "type": "string" }, "level": { "type": "string", "enum": ["Low", "Mild", "Moderate", "Elevated"] }, "score": { "type": "number" } } },
+      "BrandBranch": { "type": "object", "additionalProperties": true, "properties": { "id": { "type": "string", "format": "uuid" }, "brand_id": { "type": "string", "format": "uuid" }, "branch_id": { "type": "string", "format": "uuid" }, "branch_name": { "type": "string" }, "branch_email": { "type": "string", "format": "email" }, "branch_slug": { "type": "string" }, "location": { "type": "string" }, "phone": { "type": "string" }, "status": { "type": "string", "enum": ["active", "inactive", "suspended"] } } },
+      "StorefrontReview": { "type": "object", "additionalProperties": true, "properties": { "id": { "type": "string", "format": "uuid" }, "vendor_id": { "type": "string", "format": "uuid" }, "customer_id": { "type": "string", "format": "uuid" }, "rating": { "type": "integer", "minimum": 1, "maximum": 5 }, "review": { "type": "string" }, "status": { "type": "string", "enum": ["pending", "approved", "rejected"] } } },
+      "FamilyProfile": { "type": "object", "additionalProperties": true, "properties": { "customer_id": { "type": "string", "format": "uuid" }, "name": { "type": "string" }, "relationship": { "type": "string" }, "age_range": { "type": "string" }, "skin_type": { "type": "string" }, "concerns": { "type": "array", "items": { "type": "string" } } } },
+      "CartItem": { "type": "object", "additionalProperties": true, "properties": { "customer_id": { "type": "string", "format": "uuid" }, "vendor_id": { "type": "string", "format": "uuid" }, "product_id": { "type": "string", "format": "uuid" }, "quantity": { "type": "integer", "default": 1 } } },
+      "Payment": { "type": "object", "additionalProperties": true, "properties": { "vendor_id": { "type": "string", "format": "uuid" }, "amount": { "type": "number" }, "plan": { "type": "string" }, "status": { "type": "string" }, "reference": { "type": "string" } } },
+      "TeamMember": { "type": "object", "additionalProperties": true, "properties": { "vendor_id": { "type": "string", "format": "uuid" }, "email": { "type": "string", "format": "email" }, "role": { "type": "string", "enum": ["Vendor", "Manager", "Viewer"] }, "status": { "type": "string" } } },
+      "SafetyIngredient": { "type": "object", "additionalProperties": true, "properties": { "id": { "type": "string", "format": "uuid" }, "name": { "type": "string" }, "status": { "type": "string" }, "summary": { "type": "string" }, "region": { "type": "string" }, "max_concentration": { "type": "string" } } },
+      "OnboardingRequest": { "type": "object", "properties": { "vendor_id": { "type": "string", "format": "uuid" }, "requested_by": { "type": "string", "format": "uuid" }, "request_type": { "type": "string" }, "notes": { "type": "string" }, "status": { "type": "string", "enum": ["pending", "contacted", "scheduled", "completed", "cancelled"] } } },
+      "AnalyseSkinRequest": { "type": "object", "properties": { "imageBase64": { "type": "string" }, "imageUrl": { "type": "string", "format": "uri" }, "mimeType": { "type": "string", "example": "image/jpeg" }, "skinArea": { "type": "string", "enum": ["Face", "Neck", "Back", "Hands", "Legs", "Whole Body", "Other area"] } } },
+      "AnalyseSkinResult": { "type": "object", "properties": { "concern": { "type": "string" }, "result": { "type": "string" }, "score": { "type": "number" }, "severity": { "type": "array", "items": { "$ref": "#/components/schemas/SeverityItem" } }, "benefits": { "type": "array", "items": { "type": "string" } } } },
+      "ChatAdvisorRequest": { "type": "object", "required": ["contents"], "properties": { "contents": { "type": "array", "items": { "type": "object", "properties": { "role": { "type": "string", "enum": ["user", "model"] }, "parts": { "type": "array", "items": { "type": "object", "properties": { "text": { "type": "string" } } } } } } } } },
+      "ManageBranchRequest": { "type": "object", "properties": { "action": { "type": "string", "enum": ["create", "update"] }, "brand_id": { "type": "string", "format": "uuid" }, "branch_id": { "type": "string", "format": "uuid" }, "branch_name": { "type": "string" }, "branch_email": { "type": "string", "format": "email" }, "location": { "type": "string" }, "phone": { "type": "string" }, "password": { "type": "string" }, "status": { "type": "string", "enum": ["active", "inactive", "suspended"] } } },
+      "EmailFunctionRequest": { "type": "object", "properties": { "action": { "type": "string" }, "template": { "type": "string", "enum": ["vendor_signup_trial_started", "product_submitted", "product_approved", "product_rejected", "payment_success_receipt", "customer_scan_completed", "review_submitted", "customer_review_request", "team_invite", "admin_alert", "admin_cac_submitted", "admin_product_review", "admin_payment"] }, "email": { "type": "string", "format": "email" }, "name": { "type": "string" }, "brand": { "type": "string" }, "product": { "type": "string" }, "message": { "type": "string" }, "metadata": { "type": "object", "additionalProperties": true } } },
+      "WebhookDispatchRequest": { "type": "object", "required": ["vendor_id", "event_type"], "properties": { "vendor_id": { "type": "string", "format": "uuid" }, "event_type": { "type": "string", "enum": ["scan.completed", "purchase.created", "product.flagged", "catalog.updated"] }, "payload": { "type": "object", "additionalProperties": true } } },
+      "DomainVerificationRequest": { "type": "object", "required": ["domain"], "properties": { "domain": { "type": "string", "example": "skin.yourbrand.com" } } },
+      "DomainVerificationResponse": { "type": "object", "properties": { "status": { "type": "string", "enum": ["verified", "pending", "invalid", "error"] }, "domain": { "type": "string" }, "record": { "type": "string" }, "target": { "type": "string" }, "message": { "type": "string" }, "expected": { "type": "object", "additionalProperties": true } } },
+      "RecommendationRequest": { "type": "object", "properties": { "concern": { "type": "string", "example": "hyperpigmentation" }, "skinConcern": { "type": "string", "example": "acne" } } },
+      "ErrorResponse": { "type": "object", "additionalProperties": true, "properties": { "error": { "type": "string" }, "message": { "type": "string" }, "code": { "type": "string" } } }
     }
+  },
+  "x-anovra-role-flows": {
+    "customer": ["auth signup/signin", "profiles self read/update", "skin-scans upload", "analyse-skin", "scans insert/read", "products approved read", "cart_items create", "storefront_reviews create", "customer_family_profiles manage", "chat-advisor"],
+    "vendor": ["auth signup/signin", "profiles self read/update", "product-images upload", "products CRUD own catalogue", "scans read own storefront activity", "payments read/write own subscription records", "team_members manage", "manage-api-key", "verify-domain", "webhook_url profile setting", "onboarding_requests"],
+    "brand_hq": ["auth signup/signin", "profiles account_type=brand", "manage-brand-branch create/update/suspend/reactivate", "brand_branches read", "branch profiles read", "branch products CRUD", "branch scans read", "branch payments read", "brand public page via profile slug"],
+    "branch": ["auth signin from Brand HQ-created credentials", "vendor dashboard with parent_brand_id", "products CRUD own branch catalogue", "scans read own branch activity", "shop/scan URLs by branch slug"],
+    "admin": ["auth signin", "profiles platform read/update", "products safety approval", "storefront_reviews approval", "safety_ingredients CRUD", "payments read", "brand_branches read", "admin_team manage", "team resources/targets/announcements", "email_delivery_logs", "webhook_delivery_logs"]
+  },
+  "x-webhook-events": {
+    "scan.completed": { "description": "Sent after a customer skin analysis is completed." },
+    "purchase.created": { "description": "Sent when a purchase/cart event is recorded." },
+    "product.flagged": { "description": "Sent when a product requires safety attention." },
+    "catalog.updated": { "description": "Sent when catalogue data changes." }
   }
 }
