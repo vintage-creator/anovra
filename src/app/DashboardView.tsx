@@ -2518,7 +2518,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     ))}
                   </div>
                   <button
-                    onClick={() => setShowApiDocs(true)}
+                    onClick={() => window.open("/api-docs.html", "_blank", "noopener,noreferrer")}
                     className="inline-flex items-center gap-1.5 mt-2 text-xs text-emerald-600 hover:text-emerald-700 transition-colors font-medium cursor-pointer"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >

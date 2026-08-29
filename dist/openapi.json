@@ -1,0 +1,523 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Anovra Vendor API",
+    "version": "1.0.0",
+    "description": "Interactive documentation for vendor and Brand HQ integrations. The API is served by Supabase Edge Functions and uses live Anovra API keys for vendor data access."
+  },
+  "servers": [
+    {
+      "url": "https://ejpdrcbgqelxlopivwld.supabase.co/functions/v1",
+      "description": "Production Supabase Edge Functions"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Vendor API",
+      "description": "Authenticated endpoints for scans, recommendations, and catalogue sync."
+    },
+    {
+      "name": "Webhooks",
+      "description": "Outbound events sent by Anovra to configured vendor webhook endpoints."
+    },
+    {
+      "name": "Developer setup",
+      "description": "Session-authenticated helper functions for API key and custom domain setup."
+    }
+  ],
+  "paths": {
+    "/vendor-api/scans": {
+      "get": {
+        "tags": ["Vendor API"],
+        "security": [
+          {
+            "VendorApiKey": []
+          }
+        ],
+        "summary": "List recent skin analysis reports",
+        "description": "Returns up to 100 recent scan records for the vendor connected to the bearer API key.",
+        "operationId": "listVendorScans",
+        "responses": {
+          "200": {
+            "description": "Recent scans returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanListResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": "scan_123",
+                      "vendor_id": "vendor_uuid",
+                      "area": "Face",
+                      "score": 78,
+                      "skin_type": "Oily/Combination Skin",
+                      "condition": "Acne & Hyperpigmentation",
+                      "created_at": "2026-08-29T10:15:00Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/vendor-api/catalog": {
+      "get": {
+        "tags": ["Vendor API"],
+        "security": [
+          {
+            "VendorApiKey": []
+          }
+        ],
+        "summary": "List approved catalogue products",
+        "description": "Returns approved products for the vendor connected to the bearer API key. Pending safety review products are excluded.",
+        "operationId": "listVendorCatalog",
+        "responses": {
+          "200": {
+            "description": "Approved catalogue returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductListResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": "product_123",
+                      "vendor_id": "vendor_uuid",
+                      "name": "Niacinamide 10% Serum",
+                      "brand": "Vintage",
+                      "category": "Serum",
+                      "price": 4500,
+                      "nafdac_status": "approved",
+                      "image_url": "https://example.com/product.jpg",
+                      "created_at": "2026-08-29T10:15:00Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/vendor-api/recommendations": {
+      "post": {
+        "tags": ["Vendor API"],
+        "security": [
+          {
+            "VendorApiKey": []
+          }
+        ],
+        "summary": "Get product recommendations",
+        "description": "Ranks the vendor's approved products against a supplied concern or skin concern.",
+        "operationId": "createVendorRecommendations",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationRequest"
+              },
+              "example": {
+                "concern": "hyperpigmentation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recommendations returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductListResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": "product_123",
+                      "name": "Niacinamide 10% Serum",
+                      "brand": "Vintage",
+                      "category": "Serum",
+                      "price": 4500,
+                      "nafdac_status": "approved",
+                      "match_score": 94
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/manage-api-key": {
+      "post": {
+        "tags": ["Developer setup"],
+        "security": [
+          {
+            "SupabaseSessionJwt": []
+          }
+        ],
+        "summary": "Generate or rotate a live vendor API key",
+        "description": "Creates a new live API key for the authenticated vendor or Brand HQ session. Existing active keys for that account are revoked. The full key is returned once.",
+        "operationId": "createVendorApiKey",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyRequest"
+              },
+              "example": {
+                "action": "create",
+                "name": "Live API key"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "API key generated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyResponse"
+                },
+                "example": {
+                  "key": "ak_live_000000000000000000000000000000000000000000000000",
+                  "key_prefix": "ak_live_000000..."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/verify-domain": {
+      "post": {
+        "tags": ["Developer setup"],
+        "security": [],
+        "summary": "Check custom domain DNS status",
+        "description": "Validates a custom domain and checks whether DNS points to Anovra using the supported CNAME or A record.",
+        "operationId": "verifyCustomDomain",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DomainVerificationRequest"
+              },
+              "example": {
+                "domain": "skin.example.com"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Domain checked successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainVerificationResponse"
+                },
+                "example": {
+                  "status": "pending",
+                  "domain": "skin.example.com",
+                  "message": "Domain format is valid, but DNS is not pointing to Anovra yet.",
+                  "expected": {
+                    "cname": {
+                      "type": "CNAME",
+                      "host": "skin",
+                      "value": "anovra.africa"
+                    },
+                    "a": {
+                      "type": "A",
+                      "host": "skin",
+                      "value": "198.54.115.240"
+                    },
+                    "recommended_domain": "skin.example.com"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "VendorApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Anovra API key",
+        "description": "Use the live key generated in the vendor dashboard API & Dev section. Example: ak_live_xxxxxxxxx"
+      },
+      "SupabaseSessionJwt": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Use the authenticated Supabase session access token for dashboard-only functions."
+      }
+    },
+    "responses": {
+      "Unauthorised": {
+        "description": "Missing or invalid API key.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Invalid API key."
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "The request could not be processed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Endpoint not found."
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ScanListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scan"
+            }
+          }
+        }
+      },
+      "ProductListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            }
+          }
+        }
+      },
+      "RecommendationRequest": {
+        "type": "object",
+        "properties": {
+          "concern": {
+            "type": "string",
+            "description": "Primary skin concern to match against approved catalogue products.",
+            "example": "hyperpigmentation"
+          },
+          "skinConcern": {
+            "type": "string",
+            "description": "Alternative field name accepted by the recommendation endpoint.",
+            "example": "acne"
+          }
+        }
+      },
+      "ApiKeyRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["create"],
+            "default": "create"
+          },
+          "name": {
+            "type": "string",
+            "example": "Live API key"
+          }
+        }
+      },
+      "ApiKeyResponse": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "ak_live_000000000000000000000000000000000000000000000000"
+          },
+          "key_prefix": {
+            "type": "string",
+            "example": "ak_live_000000..."
+          }
+        }
+      },
+      "DomainVerificationRequest": {
+        "type": "object",
+        "required": ["domain"],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "example": "skin.example.com"
+          }
+        }
+      },
+      "DomainVerificationResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["verified", "pending", "invalid", "error"]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "record": {
+            "type": "string",
+            "example": "CNAME"
+          },
+          "target": {
+            "type": "string",
+            "example": "anovra.africa"
+          },
+          "message": {
+            "type": "string"
+          },
+          "expected": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "Scan": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "vendor_id": {
+            "type": "string"
+          },
+          "area": {
+            "type": "string",
+            "example": "Face"
+          },
+          "score": {
+            "type": "number",
+            "example": 78
+          },
+          "skin_type": {
+            "type": "string",
+            "example": "Oily/Combination Skin"
+          },
+          "condition": {
+            "type": "string",
+            "example": "Acne & Hyperpigmentation"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "vendor_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Niacinamide 10% Serum"
+          },
+          "brand": {
+            "type": "string",
+            "example": "Vintage"
+          },
+          "category": {
+            "type": "string",
+            "example": "Serum"
+          },
+          "price": {
+            "type": "number",
+            "example": 4500
+          },
+          "nafdac_status": {
+            "type": "string",
+            "example": "approved"
+          },
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "match_score": {
+            "type": "number",
+            "example": 94
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "x-webhook-events": {
+      "scan.completed": {
+        "description": "Sent after a customer scan is completed."
+      },
+      "purchase.created": {
+        "description": "Sent when a purchase/cart event is recorded."
+      },
+      "product.flagged": {
+        "description": "Sent when a product requires safety attention."
+      },
+      "catalog.updated": {
+        "description": "Sent when catalogue data changes."
+      }
+    }
+  }
+}
