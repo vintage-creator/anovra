@@ -570,30 +570,33 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               <em className="text-[#008236] not-italic font-normal">Make Smarter</em> Skincare Decisions
             </h1>
             <p className="text-muted-foreground text-base sm:text-lg leading-relaxed mb-8 max-w-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Looking for personalised skincare recommendations or a better way to serve your customers, Anovra empowers individuals and skincare businesses with intelligent tools that make every recommendation more personal.
+              AI skin analysis, safer product matching, and storefront tools for customers, skincare vendors, and multi-branch brands.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3.5 w-full sm:w-auto">
-              <button
-                onClick={() => setView("skintest")}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all text-center cursor-pointer"
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              >
-                Analyse Your Skin
-                <ArrowRight className="w-4 h-4 text-white" />
-              </button>
-              <button
-                onClick={() => openSignup("vendor")}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 border-2 border-[#008236] bg-transparent hover:bg-[#008236]/10 text-[#008236] dark:text-emerald-400 font-bold px-6 py-3.5 rounded-xl transition-all text-center cursor-pointer"
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              >
-                Start Vendor Storefront
-              </button>
+            <div className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-xl">
+                <button
+                  onClick={() => setView("skintest")}
+                  className="min-h-12 flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all text-center cursor-pointer whitespace-nowrap"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Analyse my skin
+                  <ArrowRight className="w-4 h-4 text-white" />
+                </button>
+                <button
+                  onClick={() => openSignup("vendor")}
+                  className="min-h-12 flex items-center justify-center gap-2 border-2 border-[#008236] bg-transparent hover:bg-[#008236]/10 text-[#008236] dark:text-emerald-400 font-bold px-6 py-3.5 rounded-xl transition-all text-center cursor-pointer whitespace-nowrap"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Start a storefront
+                </button>
+              </div>
               <button
                 onClick={() => openSignup("brand")}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 border border-border bg-card hover:bg-muted text-foreground font-bold px-6 py-3.5 rounded-xl transition-all text-center cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-[#008236] transition-colors cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                Register Brand HQ
+                Managing multiple outlets? Register Brand HQ
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
