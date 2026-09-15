@@ -513,6 +513,7 @@ function RecommendationEngineSection() {
 
 export function LandingView({ setView }: { setView: (v: View) => void }) {
   const [workflowAudience, setWorkflowAudience] = useState<"vendors" | "customers">("vendors");
+  const [pricingAudience, setPricingAudience] = useState<"vendors" | "customers">("vendors");
   const openSignup = (kind: "vendor" | "brand" = "vendor") => {
     sessionStorage.setItem("signup_account_kind", kind);
     setView("signup");
@@ -563,7 +564,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
         "Shareable test link",
         "Basic analytics",
       ],
-      cta: "Get started",
+      cta: "Start 14-day free trial",
       highlight: false,
     },
     {
@@ -954,7 +955,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
         </div>
       </section>
 
-      {/* Pricing Section with Brand Color Background */}
+      {/* Pricing Section */}
       <section className="py-20 max-w-7xl mx-auto px-4 sm:px-6">
         <div className="bg-[#FAF7F2] text-foreground rounded-3xl p-6 sm:p-12 shadow-sm border border-border/80">
           <h2
@@ -964,11 +965,34 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
             Transparent pricing in naira.
           </h2>
           <p className="text-center text-sm text-muted-foreground mb-12" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Plans for every stage — whether you're selling or just starting your skin journey.
+            Start with a 14-day free trial, then choose the plan that fits how you use Anovra.
           </p>
 
+          <div className="max-w-md mx-auto mb-10 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-white p-1 shadow-xs">
+            {[
+              { id: "vendors" as const, label: "For vendors" },
+              { id: "customers" as const, label: "For customers" },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setPricingAudience(item.id)}
+                className={cn(
+                  "min-h-11 rounded-xl px-4 text-sm font-bold transition-colors",
+                  pricingAudience === item.id
+                    ? "bg-[#008236] text-white shadow-xs"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
           {/* Vendor Plans */}
-          <div className="mb-14">
+          {pricingAudience === "vendors" && (
+          <div>
             <div className="flex items-center gap-4 mb-7 max-w-4xl mx-auto">
               <div>
                 <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skincare Vendors</h3>
@@ -976,7 +1000,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               </div>
               <div className="flex-1 h-px bg-border/60" />
               <span className="text-xs text-[#008236] bg-[#008236]/10 border border-[#008236]/30 px-3 py-1 rounded-full font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Sell smarter with AI
+                14-day free trial on every plan
               </span>
             </div>
             <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
@@ -986,14 +1010,14 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   className={cn(
                     "rounded-2xl border p-6 flex flex-col transition-all duration-300",
                     t.highlight
-                      ? "bg-[#008236] text-white border-2 border-[#008236] shadow-2xl sm:scale-105"
+                      ? "bg-white text-foreground border-2 border-[#008236] shadow-2xl sm:scale-105 ring-4 ring-[#008236]/10"
                       : t.name === "Basic"
                         ? "bg-white text-foreground border-2 border-[#008236]/50 hover:border-[#008236]"
-                        : "bg-white text-foreground border-2 border-[#C86B3A]/50 hover:border-[#C86B3A]"
+                        : "bg-white text-foreground border-2 border-[#008236]/50 hover:border-[#008236]"
                   )}
                 >
                   <p
-                    className={cn("text-xs font-bold mb-3 uppercase tracking-wider", t.highlight ? "text-emerald-300" : "text-muted-foreground")}
+                    className={cn("text-xs font-bold mb-3 uppercase tracking-wider", t.highlight ? "text-[#008236]" : "text-muted-foreground")}
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     {t.name}
@@ -1001,12 +1025,15 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-3xl font-light mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>
                     {t.price}
                   </p>
-                  <p className={cn("text-xs mb-6", t.highlight ? "text-white/70" : "text-muted-foreground")} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
+                  <p className="text-xs mb-3 text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
+                  <span className="mb-6 inline-flex w-fit rounded-full bg-[#008236]/10 px-2.5 py-1 text-[11px] font-bold text-[#008236] border border-[#008236]/20">
+                    14-day free trial
+                  </span>
                   <ul className="space-y-2.5 flex-1 mb-6">
                     {t.features.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        <Check className={cn("w-3.5 h-3.5 mt-0.5 flex-shrink-0", t.highlight ? "text-white" : "text-[#008236]")} />
-                        <span className={t.highlight ? "text-white/90" : "text-muted-foreground"}>{f}</span>
+                        <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-[#008236]" />
+                        <span className="text-muted-foreground">{f}</span>
                       </li>
                     ))}
                   </ul>
@@ -1015,10 +1042,10 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     className={cn(
                       "w-full py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm",
                       t.highlight
-                        ? "bg-[#C86B3A] text-white hover:bg-[#b05a2e]"
+                        ? "bg-[#008236] text-white hover:bg-[#006c2c]"
                         : t.name === "Basic"
                           ? "bg-[#008236] text-white hover:bg-[#006c2c]"
-                          : "bg-[#C86B3A] text-white hover:bg-[#b05a2e]"
+                          : "bg-[#008236] text-white hover:bg-[#006c2c]"
                     )}
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
@@ -1028,8 +1055,10 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               ))}
             </div>
           </div>
+          )}
 
           {/* User / Consumer Plans */}
+          {pricingAudience === "customers" && (
           <div>
             <div className="flex items-center gap-4 mb-7 max-w-4xl mx-auto">
               <div>
@@ -1038,7 +1067,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               </div>
               <div className="flex-1 h-px bg-border/60" />
               <span className="text-xs text-amber-800 bg-[#C86B3A]/10 border border-[#C86B3A]/30 px-2.5 py-1 rounded-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Know your skin
+                14-day free trial on every plan
               </span>
             </div>
             <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
@@ -1055,7 +1084,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     "Ingredient safety check",
                     "Results shared via link",
                   ],
-                  cta: "Get Glow Pass",
+                  cta: "Start 14-day free trial",
                 },
                 {
                   name: "Glow Pass+",
@@ -1070,7 +1099,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     "Personalised ingredient glossary",
                     "Priority product matching",
                   ],
-                  cta: "Get Glow Pass+",
+                  cta: "Start 14-day free trial",
                 },
                 {
                   name: "Premium Glow",
@@ -1086,7 +1115,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     "Early access to new AI features",
                     "Personalised skincare routine builder",
                   ],
-                  cta: "Get Premium Glow",
+                  cta: "Start 14-day free trial",
                 },
               ].map((t) => (
                 <div
@@ -1107,7 +1136,10 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-3xl font-light mb-0.5 text-white" style={{ fontFamily: "'Fraunces', serif" }}>
                     {t.price}
                   </p>
-                  <p className="text-xs mb-6 text-white/70" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
+                  <p className="text-xs mb-3 text-white/70" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
+                  <span className="mb-6 inline-flex w-fit rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold text-white border border-white/20">
+                    14-day free trial
+                  </span>
                   <ul className="space-y-2.5 flex-1 mb-6">
                     {t.features.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-sm text-white/90" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -1131,6 +1163,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               ))}
             </div>
           </div>
+          )}
         </div>
       </section>
 
