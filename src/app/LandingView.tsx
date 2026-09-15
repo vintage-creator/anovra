@@ -272,6 +272,7 @@ const ENGINE_FACTORS = [
 
 function RecommendationEngineSection() {
   const [active, setActive] = useState(0);
+  const [showEngineDetails, setShowEngineDetails] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setActive((i) => (i + 1) % ENGINE_FACTORS.length), 2600);
@@ -279,13 +280,14 @@ function RecommendationEngineSection() {
   }, []);
 
   const f = ENGINE_FACTORS[active];
+  const previewFactors = ENGINE_FACTORS.slice(0, 4);
 
   return (
-    <section className="py-24 bg-background overflow-hidden">
+    <section className="py-16 sm:py-20 bg-background overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
         {/* Header */}
-        <div className="max-w-2xl mb-16">
+        <div className="max-w-2xl mb-8">
           <p
             className="text-xs tracking-[0.2em] uppercase text-emerald-600 font-semibold mb-3"
             style={{ fontFamily: "'DM Mono', monospace" }}
@@ -301,10 +303,52 @@ function RecommendationEngineSection() {
             <em className="text-emerald-600 not-italic">One precise match.</em>
           </h2>
           <p className="text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Before a single product is recommended, the Anovra engine evaluates eight independent factors simultaneously — so every result is accurate, safe, and actually available to the customer.
+            Anovra checks concern, skin type, severity, ingredient safety, stock, and location before showing a product.
           </p>
         </div>
 
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+          {previewFactors.map((factor) => (
+            <div key={factor.label} className="rounded-2xl border border-border bg-card p-4 shadow-xs">
+              <div className={`w-9 h-9 rounded-xl border flex items-center justify-center mb-3 ${factor.color}`}>
+                {factor.icon}
+              </div>
+              <h3 className="text-sm font-bold text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {factor.label}
+              </h3>
+              <p className="text-xs leading-relaxed text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {factor.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-y border-border py-5 mb-8">
+          <div className="grid grid-cols-3 gap-4 sm:gap-8 text-center sm:text-left">
+            {[
+              { value: "8", label: "Signals" },
+              { value: "<2s", label: "Match time" },
+              { value: "100%", label: "Safety checked" },
+            ].map((s) => (
+              <div key={s.label}>
+                <p className="text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>{s.value}</p>
+                <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.label}</p>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowEngineDetails((open) => !open)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#008236]/25 bg-[#008236]/8 px-4 py-2.5 text-sm font-bold text-[#008236] hover:bg-[#008236]/12 transition-colors"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            {showEngineDetails ? "Hide matching logic" : "Explore matching logic"}
+            {showEngineDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {showEngineDetails && (
+        <>
         <div className="grid lg:grid-cols-2 gap-12 items-center">
 
           {/* Left — factor list */}
@@ -458,6 +502,8 @@ function RecommendationEngineSection() {
             </div>
           ))}
         </div>
+        </>
+        )}
       </div>
     </section>
   );
@@ -466,6 +512,7 @@ function RecommendationEngineSection() {
 // ---- LANDING ----
 
 export function LandingView({ setView }: { setView: (v: View) => void }) {
+  const [workflowAudience, setWorkflowAudience] = useState<"vendors" | "customers">("vendors");
   const openSignup = (kind: "vendor" | "brand" = "vendor") => {
     sessionStorage.setItem("signup_account_kind", kind);
     setView("signup");
@@ -550,6 +597,29 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
       highlight: false,
     },
   ];
+  const workflows = {
+    vendors: {
+      eyebrow: "For skincare vendors",
+      title: "Launch a guided storefront in three steps",
+      accent: "emerald",
+      steps: [
+        { step: "01", title: "Set up your catalogue", desc: "Add products, ingredients, pricing, stock, and skin concerns." },
+        { step: "02", title: "Share one storefront link", desc: "Use your Anovra shop, scan route, WhatsApp, Instagram, or website embed." },
+        { step: "03", title: "Convert better recommendations", desc: "Customers scan, get matched to approved products, and order from you." },
+      ],
+    },
+    customers: {
+      eyebrow: "For skincare customers",
+      title: "Get a safer routine without guessing",
+      accent: "amber",
+      steps: [
+        { step: "01", title: "Take a quick skin test", desc: "Use camera capture or upload a clear photo of the selected skin area." },
+        { step: "02", title: "Review your AI report", desc: "See concern, skin type, severity, and ingredient guidance in plain language." },
+        { step: "03", title: "Shop matched products", desc: "Browse approved vendor products that fit your result and location." },
+      ],
+    },
+  };
+  const activeWorkflow = workflows[workflowAudience];
 
   return (
     <div className="min-h-screen">
@@ -703,76 +773,86 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
       {/* Skin Conditions Slider */}
       <SkinConditionsSlider />
 
-      {/* How it works — Dual Sections for Vendors & Users */}
-      <section className="py-20 bg-secondary/80 border-y border-border/60">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-16">
-          
-          {/* How it works — Vendors */}
-          <div>
-            <div className="flex items-center gap-3 mb-8">
-              <span className="px-3 py-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs font-bold uppercase tracking-wider rounded-full border border-emerald-500/20">
-                For Skincare Vendors
-              </span>
-              <h2
-                className="text-2xl sm:text-3xl font-light text-foreground"
-                style={{ fontFamily: "'Fraunces', serif" }}
-              >
-                How it works — Vendors
+      {/* How it works */}
+      <section className="py-16 sm:py-20 bg-secondary/80 border-y border-border/60">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8">
+            <div>
+              <p className="text-xs tracking-[0.2em] uppercase text-emerald-600 font-semibold mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>
+                How it works
+              </p>
+              <h2 className="text-3xl sm:text-4xl font-light text-foreground leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                Choose the flow that fits you.
               </h2>
             </div>
-            <div className="grid sm:grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1 shadow-xs">
               {[
-                { step: "01", title: "Vendor sets up their catalogue", desc: "Add products with ingredients and concerns. Our AI attaches ingredient benefits, side effects, and safety checks automatically." },
-                { step: "02", title: "Share one link with customers", desc: "Your unique link — anovra.africa/shop/your-brand — is ready immediately. Paste it in your Instagram bio, WhatsApp, or embed on your site." },
-                { step: "03", title: "Customers get matched products", desc: "A 90-second selfie + questionnaire. AI analysis. Personalised recommendations from your catalogue with full ingredient transparency." },
-              ].map((s) => (
-                <div key={s.step} className="relative bg-card p-6 rounded-2xl border border-border/80 shadow-xs">
-                  <p
-                    className="text-5xl font-light text-emerald-600/30 leading-none mb-3"
-                    style={{ fontFamily: "'Fraunces', serif" }}
-                  >
-                    {s.step}
-                  </p>
-                  <h3 className="font-semibold text-foreground mb-2 text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.title}</h3>
-                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.desc}</p>
-                </div>
+                { id: "vendors" as const, label: "Vendors" },
+                { id: "customers" as const, label: "Customers" },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setWorkflowAudience(item.id)}
+                  className={cn(
+                    "min-h-10 rounded-xl px-4 text-sm font-bold transition-colors",
+                    workflowAudience === item.id
+                      ? "bg-[#008236] text-white shadow-xs"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {item.label}
+                </button>
               ))}
             </div>
           </div>
 
-          {/* How it works — Users */}
-          <div className="pt-8 border-t border-border/60">
-            <div className="flex items-center gap-3 mb-8">
-              <span className="px-3 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-bold uppercase tracking-wider rounded-full border border-amber-500/20">
-                For Skin Care Customers
-              </span>
-              <h2
-                className="text-2xl sm:text-3xl font-light text-foreground"
-                style={{ fontFamily: "'Fraunces', serif" }}
+          <div className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <span
+                  className={cn(
+                    "inline-flex px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full border mb-3",
+                    workflowAudience === "vendors"
+                      ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+                      : "bg-amber-500/10 text-amber-700 border-amber-500/20"
+                  )}
+                >
+                  {activeWorkflow.eyebrow}
+                </span>
+                <h3 className="text-2xl sm:text-3xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  {activeWorkflow.title}
+                </h3>
+              </div>
+              <button
+                onClick={() => workflowAudience === "vendors" ? openSignup("vendor") : setView("skintest")}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#008236] px-5 py-3 text-sm font-bold text-white hover:bg-[#006c2c] transition-colors"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                How it works — Users
-              </h2>
+                {workflowAudience === "vendors" ? "Start storefront" : "Take skin test"}
+                <ArrowRight className="w-4 h-4 text-white" />
+              </button>
             </div>
-            <div className="grid sm:grid-cols-3 gap-6">
-              {[
-                { step: "01", title: "Take a 90-second skin test", desc: "Upload or take a quick photo or short video of your facial or body skin area in plain lighting." },
-                { step: "02", title: "AI instant skin analysis", desc: "Our AI fine-tuned on Fitzpatrick IV–VI skin evaluates hyperpigmentation, acne, tone evenness, and barrier health in seconds." },
-                { step: "03", title: "Get matched products & order", desc: "Receive personalised, NAFDAC-checked product recommendations with direct WhatsApp links to purchase from local vendors." },
-              ].map((s) => (
-                <div key={s.step} className="relative bg-card p-6 rounded-2xl border border-border/80 shadow-xs">
+
+            <div className="grid sm:grid-cols-3 gap-4">
+              {activeWorkflow.steps.map((s) => (
+                <div key={s.step} className="relative rounded-2xl border border-border/80 bg-background p-5">
                   <p
-                    className="text-5xl font-light text-amber-600/30 leading-none mb-3"
+                    className={cn(
+                      "text-4xl font-light leading-none mb-3",
+                      workflowAudience === "vendors" ? "text-emerald-600/30" : "text-amber-600/35"
+                    )}
                     style={{ fontFamily: "'Fraunces', serif" }}
                   >
                     {s.step}
                   </p>
-                  <h3 className="font-semibold text-foreground mb-2 text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.title}</h3>
-                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.desc}</p>
+                  <h4 className="font-semibold text-foreground mb-2 text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.title}</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.desc}</p>
                 </div>
               ))}
             </div>
           </div>
-
         </div>
       </section>
 
