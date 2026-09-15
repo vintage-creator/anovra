@@ -1018,7 +1018,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   className={cn(
                     "relative overflow-hidden rounded-2xl border p-6 flex flex-col transition-all duration-300",
                     t.highlight
-                      ? "bg-white text-foreground border-2 border-[#008236] shadow-2xl sm:scale-105 ring-4 ring-[#008236]/10"
+                      ? "bg-white text-foreground border-2 border-[#C86B3A] shadow-2xl sm:scale-105 ring-4 ring-[#C86B3A]/15"
                       : t.name === "Basic"
                         ? "bg-gradient-to-br from-white via-white to-emerald-50/80 text-foreground border-2 border-emerald-200 hover:border-[#008236]/70"
                         : "bg-gradient-to-br from-white via-white to-teal-50/80 text-foreground border-2 border-teal-200 hover:border-teal-500"
@@ -1027,18 +1027,18 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   <div
                     className={cn(
                       "absolute inset-x-0 top-0 h-1.5",
-                      t.highlight ? "bg-[#008236]" : t.name === "Basic" ? "bg-emerald-400" : "bg-teal-500"
+                      t.highlight ? "bg-[#C86B3A]" : t.name === "Basic" ? "bg-emerald-400" : "bg-teal-500"
                     )}
                   />
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <p
-                      className={cn("text-xs font-bold uppercase tracking-wider", t.highlight ? "text-[#008236]" : "text-muted-foreground")}
+                      className={cn("text-xs font-bold uppercase tracking-wider", t.highlight ? "text-[#C86B3A]" : "text-muted-foreground")}
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
                       {t.name}
                     </p>
                     {t.highlight && (
-                      <span className="rounded-full bg-[#008236]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#008236] border border-[#008236]/20">
+                      <span className="rounded-full bg-[#C86B3A]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#C86B3A] border border-[#C86B3A]/20">
                         Recommended
                       </span>
                     )}
@@ -1063,7 +1063,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     className={cn(
                       "w-full py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm",
                       t.highlight
-                        ? "bg-[#008236] text-white hover:bg-[#006c2c]"
+                        ? "bg-[#C86B3A] text-white hover:bg-[#b05a2e]"
                         : t.name === "Basic"
                           ? "bg-[#008236] text-white hover:bg-[#006c2c]"
                           : "bg-[#008236] text-white hover:bg-[#006c2c]"
