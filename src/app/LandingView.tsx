@@ -303,7 +303,7 @@ function RecommendationEngineSection() {
             <em className="text-emerald-600 not-italic">One precise match.</em>
           </h2>
           <p className="text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Anovra checks concern, skin type, severity, ingredient safety, stock, and location before showing a product.
+            When a customer completes a skin test, Anovra compares their result with product safety, ingredients, stock, and location, then explains why each recommendation fits.
           </p>
         </div>
 
@@ -600,22 +600,22 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
   const workflows = {
     vendors: {
       eyebrow: "For skincare vendors",
-      title: "Launch a guided storefront in three steps",
+      title: "Serve customers with better recommendations in three steps",
       accent: "emerald",
       steps: [
-        { step: "01", title: "Set up your catalogue", desc: "Add products, ingredients, pricing, stock, and skin concerns." },
-        { step: "02", title: "Share one storefront link", desc: "Use your Anovra shop, scan route, WhatsApp, Instagram, or website embed." },
-        { step: "03", title: "Convert better recommendations", desc: "Customers scan, get matched to approved products, and order from you." },
+        { step: "01", title: "Set up your catalogue", desc: "Add your products once, including ingredients, pricing, stock, and the concerns each product helps with." },
+        { step: "02", title: "Share one storefront link", desc: "Use your Anovra shop or skin-test link on WhatsApp, Instagram, your website, or in-store QR codes." },
+        { step: "03", title: "Guide ready-to-buy customers", desc: "Customers scan their skin, see why a product fits, and contact you with more confidence." },
       ],
     },
     customers: {
       eyebrow: "For skincare customers",
-      title: "Get a safer routine without guessing",
+      title: "Find products that make sense for your skin",
       accent: "amber",
       steps: [
-        { step: "01", title: "Take a quick skin test", desc: "Use camera capture or upload a clear photo of the selected skin area." },
-        { step: "02", title: "Review your AI report", desc: "See concern, skin type, severity, and ingredient guidance in plain language." },
-        { step: "03", title: "Shop matched products", desc: "Browse approved vendor products that fit your result and location." },
+        { step: "01", title: "Take a quick skin test", desc: "Take or upload a clear photo of the area you want to understand." },
+        { step: "02", title: "Review your AI report", desc: "Get a plain-English report that explains your concern, skin type, severity, and ingredient guidance." },
+        { step: "03", title: "Shop matched products", desc: "Browse approved products matched to your result, vendor availability, and location." },
       ],
     },
   };
@@ -640,7 +640,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               <em className="text-[#008236] not-italic font-normal">Make Smarter</em> Skincare Decisions
             </h1>
             <p className="text-muted-foreground text-base sm:text-lg leading-relaxed mb-8 max-w-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              AI skin analysis, safer product matching, and storefront tools for customers, skincare vendors, and multi-branch brands.
+              Looking for personalised skincare recommendations, or a better way to serve your customers? Anovra helps individuals and skincare businesses understand skin needs, match safer products, and make every recommendation feel more personal.
             </p>
             <div className="space-y-3.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-xl">
