@@ -994,9 +994,14 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
           {pricingAudience === "vendors" && (
           <div>
             <div className="flex items-center gap-4 mb-7 max-w-4xl mx-auto">
-              <div>
-                <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skincare Vendors</h3>
-                <p className="text-xs uppercase tracking-widest text-[#008236] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Vendor Plans</p>
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-[#008236]/10 text-[#008236] border border-[#008236]/20 flex items-center justify-center">
+                  <Store className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skincare Vendors</h3>
+                  <p className="text-xs uppercase tracking-widest text-[#008236] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Vendor Plans</p>
+                </div>
               </div>
               <div className="flex-1 h-px bg-border/60" />
               <span className="text-xs text-[#008236] bg-[#008236]/10 border border-[#008236]/30 px-3 py-1 rounded-full font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -1008,20 +1013,33 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                 <div
                   key={t.name}
                   className={cn(
-                    "rounded-2xl border p-6 flex flex-col transition-all duration-300",
+                    "relative overflow-hidden rounded-2xl border p-6 flex flex-col transition-all duration-300",
                     t.highlight
                       ? "bg-white text-foreground border-2 border-[#008236] shadow-2xl sm:scale-105 ring-4 ring-[#008236]/10"
                       : t.name === "Basic"
-                        ? "bg-white text-foreground border-2 border-[#008236]/50 hover:border-[#008236]"
-                        : "bg-white text-foreground border-2 border-[#008236]/50 hover:border-[#008236]"
+                        ? "bg-gradient-to-br from-white via-white to-emerald-50/80 text-foreground border-2 border-emerald-200 hover:border-[#008236]/70"
+                        : "bg-gradient-to-br from-white via-white to-teal-50/80 text-foreground border-2 border-teal-200 hover:border-teal-500"
                   )}
                 >
-                  <p
-                    className={cn("text-xs font-bold mb-3 uppercase tracking-wider", t.highlight ? "text-[#008236]" : "text-muted-foreground")}
-                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  >
-                    {t.name}
-                  </p>
+                  <div
+                    className={cn(
+                      "absolute inset-x-0 top-0 h-1.5",
+                      t.highlight ? "bg-[#008236]" : t.name === "Basic" ? "bg-emerald-400" : "bg-teal-500"
+                    )}
+                  />
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <p
+                      className={cn("text-xs font-bold uppercase tracking-wider", t.highlight ? "text-[#008236]" : "text-muted-foreground")}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      {t.name}
+                    </p>
+                    {t.highlight && (
+                      <span className="rounded-full bg-[#008236]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#008236] border border-[#008236]/20">
+                        Recommended
+                      </span>
+                    )}
+                  </div>
                   <p className="text-3xl font-light mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>
                     {t.price}
                   </p>
