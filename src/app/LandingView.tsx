@@ -993,7 +993,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
           {/* Vendor Plans */}
           {pricingAudience === "vendors" && (
           <div>
-            <div className="flex items-center gap-4 mb-7 max-w-4xl mx-auto">
+            <div className="flex flex-col lg:flex-row lg:items-start gap-4 mb-7 max-w-4xl mx-auto">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-2xl bg-[#008236]/10 text-[#008236] border border-[#008236]/20 flex items-center justify-center">
                   <Store className="w-5 h-5" />
@@ -1001,6 +1001,9 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                 <div>
                   <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skincare Vendors</h3>
                   <p className="text-xs uppercase tracking-widest text-[#008236] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Vendor Plans</p>
+                  <p className="mt-2 max-w-xl text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Choose the plan that matches how many customers you serve, how large your catalogue is, and how much control you want over your storefront and analytics.
+                  </p>
                 </div>
               </div>
               <div className="flex-1 h-px bg-border/60" />
@@ -1078,10 +1081,18 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
           {/* User / Consumer Plans */}
           {pricingAudience === "customers" && (
           <div>
-            <div className="flex items-center gap-4 mb-7 max-w-4xl mx-auto">
-              <div>
-                <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skin Care Customers</h3>
-                <p className="text-xs uppercase tracking-widest text-[#C86B3A] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Consumer Plans</p>
+            <div className="flex flex-col lg:flex-row lg:items-start gap-4 mb-7 max-w-4xl mx-auto">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-[#C86B3A]/10 text-[#C86B3A] border border-[#C86B3A]/20 flex items-center justify-center">
+                  <Leaf className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skincare Customers</h3>
+                  <p className="text-xs uppercase tracking-widest text-[#C86B3A] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Consumer Plans</p>
+                  <p className="mt-2 max-w-xl text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Choose the plan that matches how often you want to analyse your skin, track progress, compare products, and get guided skincare support.
+                  </p>
+                </div>
               </div>
               <div className="flex-1 h-px bg-border/60" />
               <span className="text-xs text-amber-800 bg-[#C86B3A]/10 border border-[#C86B3A]/30 px-2.5 py-1 rounded-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -1139,18 +1150,31 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                 <div
                   key={t.name}
                   className={cn(
-                    "rounded-2xl border p-6 flex flex-col transition-all duration-300",
+                    "relative overflow-hidden rounded-2xl border p-6 flex flex-col transition-all duration-300",
                     t.highlight
-                      ? "bg-[#C86B3A] text-white border-2 border-[#C86B3A] shadow-2xl sm:scale-105"
+                      ? "bg-[#C86B3A] text-white border-2 border-[#C86B3A] shadow-2xl sm:scale-105 ring-4 ring-[#C86B3A]/15"
                       : "bg-[#008236] text-white border-2 border-[#008236] hover:shadow-lg"
                   )}
                 >
+                  <div
+                    className={cn(
+                      "absolute inset-x-0 top-0 h-1.5",
+                      t.highlight ? "bg-amber-200/80" : "bg-white/25"
+                    )}
+                  />
+                  <div className="flex items-start justify-between gap-3 mb-3">
                   <p
-                    className="text-xs font-bold mb-3 uppercase tracking-wider text-white/80"
+                    className="text-xs font-bold uppercase tracking-wider text-white/80"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     {t.name}
                   </p>
+                    {t.highlight && (
+                      <span className="rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white border border-white/25">
+                        Recommended
+                      </span>
+                    )}
+                  </div>
                   <p className="text-3xl font-light mb-0.5 text-white" style={{ fontFamily: "'Fraunces', serif" }}>
                     {t.price}
                   </p>
