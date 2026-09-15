@@ -107,6 +107,8 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           "localhost",
           "127.0.0.1"
         ].includes(window.location.hostname) || 
+        window.location.hostname === "anovra-api.vercel.app" ||
+        window.location.hostname.endsWith(".vercel.app") ||
         window.location.hostname.endsWith(".local") || 
         window.location.hostname.includes("webcontainer") || 
         window.location.hostname.includes("stackblitz");

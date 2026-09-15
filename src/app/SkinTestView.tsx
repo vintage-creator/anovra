@@ -425,6 +425,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       "localhost",
       "127.0.0.1"
     ].includes(hostname) || 
+    hostname === "anovra-api.vercel.app" ||
+    hostname.endsWith(".vercel.app") ||
     hostname.endsWith(".local") || 
     hostname.includes("webcontainer") || 
     hostname.includes("stackblitz");

@@ -3,16 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Anovra API Documentation</title>
+    <title>Anovra Platform API Documentation</title>
     <link rel="preconnect" href="https://unpkg.com" />
     <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
     <style>
       :root {
         color-scheme: light;
         --anovra-green: #008236;
+        --anovra-green-dark: #006c2c;
         --anovra-ink: #1f2a24;
         --anovra-muted: #66736b;
         --anovra-bg: #fbfaf7;
+        --anovra-line: rgba(31, 42, 36, 0.1);
       }
 
       body {
@@ -29,14 +31,14 @@
       .docs-header {
         position: sticky;
         top: 0;
-        z-index: 20;
+        z-index: 30;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 1rem;
         padding: 0.9rem clamp(1rem, 4vw, 2.5rem);
         background: rgba(251, 250, 247, 0.92);
-        border-bottom: 1px solid rgba(31, 42, 36, 0.1);
+        border-bottom: 1px solid var(--anovra-line);
         backdrop-filter: blur(14px);
       }
 
@@ -87,6 +89,81 @@
         white-space: nowrap;
       }
 
+      .docs-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .docs-primary {
+        background: var(--anovra-green);
+        border-color: var(--anovra-green);
+        color: #fff;
+      }
+
+      .docs-intro {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 1.25rem clamp(1rem, 3vw, 2rem) 0;
+      }
+
+      .docs-intro-card {
+        display: grid;
+        grid-template-columns: 1.25fr 0.75fr;
+        gap: 1rem;
+        align-items: stretch;
+        border: 1px solid var(--anovra-line);
+        border-radius: 1.25rem;
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: 0 14px 40px rgba(15, 23, 42, 0.05);
+        padding: clamp(1rem, 2.5vw, 1.35rem);
+      }
+
+      .docs-intro h2 {
+        margin: 0;
+        color: var(--anovra-ink);
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(1.35rem, 3vw, 2rem);
+        font-weight: 400;
+        line-height: 1.1;
+      }
+
+      .docs-intro p {
+        margin: 0.55rem 0 0;
+        max-width: 66ch;
+        color: var(--anovra-muted);
+        font-size: 0.92rem;
+        line-height: 1.65;
+      }
+
+      .docs-steps {
+        display: grid;
+        gap: 0.55rem;
+      }
+
+      .docs-step {
+        border: 1px solid rgba(0, 130, 54, 0.14);
+        border-radius: 0.85rem;
+        background: rgba(0, 130, 54, 0.045);
+        padding: 0.75rem;
+      }
+
+      .docs-step strong {
+        display: block;
+        color: var(--anovra-ink);
+        font-size: 0.8rem;
+      }
+
+      .docs-step span {
+        display: block;
+        margin-top: 0.15rem;
+        color: var(--anovra-muted);
+        font-size: 0.74rem;
+        line-height: 1.45;
+      }
+
       #swagger-ui {
         max-width: 1180px;
         margin: 0 auto;
@@ -115,15 +192,55 @@
         box-shadow: none;
       }
 
+      .swagger-ui .btn.authorize:hover,
+      .swagger-ui .btn.execute:hover {
+        background: var(--anovra-green-dark);
+      }
+
       .swagger-ui .opblock.opblock-get,
-      .swagger-ui .opblock.opblock-post {
+      .swagger-ui .opblock.opblock-post,
+      .swagger-ui .opblock.opblock-patch,
+      .swagger-ui .opblock.opblock-delete,
+      .swagger-ui .opblock.opblock-put {
         border-color: rgba(0, 130, 54, 0.25);
         background: rgba(255, 255, 255, 0.88);
       }
 
       .swagger-ui .opblock.opblock-get .opblock-summary-method,
-      .swagger-ui .opblock.opblock-post .opblock-summary-method {
+      .swagger-ui .opblock.opblock-post .opblock-summary-method,
+      .swagger-ui .opblock.opblock-patch .opblock-summary-method,
+      .swagger-ui .opblock.opblock-delete .opblock-summary-method,
+      .swagger-ui .opblock.opblock-put .opblock-summary-method {
         background: var(--anovra-green);
+      }
+
+      .swagger-ui .opblock-summary {
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+
+      .swagger-ui .opblock-summary-path,
+      .swagger-ui .opblock-summary-description {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .swagger-ui .parameters-container,
+      .swagger-ui .responses-wrapper,
+      .swagger-ui .model-box,
+      .swagger-ui .opblock-body pre,
+      .swagger-ui table {
+        max-width: 100%;
+      }
+
+      .swagger-ui .parameters,
+      .swagger-ui .responses-table,
+      .swagger-ui .model-container {
+        overflow-x: auto;
+      }
+
+      .swagger-ui textarea {
+        min-height: 9rem;
       }
 
       @media (max-width: 640px) {
@@ -135,6 +252,95 @@
         .docs-back {
           width: 100%;
         }
+
+        .docs-actions {
+          width: 100%;
+          display: grid;
+          grid-template-columns: 1fr;
+        }
+
+        .docs-intro-card {
+          grid-template-columns: 1fr;
+          border-radius: 1rem;
+        }
+
+        #swagger-ui {
+          padding-inline: 0.5rem;
+        }
+
+        .swagger-ui .info {
+          margin: 1rem 0;
+        }
+
+        .swagger-ui .info .title {
+          font-size: 1.45rem;
+          line-height: 1.15;
+        }
+
+        .swagger-ui .scheme-container {
+          padding: 0.75rem;
+        }
+
+        .swagger-ui .opblock {
+          border-radius: 0.8rem;
+        }
+
+        .swagger-ui .opblock-summary {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          min-height: unset;
+          padding: 0.75rem;
+        }
+
+        .swagger-ui .opblock-summary-control {
+          align-items: flex-start;
+        }
+
+        .swagger-ui .opblock-summary-description {
+          grid-column: 1 / -1;
+          padding-left: 0;
+          margin-top: 0.35rem;
+        }
+
+        .swagger-ui .opblock-summary-path {
+          font-size: 0.82rem;
+        }
+
+        .swagger-ui .opblock-summary-method {
+          min-width: 4.1rem;
+          padding: 0.45rem 0.5rem;
+        }
+
+        .swagger-ui .execute-wrapper,
+        .swagger-ui .btn-group {
+          display: grid;
+          gap: 0.5rem;
+        }
+
+        .swagger-ui .btn {
+          min-height: 2.5rem;
+        }
+
+        .swagger-ui table thead {
+          display: none;
+        }
+
+        .swagger-ui table,
+        .swagger-ui table tbody,
+        .swagger-ui table tr,
+        .swagger-ui table td {
+          display: block;
+          width: 100%;
+        }
+
+        .swagger-ui table tr {
+          border-bottom: 1px solid var(--anovra-line);
+          padding: 0.65rem 0;
+        }
+
+        .swagger-ui table td {
+          padding: 0.35rem 0;
+        }
       }
     </style>
   </head>
@@ -145,11 +351,31 @@
           <img src="/logo.png" alt="Anovra" />
           <div>
             <p class="docs-kicker">Developer documentation</p>
-            <h1 class="docs-title">Anovra Vendor API</h1>
+            <h1 class="docs-title">Anovra Platform API</h1>
           </div>
         </div>
-        <a class="docs-back" href="/#/dashboard">Back to dashboard</a>
+        <div class="docs-actions">
+          <a class="docs-back" href="/openapi.json" target="_blank" rel="noreferrer">Open JSON spec</a>
+          <a class="docs-back docs-primary" href="/#/">Open frontend</a>
+        </div>
       </header>
+      <section class="docs-intro" aria-label="API documentation guide">
+        <div class="docs-intro-card">
+          <div>
+            <p class="docs-kicker">Interactive Swagger workspace</p>
+            <h2>Test Anovra backend flows from authentication to role dashboards.</h2>
+            <p>
+              Use the Authorize button for Supabase session tokens or live vendor API keys. The documentation covers customers,
+              vendors, Brand HQ, branches, platform admins, AI Edge Functions, storage uploads, and public developer endpoints.
+            </p>
+          </div>
+          <div class="docs-steps">
+            <div class="docs-step"><strong>1. Auth flows</strong><span>Use Supabase Auth endpoints for customer, vendor, Brand HQ, branch, staff, and admin sign-in.</span></div>
+            <div class="docs-step"><strong>2. Dashboard data</strong><span>Use REST table endpoints with RLS-backed session tokens.</span></div>
+            <div class="docs-step"><strong>3. Developer API</strong><span>Use generated `ak_live_...` keys for external vendor integrations.</span></div>
+          </div>
+        </div>
+      </section>
       <div id="swagger-ui"></div>
     </main>
     <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
