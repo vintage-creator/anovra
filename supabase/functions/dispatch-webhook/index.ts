@@ -28,10 +28,22 @@ serve(async (req) => {
 
     const { data: profile, error: profileError } = await admin
       .from("profiles")
-      .select("webhook_url")
+      .select("webhook_url, verification_status, account_type, branch_status, parent_brand_id")
       .eq("id", vendor_id)
       .maybeSingle();
     if (profileError) throw profileError;
+
+    if (!profile || ["suspended", "banned"].includes(profile.verification_status) || (profile.account_type === "branch" && profile.branch_status !== "active")) {
+      await admin.from("webhook_delivery_logs").insert([{ ...logPayload, success: false, error_message: "Account is not active." }]);
+      return new Response(JSON.stringify({ skipped: true, reason: "Account is not active." }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (profile.account_type === "branch" && profile.parent_brand_id) {
+      const { data: parentBrand } = await admin.from("profiles").select("verification_status").eq("id", profile.parent_brand_id).maybeSingle();
+      if (["suspended", "banned"].includes(parentBrand?.verification_status)) {
+        await admin.from("webhook_delivery_logs").insert([{ ...logPayload, success: false, error_message: "Brand HQ account is not active." }]);
+        return new Response(JSON.stringify({ skipped: true, reason: "Brand HQ account is not active." }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
 
     if (!profile?.webhook_url) {
       await admin.from("webhook_delivery_logs").insert([{ ...logPayload, success: false, error_message: "No webhook URL configured." }]);

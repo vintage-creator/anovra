@@ -18,6 +18,7 @@ import { toast } from "sonner";
 // ---- ADMIN VIEW ----
 
 type AdminTab = "overview" | "safety" | "ingredients" | "vendors" | "brands" | "reviews" | "team" | "payments" | "onboarding" | "logs";
+type ModerationAction = "suspend" | "ban" | "reactivate" | "unban";
 
 type TeamRole = "Marketing" | "Sales" | "Support" | "Representative" | "Operations" | "Manager";
 type TeamMember = {
@@ -68,6 +69,8 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [onboardingRequests, setOnboardingRequests] = useState<any[]>([]);
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
+  const [moderationEvents, setModerationEvents] = useState<any[]>([]);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Modal states
@@ -92,6 +95,15 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     type: "info",
     onConfirm: () => {},
   });
+  const [moderationModal, setModerationModal] = useState<{
+    accountId: string;
+    accountName: string;
+    action: ModerationAction;
+  } | null>(null);
+  const [moderationReasonCode, setModerationReasonCode] = useState("");
+  const [moderationReasonDetails, setModerationReasonDetails] = useState("");
+  const [moderationInternalNotes, setModerationInternalNotes] = useState("");
+  const [isModerating, setIsModerating] = useState(false);
 
   // Add ingredient form states
   const [ingName, setIngName] = useState("");
@@ -155,7 +167,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         }
 
         const { data: authData } = await supabase.auth.getUser();
-        const isAdminUser = authData.user?.user_metadata?.role === "admin";
+        const adminEmail = authData.user?.email?.toLowerCase() || "";
+        const isAdminUser = authData.user?.app_metadata?.role === "admin" || ["admin@anovra.africa", "hello@anovra.africa"].includes(adminEmail);
+        setIsPlatformAdmin(isAdminUser);
         if (isAdminUser) {
           const { data: payments, error: paymentsError } = await supabase
             .from("payments")
@@ -261,6 +275,19 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           }
         } catch (e) {
           console.warn("Could not load webhook_delivery_logs table:", e);
+        }
+
+        if (isAdminUser) {
+          try {
+            const { data: moderation, error: moderationError } = await supabase
+              .from("account_moderation_events")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .limit(100);
+            if (!moderationError) setModerationEvents(moderation || []);
+          } catch (e) {
+            console.warn("Could not load account moderation history:", e);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch admin dashboard telemetry:", err);
@@ -609,7 +636,8 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     });
     
     // Status resolution based on local overrides or profile flags
-    const status = vendorStatuses[v.id] ?? (v.is_verified ? "active" : "pending");
+    const storedStatus = v.verification_status || (v.is_verified ? "approved" : "pending");
+    const status = vendorStatuses[v.id] ?? (storedStatus === "approved" ? "active" : storedStatus);
 
     return {
       id: v.id,
@@ -625,6 +653,8 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       cacNumber: v.cac_number,
       cacDocumentUrl: v.cac_document_url,
       paymentReference: latestPayment?.reference,
+      email: v.email || "",
+      accountType: v.account_type || "vendor",
     };
   });
 
@@ -738,32 +768,13 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     return vendorStatuses[v.id] ?? v.status;
   }
 
-  const setVendorAction = async (vendorId: string, action: "active" | "suspended" | "banned" | "removed") => {
+  const setVendorAction = async (vendorId: string, action: "active") => {
     const tid = toast.loading(`Updating vendor status...`);
     try {
-      if (action === "removed") {
-        const { error } = await supabase
-          .from("profiles")
-          .delete()
-          .eq("id", vendorId);
-        if (error) throw error;
-        
-        setVendorsList((prev) => prev.filter((v) => v.id !== vendorId));
-        toast.success("Vendor account removed successfully!");
-      } else {
-        const nextVerified = action === "active";
-        const verificationStatus = action === "active" ? "approved" : action;
-        const { error } = await supabase
-          .from("profiles")
-          .update({ is_verified: nextVerified, verification_status: verificationStatus })
-          .eq("id", vendorId);
-        if (error) throw error;
-
-        setVendorsList((prev) =>
-          prev.map((v) => (v.id === vendorId ? { ...v, is_verified: nextVerified, verification_status: verificationStatus } : v))
-        );
-        toast.success(`Vendor status updated to ${action}!`);
-      }
+      const { error } = await supabase.from("profiles").update({ is_verified: true, verification_status: "approved" }).eq("id", vendorId);
+      if (error) throw error;
+      setVendorsList((prev) => prev.map((v) => (v.id === vendorId ? { ...v, is_verified: true, verification_status: "approved" } : v)));
+      toast.success("Partner account approved.");
       setVendorStatuses((s) => ({ ...s, [vendorId]: action }));
       setOpenDropdown(null);
     } catch (err: any) {
@@ -772,6 +783,68 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       toast.dismiss(tid);
     }
   };
+
+  function openModeration(accountId: string, accountName: string, action: ModerationAction) {
+    if (!isPlatformAdmin) {
+      toast.error("Only a Platform Super Admin can change account access.");
+      return;
+    }
+    setOpenDropdown(null);
+    setModerationReasonCode(action === "reactivate" || action === "unban" ? "issue_resolved" : "");
+    setModerationReasonDetails("");
+    setModerationInternalNotes("");
+    setModerationModal({ accountId, accountName, action });
+  }
+
+  async function submitModeration() {
+    if (!moderationModal) return;
+    if (!moderationReasonCode) {
+      toast.error("Choose a reason for this decision.");
+      return;
+    }
+    if (moderationReasonDetails.trim().length < 10) {
+      toast.error("Explain the decision in at least 10 characters.");
+      return;
+    }
+    setIsModerating(true);
+    const tid = toast.loading("Updating account access...");
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-account-moderation", {
+        body: {
+          account_id: moderationModal.accountId,
+          action: moderationModal.action,
+          reason_code: moderationReasonCode,
+          reason_details: moderationReasonDetails.trim(),
+          internal_notes: moderationInternalNotes.trim(),
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const displayStatus = data.status === "approved" ? "active" : data.status;
+      setVendorStatuses((current) => ({ ...current, [moderationModal.accountId]: displayStatus }));
+      setVendorsList((current) => current.map((profile) => profile.id === moderationModal.accountId ? {
+        ...profile,
+        verification_status: data.status,
+        is_verified: data.status === "approved",
+        branch_status: profile.account_type === "branch" ? (data.status === "approved" ? "active" : "suspended") : profile.branch_status,
+        moderated_at: new Date().toISOString(),
+      } : profile));
+      setBrandBranchesList((current) => current.map((branch) => branch.branch_id === moderationModal.accountId ? {
+        ...branch,
+        status: data.status === "approved" ? "active" : "suspended",
+      } : branch));
+      if (data.event) setModerationEvents((current) => [{ ...data.event, created_at: new Date().toISOString() }, ...current]);
+      toast.success(`${moderationModal.accountName} access ${data.status === "approved" ? "restored" : data.status}.`);
+      if (!data.email_sent) toast.info("Access was updated, but the notification email was not delivered.");
+      setModerationModal(null);
+    } catch (error: any) {
+      const context = error?.context ? await error.context.json().catch(() => null) : null;
+      toast.error(context?.error || error?.message || "Account access could not be updated.");
+    } finally {
+      toast.dismiss(tid);
+      setIsModerating(false);
+    }
+  }
 
   const resolveFlag = async (productId: string, action: "approve" | "ban") => {
     const tid = toast.loading(`${action === "approve" ? "Approving" : "Blocking"} product...`);
@@ -2018,7 +2091,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                           <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                             {statusBadge()}
                           </div>
-                          {!isApproved ? (
+                          {!isPlatformAdmin ? (
+                            <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2.5 py-1">Read-only</span>
+                          ) : !isApproved && status === "pending" ? (
                             <button
                               onClick={() => setVendorAction(v.id, "active")}
                               className="flex items-center gap-1 text-xs bg-accent text-white px-2.5 py-1 rounded-full hover:bg-accent/90 transition-colors font-medium whitespace-nowrap"
@@ -2039,39 +2114,16 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               </button>
                               {isDropOpen && (
                                 <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-lg z-20 overflow-hidden">
-                                  <button
-                                    onClick={() => {
-                                      setVendorAction(v.id, "suspended");
-                                      setOpenDropdown(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 hover:bg-orange-50 transition-colors text-left"
-                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                                  >
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                    Suspend vendor
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setVendorAction(v.id, "banned");
-                                      setOpenDropdown(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors text-left border-t border-border"
-                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                                  >
-                                    <Ban className="w-3.5 h-3.5" />
-                                    Ban vendor
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setVendorAction(v.id, "removed");
-                                      setOpenDropdown(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary transition-colors text-left border-t border-border"
-                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                    Remove account
-                                  </button>
+                                  {status === "suspended" ? (
+                                    <button onClick={() => openModeration(v.id, v.name, "reactivate")} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-50 text-left"><CheckCircle className="w-3.5 h-3.5" />Reactivate account</button>
+                                  ) : status === "banned" ? (
+                                    <button onClick={() => openModeration(v.id, v.name, "unban")} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-50 text-left"><CheckCircle className="w-3.5 h-3.5" />Unban account</button>
+                                  ) : (
+                                    <>
+                                      <button onClick={() => openModeration(v.id, v.name, "suspend")} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 hover:bg-orange-50 text-left"><AlertTriangle className="w-3.5 h-3.5" />Suspend account</button>
+                                      <button onClick={() => openModeration(v.id, v.name, "ban")} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 text-left border-t border-border"><Ban className="w-3.5 h-3.5" />Ban account</button>
+                                    </>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -2178,7 +2230,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                         
                         {/* Action buttons */}
                         <div className="flex items-center gap-2">
-                          {!isApproved ? (
+                          {!isPlatformAdmin ? (
+                            <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2.5 py-1">Read-only access</span>
+                          ) : !isApproved && status === "pending" ? (
                             <button
                               onClick={() => setVendorAction(v.id, "active")}
                               className="flex items-center gap-1 text-[11px] bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-accent/90 transition-colors font-semibold"
@@ -2198,39 +2252,16 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               </button>
                               {isDropOpen && (
                                 <div className="absolute right-0 bottom-full mb-1.5 w-44 bg-card border border-border rounded-lg shadow-lg z-20 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
-                                  <button
-                                    onClick={() => {
-                                      setVendorAction(v.id, "suspended");
-                                      setOpenDropdown(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 hover:bg-orange-50 transition-colors text-left"
-                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                                  >
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                    Suspend merchant
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setVendorAction(v.id, "banned");
-                                      setOpenDropdown(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors text-left border-t border-border"
-                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                                  >
-                                    <Ban className="w-3.5 h-3.5" />
-                                    Ban brand account
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setVendorAction(v.id, "removed");
-                                      setOpenDropdown(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary transition-colors text-left border-t border-border"
-                                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                    Remove merchant
-                                  </button>
+                                  {status === "suspended" ? (
+                                    <button onClick={() => openModeration(v.id, v.name, "reactivate")} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-50 text-left"><CheckCircle className="w-3.5 h-3.5" />Reactivate account</button>
+                                  ) : status === "banned" ? (
+                                    <button onClick={() => openModeration(v.id, v.name, "unban")} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-50 text-left"><CheckCircle className="w-3.5 h-3.5" />Unban account</button>
+                                  ) : (
+                                    <>
+                                      <button onClick={() => openModeration(v.id, v.name, "suspend")} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 hover:bg-orange-50 text-left"><AlertTriangle className="w-3.5 h-3.5" />Suspend account</button>
+                                      <button onClick={() => openModeration(v.id, v.name, "ban")} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 text-left border-t border-border"><Ban className="w-3.5 h-3.5" />Ban account</button>
+                                    </>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -2350,6 +2381,31 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                           View public profile
                           <ExternalLink className="w-3.5 h-3.5" />
                         </a>
+                        {isPlatformAdmin && (
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setOpenDropdown(openDropdown === `brand-${brand.id}` ? null : `brand-${brand.id}`)}
+                              className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                            >
+                              Manage access <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                            {openDropdown === `brand-${brand.id}` && (
+                              <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-lg shadow-lg z-20 overflow-hidden">
+                                {brand.status === "suspended" ? (
+                                  <button onClick={() => openModeration(brand.id, brand.name, "reactivate")} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-emerald-700 hover:bg-emerald-50 text-left"><CheckCircle className="w-3.5 h-3.5" />Reactivate Brand HQ</button>
+                                ) : brand.status === "banned" ? (
+                                  <button onClick={() => openModeration(brand.id, brand.name, "unban")} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-emerald-700 hover:bg-emerald-50 text-left"><CheckCircle className="w-3.5 h-3.5" />Unban Brand HQ</button>
+                                ) : (
+                                  <>
+                                    <button onClick={() => openModeration(brand.id, brand.name, "suspend")} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-orange-700 hover:bg-orange-50 text-left"><AlertTriangle className="w-3.5 h-3.5" />Suspend Brand HQ</button>
+                                    <button onClick={() => openModeration(brand.id, brand.name, "ban")} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-red-700 hover:bg-red-50 text-left border-t border-border"><Ban className="w-3.5 h-3.5" />Ban Brand HQ</button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -3630,7 +3686,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   Operational Activity Logs
                 </h2>
                 <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Audit outbound notification logs and webhook integrations to verify platform communications.
+                  Audit account access decisions, outbound notifications, and webhook delivery across the platform.
                 </p>
               </div>
             </div>
@@ -3707,6 +3763,38 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   )}
                 </div>
               </div>
+
+              <div className="bg-card border border-border rounded-xl p-5 lg:col-span-2">
+                <div className="flex items-start justify-between gap-4 mb-3 border-b border-border pb-2.5">
+                  <div>
+                    <h3 className="font-semibold text-foreground text-sm">Account Moderation History</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Permanent record of suspensions, bans and restored access.</p>
+                  </div>
+                  <Shield className="w-4 h-4 text-accent shrink-0" />
+                </div>
+                <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+                  {moderationEvents.length ? moderationEvents.map((event) => (
+                    <div key={event.id || `${event.account_id}-${event.created_at}`} className="border border-border rounded-lg p-3 text-xs flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-foreground">{event.account_name}</span>
+                          <span className={cn("px-2 py-0.5 rounded-full font-semibold capitalize", event.new_status === "approved" ? "bg-emerald-50 text-emerald-700" : event.new_status === "banned" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700")}>{event.action}</span>
+                          <span className="text-muted-foreground capitalize">{String(event.account_type || "account").replaceAll("_", " ")}</span>
+                        </div>
+                        <p className="text-foreground mt-1.5 leading-relaxed">{event.reason_details}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">Reason code: {String(event.reason_code || "").replaceAll("_", " ")}</p>
+                        {event.internal_notes && <p className="text-[10px] text-muted-foreground mt-1.5 border-l-2 border-border pl-2">Internal note: {event.internal_notes}</p>}
+                      </div>
+                      <div className="sm:text-right shrink-0 text-[10px] text-muted-foreground">
+                        <p>{new Date(event.created_at).toLocaleString("en-GB")}</p>
+                        <p className="mt-1">by {event.actor_email || "Platform Admin"}</p>
+                      </div>
+                    </div>
+                  )) : (
+                    <p className="text-center text-xs text-muted-foreground py-8">No account moderation decisions recorded.</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -3714,6 +3802,56 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         </main>
         </div>
       </div>
+
+      {moderationModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="bg-card border border-border w-full max-w-lg rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b border-border flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center shrink-0", moderationModal.action === "ban" ? "bg-red-50 text-red-700" : moderationModal.action === "suspend" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700")}>
+                  {moderationModal.action === "ban" ? <Ban className="w-5 h-5" /> : moderationModal.action === "suspend" ? <AlertTriangle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground capitalize" style={{ fontFamily: "'Fraunces', serif" }}>{moderationModal.action} account access</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{moderationModal.accountName}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setModerationModal(null)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted" aria-label="Close"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 space-y-5">
+              <div className={cn("rounded-lg border p-3 text-xs leading-relaxed", moderationModal.action === "ban" ? "bg-red-50/70 border-red-200 text-red-800" : moderationModal.action === "suspend" ? "bg-amber-50/70 border-amber-200 text-amber-800" : "bg-emerald-50/70 border-emerald-200 text-emerald-800")}>
+                {moderationModal.action === "suspend" && "Suspension temporarily blocks login, storefronts and active API keys while an issue is investigated."}
+                {moderationModal.action === "ban" && "A ban blocks login, storefronts and active API keys for a serious or repeated violation. Account data is preserved for audit and appeal."}
+                {(moderationModal.action === "reactivate" || moderationModal.action === "unban") && "Restoring access allows this account to sign in and publish again. Previously revoked API keys remain revoked and must be rotated."}
+              </div>
+              <div>
+                <label htmlFor="moderation-reason" className="block text-xs font-semibold text-foreground mb-1.5">Decision reason</label>
+                <select id="moderation-reason" value={moderationReasonCode} onChange={(event) => setModerationReasonCode(event.target.value)} className="w-full bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/25">
+                  <option value="">Select a reason</option>
+                  {(moderationModal.action === "reactivate" || moderationModal.action === "unban") ? (
+                    <><option value="issue_resolved">Issue resolved</option><option value="appeal_approved">Appeal approved</option><option value="compliance_cleared">Compliance review cleared</option><option value="other">Other</option></>
+                  ) : (
+                    <><option value="compliance_review">Compliance review</option><option value="fraudulent_documents">Fraudulent or unverifiable documents</option><option value="unsafe_products">Unsafe or prohibited products</option><option value="repeated_violations">Repeated policy violations</option><option value="fraud_or_payment_abuse">Fraud or payment abuse</option><option value="account_security">Account security concern</option><option value="customer_safety_complaints">Customer safety complaints</option><option value="terms_breach">Terms of service breach</option><option value="regulatory_request">Regulatory request</option><option value="other">Other</option></>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="moderation-details" className="block text-xs font-semibold text-foreground mb-1.5">Message to account holder</label>
+                <textarea id="moderation-details" value={moderationReasonDetails} onChange={(event) => setModerationReasonDetails(event.target.value)} maxLength={1000} rows={4} placeholder="Explain what happened, what access is affected, and what the account holder should do next." className="w-full resize-none bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/25" />
+                <p className="text-[10px] text-muted-foreground mt-1">This text is included in the notification email. {moderationReasonDetails.length}/1000</p>
+              </div>
+              <div>
+                <label htmlFor="moderation-notes" className="block text-xs font-semibold text-foreground mb-1.5">Internal notes <span className="font-normal text-muted-foreground">(optional)</span></label>
+                <textarea id="moderation-notes" value={moderationInternalNotes} onChange={(event) => setModerationInternalNotes(event.target.value)} maxLength={2000} rows={2} placeholder="Evidence, ticket references or review notes. Never shown to the account holder." className="w-full resize-none bg-input-background border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/25" />
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-secondary/40 border-t border-border flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <button type="button" onClick={() => setModerationModal(null)} disabled={isModerating} className="px-4 py-2.5 rounded-lg border border-border text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">Cancel</button>
+              <button type="button" onClick={submitModeration} disabled={isModerating} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50", moderationModal.action === "ban" ? "bg-red-700 hover:bg-red-800" : moderationModal.action === "suspend" ? "bg-amber-700 hover:bg-amber-800" : "bg-emerald-700 hover:bg-emerald-800")}>{isModerating ? "Updating access..." : moderationModal.action === "reactivate" ? "Reactivate account" : moderationModal.action === "unban" ? "Unban account" : moderationModal.action === "ban" ? "Ban account" : "Suspend account"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PREMIUM CONFIRM MODAL */}
       {confirmModal.isOpen && (

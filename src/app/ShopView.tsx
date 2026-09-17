@@ -116,7 +116,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         // 1. Fetch profiles to match by stored slug, business name slug, or custom domain
         const { data: profiles } = await supabase.from("profiles").select("*");
         const marketplaceProfiles = (profiles || [])
-          .filter((p) => p.business_name && !isPlaceholderName(p.business_name) && p.account_type !== "brand")
+          .filter((p) => p.business_name && !isPlaceholderName(p.business_name) && p.account_type !== "brand" && !["suspended", "banned"].includes(p.verification_status))
           .map((p) => ({ id: p.id, name: p.business_name, slug: p.slug || slugify(p.business_name), verified: p.is_verified }));
         setVendorOptions(marketplaceProfiles);
         let targetProfile = profiles?.find((p) => {
@@ -147,11 +147,23 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           setGenerating(false);
           return;
         }
-        if (targetProfile?.account_type === "branch" && targetProfile.branch_status !== "active") {
+        if (
+          (targetProfile?.account_type === "branch" && targetProfile.branch_status !== "active")
+          || ["suspended", "banned"].includes(targetProfile?.verification_status)
+        ) {
           setProfileNotFound(true);
           setVendorProfileId(null);
           setGenerating(false);
           return;
+        }
+        if (targetProfile?.account_type === "branch" && targetProfile.parent_brand_id) {
+          const parentProfile = profiles?.find((profile) => profile.id === targetProfile.parent_brand_id);
+          if (["suspended", "banned"].includes(parentProfile?.verification_status)) {
+            setProfileNotFound(true);
+            setVendorProfileId(null);
+            setGenerating(false);
+            return;
+          }
         }
         setProfileNotFound(false);
         setVendorProfileId(targetProfile?.id || null);

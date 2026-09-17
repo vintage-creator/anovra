@@ -437,7 +437,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       }
       const fetchVendor = async () => {
         try {
-          let query = supabase.from("profiles").select("id, name, business_name, white_label, plan, phone, created_at, slug, account_type, branch_status");
+          let query = supabase.from("profiles").select("id, name, business_name, white_label, plan, phone, created_at, slug, account_type, branch_status, verification_status, parent_brand_id");
           
           if (!isSystemDomain) {
             query = query.eq("custom_domain", hostname);
@@ -449,17 +449,25 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             
           if (error && error.message.includes("white_label")) {
             // Fallback: Query base columns only if settings columns do not exist
-            let fallbackQuery = supabase.from("profiles").select("id, name, business_name, plan, phone, created_at, slug, account_type, branch_status");
+            let fallbackQuery = supabase.from("profiles").select("id, name, business_name, plan, phone, created_at, slug, account_type, branch_status, verification_status, parent_brand_id");
             if (!isSystemDomain) {
               fallbackQuery = fallbackQuery.eq("custom_domain", hostname);
             } else {
               fallbackQuery = fallbackQuery.or(`slug.eq.${slug},business_name.ilike.${slug.replace(/-/g, " ")}`);
             }
             const { data: baseData } = await fallbackQuery.maybeSingle();
-            if (baseData?.account_type === "branch" && baseData.branch_status !== "active") {
+            if ((baseData?.account_type === "branch" && baseData.branch_status !== "active") || ["suspended", "banned"].includes(baseData?.verification_status || "")) {
               setVendorProfile(null);
               setTrialExpired(true);
               return;
+            }
+            if (baseData?.account_type === "branch" && baseData.parent_brand_id) {
+              const { data: parentBrand } = await supabase.from("profiles").select("verification_status").eq("id", baseData.parent_brand_id).maybeSingle();
+              if (["suspended", "banned"].includes(parentBrand?.verification_status || "")) {
+                setVendorProfile(null);
+                setTrialExpired(true);
+                return;
+              }
             }
             if (baseData) {
               setVendorProfile({
@@ -473,10 +481,18 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               }
             }
           } else if (data) {
-            if (data.account_type === "branch" && data.branch_status !== "active") {
+            if ((data.account_type === "branch" && data.branch_status !== "active") || ["suspended", "banned"].includes(data.verification_status || "")) {
               setVendorProfile(null);
               setTrialExpired(true);
               return;
+            }
+            if (data.account_type === "branch" && data.parent_brand_id) {
+              const { data: parentBrand } = await supabase.from("profiles").select("verification_status").eq("id", data.parent_brand_id).maybeSingle();
+              if (["suspended", "banned"].includes(parentBrand?.verification_status || "")) {
+                setVendorProfile(null);
+                setTrialExpired(true);
+                return;
+              }
             }
             setVendorProfile(data);
             const joinedYear = data.created_at ? new Date(data.created_at) : new Date();

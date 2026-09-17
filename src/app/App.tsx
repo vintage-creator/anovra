@@ -571,6 +571,36 @@ export default function App() {
           } catch (err) {}
         }
 
+        const { data: accessProfile } = await supabase
+          .from("profiles")
+          .select("account_type, branch_status, verification_status, parent_brand_id")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (["suspended", "banned"].includes(accessProfile?.verification_status || "")) {
+          const accountState = accessProfile?.verification_status === "banned" ? "banned" : "suspended";
+          await supabase.auth.signOut();
+          toast.error(`This account has been ${accountState}. Check your email for the decision details or contact Anovra support.`);
+          setViewState("signin");
+          window.location.hash = "#/signin";
+          return;
+        }
+
+        if (accessProfile?.account_type === "branch" && accessProfile.parent_brand_id) {
+          const { data: parentBrand } = await supabase
+            .from("profiles")
+            .select("verification_status")
+            .eq("id", accessProfile.parent_brand_id)
+            .maybeSingle();
+          if (["suspended", "banned"].includes(parentBrand?.verification_status || "")) {
+            await supabase.auth.signOut();
+            toast.error("This branch is unavailable while its Brand HQ account is under review.");
+            setViewState("signin");
+            window.location.hash = "#/signin";
+            return;
+          }
+        }
+
         // Resolve admin role
         const isAdmin = role === "admin" || email === "admin@anovra.africa" || email === "hello@anovra.africa";
 
@@ -636,12 +666,7 @@ export default function App() {
             return;
           }
           if (role === "vendor") {
-            const { data: vendorProfile } = await supabase
-              .from("profiles")
-              .select("account_type, branch_status")
-              .eq("id", user.id)
-              .maybeSingle();
-            if (vendorProfile?.account_type === "branch" && vendorProfile.branch_status !== "active") {
+            if (accessProfile?.account_type === "branch" && accessProfile.branch_status !== "active") {
               await supabase.auth.signOut();
               toast.error("This branch workspace is not active. Contact your Brand Admin.");
               setViewState("signin");

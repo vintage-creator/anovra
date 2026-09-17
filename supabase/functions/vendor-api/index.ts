@@ -42,6 +42,19 @@ serve(async (req) => {
       .maybeSingle();
     if (keyError || !keyRecord) return json({ error: "Invalid API key." }, 401);
 
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("verification_status, account_type, branch_status, parent_brand_id")
+      .eq("id", keyRecord.vendor_id)
+      .maybeSingle();
+    if (!profile || ["suspended", "banned"].includes(profile.verification_status) || (profile.account_type === "branch" && profile.branch_status !== "active")) {
+      return json({ error: "This account is not currently active." }, 403);
+    }
+    if (profile.account_type === "branch" && profile.parent_brand_id) {
+      const { data: parentBrand } = await admin.from("profiles").select("verification_status").eq("id", profile.parent_brand_id).maybeSingle();
+      if (["suspended", "banned"].includes(parentBrand?.verification_status)) return json({ error: "This Brand HQ account is not currently active." }, 403);
+    }
+
     await admin.from("vendor_api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRecord.id);
 
     const route = new URL(req.url).pathname.split("/vendor-api")[1] || "/";
