@@ -120,7 +120,12 @@ serve(async (req) => {
       }
 
       const brandSlug = slugify(brandProfile.slug || brandProfile.business_name || brandProfile.name || "brand");
-      const baseBranchSlug = slugify(body.branch_slug || body.branchSlug || `${brandSlug}-${branchName}`);
+      const branchNameSlug = slugify(branchName);
+      const brandRoot = brandSlug.split("-")[0];
+      const generatedBranchSlug = branchNameSlug === brandRoot || branchNameSlug.startsWith(`${brandRoot}-`)
+        ? branchNameSlug
+        : `${brandSlug}-${branchNameSlug}`;
+      const baseBranchSlug = slugify(body.branch_slug || body.branchSlug || generatedBranchSlug);
       let branchSlug = baseBranchSlug;
       let suffix = 2;
       while (true) {
