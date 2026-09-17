@@ -1081,6 +1081,12 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       : member.status === teamStatusFilter;
     return matchesSearch && matchesStatus;
   });
+  const teamStatusFilters: Array<{ id: "current" | "active" | "suspended" | "removed"; label: string }> = [
+    { id: "current", label: "Current staff" },
+    { id: "active", label: "Active" },
+    { id: "suspended", label: "Suspended" },
+    { id: "removed", label: "Former" },
+  ];
 
   return (
     <div className="min-h-screen bg-background pb-12">
@@ -2806,9 +2812,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 />
               </div>
               <div className="grid grid-cols-2 sm:flex gap-1.5 bg-secondary/60 p-1 rounded-lg" aria-label="Filter team accounts by status">
-                {(["current", "active", "suspended", "removed"] as const).map((status) => (
-                  <button key={status} type="button" onClick={() => setTeamStatusFilter(status)} className={cn("px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-colors", teamStatusFilter === status ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                    {status === "removed" ? "Former" : status}
+                {teamStatusFilters.map((status) => (
+                  <button key={status.id} type="button" onClick={() => setTeamStatusFilter(status.id)} className={cn("px-3 py-1.5 rounded-md text-xs font-semibold transition-colors", teamStatusFilter === status.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                    {status.label}
                   </button>
                 ))}
               </div>
