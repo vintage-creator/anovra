@@ -74,6 +74,15 @@ serve(async (req) => {
 
     if (!(caller.app_metadata?.role === "admin" || caller.user_metadata?.role === "admin" || ["admin@anovra.africa", "hello@anovra.africa"].includes(callerEmail))) return json({ error: "Platform Super Admin access is required." }, 403);
 
+    if (action === "list") {
+      const { data, error } = await admin
+        .from("admin_team")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return json({ success: true, members: data || [] });
+    }
+
     if (action === "create") {
       const name = String(body.name || "").trim();
       const email = String(body.email || "").trim().toLowerCase();

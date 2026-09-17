@@ -544,7 +544,7 @@ export default function App() {
           return;
         }
 
-        let role = user.user_metadata?.role;
+        let role = user.user_metadata?.role || user.app_metadata?.role;
         const email = user.email?.toLowerCase();
 
         // Resolve missing role from profiles for older vendor accounts
@@ -595,7 +595,7 @@ export default function App() {
         }
 
         // Resolve admin role
-        const isAdmin = role === "admin" || email === "admin@anovra.africa" || email === "hello@anovra.africa";
+        const isAdmin = role === "admin" || user.app_metadata?.role === "admin" || email === "admin@anovra.africa" || email === "hello@anovra.africa";
 
         // Resolve staff role
         let isStaff = false;
@@ -680,7 +680,7 @@ export default function App() {
 
         // 4. Admin views (admin) -> Only admin profiles
         if (view === "admin") {
-          if (!isAdmin && !isStaff) {
+          if (!isAdmin) {
             toast.error("Administrative access required. Redirecting to your account dashboard.");
             redirectLoggedInUserToDashboard();
             return;

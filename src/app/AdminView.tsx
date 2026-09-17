@@ -45,6 +45,22 @@ function generateCredentials(name: string) {
   return { username, password };
 }
 
+function mapTeamMember(row: any): TeamMember {
+  return {
+    id: row.id,
+    name: row.name || "",
+    phone: row.phone || "",
+    email: row.email || "",
+    role: row.role || "Marketing",
+    idFileName: row.idFileName || row.id_file_name || "",
+    headshotUrl: row.headshotUrl || row.headshot_url || "",
+    username: row.username || "",
+    password: row.password || "",
+    createdAt: row.createdAt || row.created_at || new Date().toISOString(),
+    status: row.status || "active",
+  };
+}
+
 export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [tab, setTab] = useState<AdminTab>(() => (sessionStorage.getItem("active_admin_tab") as AdminTab) || "overview");
 
@@ -168,7 +184,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
         const { data: authData } = await supabase.auth.getUser();
         const adminEmail = authData.user?.email?.toLowerCase() || "";
-        const isAdminUser = authData.user?.app_metadata?.role === "admin" || ["admin@anovra.africa", "hello@anovra.africa"].includes(adminEmail);
+        const isAdminUser = authData.user?.app_metadata?.role === "admin" || authData.user?.user_metadata?.role === "admin" || ["admin@anovra.africa", "hello@anovra.africa"].includes(adminEmail);
         setIsPlatformAdmin(isAdminUser);
         if (isAdminUser) {
           const { data: payments, error: paymentsError } = await supabase
@@ -198,15 +214,21 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         }
 
         try {
-          const { data: team, error: teamErr } = await supabase
-            .from("admin_team")
-            .select("*")
-            .order("created_at", { ascending: false });
-          if (!teamErr && team) {
-            setTeamMembers(team);
+          if (isAdminUser) {
+            const { data, error } = await supabase.functions.invoke("manage-platform-team", {
+              body: { action: "list" },
+            });
+            if (error) {
+              const context = error.context ? await error.context.json().catch(() => null) : null;
+              throw new Error(context?.error || error.message);
+            }
+            setTeamMembers((data?.members || []).map(mapTeamMember));
+          } else {
+            setTeamMembers([]);
           }
         } catch (e) {
-          console.warn("Could not load admin_team table:", e);
+          console.warn("Could not load admin team accounts:", e);
+          setTeamMembers([]);
         }
 
         // Load announcements
