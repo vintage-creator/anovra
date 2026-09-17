@@ -3,7 +3,7 @@ import {
   Store, Building2, AlertCircle, CreditCard, Calendar, Ban, Search, RefreshCw,
   Users, Package, Shield, BarChart2, CheckCircle, X, Check, Eye,
   ChevronDown, ChevronUp, AlertTriangle, Info, Activity, TrendingUp,
-  ExternalLink, Upload, Download, MapPin, Scan, FileText, Star, Edit, Trash2, LogOut, Menu, ArrowUp,
+  ExternalLink, Upload, Download, MapPin, Scan, FileText, Star, Edit, Trash2, LogOut, Menu, ArrowUp, Copy,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
