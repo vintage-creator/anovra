@@ -4,6 +4,7 @@ import {
   Users, Package, Shield, BarChart2, CheckCircle, X, Check, Eye,
   ChevronDown, ChevronUp, AlertTriangle, Info, Activity, TrendingUp,
   ExternalLink, Upload, Download, MapPin, Scan, FileText, Star, Edit, Trash2, LogOut, Menu, ArrowUp, Copy,
+  Mail, Phone, ArrowRight,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -646,7 +647,15 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       id: brand.id,
       name: brand.business_name || brand.name || "Brand",
       owner: brand.name || "Brand Admin",
-      status: vendorStatuses[brand.id] ?? (brand.is_verified ? "active" : "pending"),
+      email: brand.email || "",
+      phone: brand.phone || "",
+      location: brand.location || "",
+      tagline: brand.tagline || "",
+      logoUrl: brand.logo_url || "",
+      joined: brand.created_at
+        ? new Date(brand.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : "Not available",
+      status: vendorStatuses[brand.id] ?? brand.verification_status ?? (brand.is_verified ? "active" : "pending"),
       publicUrl: `https://anovra.africa/#/brand/${brand.slug || String(brand.business_name || brand.name || "brand").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`,
       branches,
       activeBranches: branches.filter((branch) => branch.status === "active").length,
@@ -2244,105 +2253,217 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
         {/* ---- BRANDS ---- */}
         {tab === "brands" && (
-          <div>
-            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-              <div>
-                <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Brand accounts
-                </h2>
-                <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {brandAccounts.length} brands · {brandBranchesList.length} branches · {brandBranchesList.filter((branch) => branch.status === "active").length} active branches
-                </p>
-              </div>
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search brands..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="bg-input-background border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-52"
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                />
-              </div>
-            </div>
+          <div className="space-y-5">
+            <section className="border-b border-border pb-5">
+              <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+                <div className="max-w-2xl">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-accent font-bold mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>
+                    Organisation directory
+                  </p>
+                  <h2 className="text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                    Brand organisations
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Review each registered Brand HQ, its administrator, public identity, branch network, and consolidated platform activity.
+                  </p>
+                </div>
 
-            <div className="grid xl:grid-cols-2 gap-4">
+                <div className="w-full xl:w-auto">
+                  <label htmlFor="brand-search" className="sr-only">Search brand organisations</label>
+                  <div className="relative w-full xl:w-80">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      id="brand-search"
+                      type="search"
+                      placeholder="Search organisation or administrator"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="w-full bg-input-background border border-border rounded-lg pl-10 pr-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-5 text-xs text-muted-foreground">
+                <span><strong className="text-foreground text-sm mr-1.5">{brandAccounts.length}</strong> Brand HQ accounts</span>
+                <span><strong className="text-foreground text-sm mr-1.5">{brandBranchesList.length}</strong> Total branches</span>
+                <span><strong className="text-foreground text-sm mr-1.5">{brandBranchesList.filter((branch) => branch.status === "active").length}</strong> Active branches</span>
+              </div>
+            </section>
+
+            <div className="space-y-5">
               {filteredBrands.map((brand) => (
-                <article key={brand.id} className="bg-card border border-border rounded-2xl p-5 shadow-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          {brand.name}
-                        </h3>
-                        <span className={cn(
-                          "text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize",
-                          brand.status === "active" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"
-                        )}>
-                          {brand.status}
-                        </span>
+                <article key={brand.id} className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+                  <div className="p-5 sm:p-6">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+                      <div className="flex items-start gap-4 min-w-0">
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg border border-border bg-secondary flex items-center justify-center overflow-hidden shrink-0">
+                          {brand.logoUrl ? (
+                            <img src={brand.logoUrl} alt={`${brand.name} logo`} className="w-full h-full object-contain p-1.5" />
+                          ) : (
+                            <span className="text-xl font-semibold text-accent" style={{ fontFamily: "'Fraunces', serif" }}>
+                              {brand.name.slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-lg sm:text-xl font-semibold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                              {brand.name}
+                            </h3>
+                            <span className={cn(
+                              "inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full font-bold capitalize border",
+                              brand.status === "active" || brand.status === "approved"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : brand.status === "suspended" || brand.status === "banned"
+                                  ? "bg-red-50 text-red-700 border-red-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                            )}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                              {brand.status === "approved" ? "Active" : brand.status}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1 max-w-xl leading-relaxed">
+                            {brand.tagline || "No public brand description has been added yet."}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-2 font-mono">Brand HQ · Joined {brand.joined}</p>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{brand.owner}</p>
-                      <a href={brand.publicUrl} target="_blank" rel="noreferrer" className="text-xs text-accent font-mono mt-2 inline-flex items-center gap-1 hover:underline">
-                        {brand.publicUrl.replace("https://", "")}
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(brand.publicUrl, brand.id)}
+                          className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          aria-label={`Copy ${brand.name} public profile link`}
+                          title="Copy public profile link"
+                        >
+                          {copiedField === brand.id ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                        <a
+                          href={brand.publicUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="h-9 inline-flex items-center justify-center gap-2 px-3.5 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent/90 transition-colors"
+                        >
+                          View public profile
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => copyToClipboard(brand.publicUrl, brand.id)}
-                      className="inline-flex items-center justify-center gap-1.5 text-xs bg-muted text-foreground px-3 py-2 rounded-lg font-semibold"
-                    >
-                      {copiedField === brand.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      Copy
-                    </button>
+
+                    <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-4 mt-6 pt-5 border-t border-border">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono mb-1.5">Brand administrator</p>
+                        <p className="text-sm font-semibold text-foreground">{brand.owner}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono mb-1.5">Registered email</p>
+                        <p className="text-sm text-foreground inline-flex items-center gap-1.5 min-w-0">
+                          <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate">{brand.email || "Not provided"}</span>
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono mb-1.5">Headquarters</p>
+                        <p className="text-sm text-foreground inline-flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          {brand.location || "Not provided"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono mb-1.5">Contact number</p>
+                        <p className="text-sm text-foreground inline-flex items-center gap-1.5">
+                          <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          {brand.phone || "Not provided"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-5">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 border-y border-border bg-secondary/35">
                     {[
-                      { label: "Branches", value: `${brand.activeBranches}/${brand.branches.length}` },
+                      { label: "Active branches", value: `${brand.activeBranches}/${brand.branches.length}` },
                       { label: "Products", value: brand.products },
                       { label: "Scans", value: brand.scans },
                       { label: "Revenue", value: `₦${brand.revenue.toLocaleString()}` },
-                    ].map((metric) => (
-                      <div key={metric.label} className="rounded-xl bg-secondary/50 border border-border px-3 py-3">
-                        <p className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>{metric.value}</p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">{metric.label}</p>
+                    ].map((metric, index) => (
+                      <div
+                        key={metric.label}
+                        className={cn(
+                          "px-5 py-4 border-border",
+                          index < 2 && "border-b",
+                          index % 2 === 0 && "border-r",
+                          "lg:border-b-0",
+                          index < 3 && "lg:border-r"
+                        )}
+                      >
+                        <p className="text-xl font-semibold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>{metric.value}</p>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono mt-0.5">{metric.label}</p>
                       </div>
                     ))}
                   </div>
 
-                  <div className="rounded-xl border border-border overflow-hidden">
-                    <div className="px-3 py-2 bg-secondary/50 border-b border-border flex items-center justify-between">
-                      <p className="text-xs font-semibold text-foreground">Branches</p>
-                      <span className="text-[10px] text-muted-foreground font-mono">{brand.branches.length} total</span>
+                  <div className="p-5 sm:p-6">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div>
+                        <h4 className="text-sm font-semibold text-foreground">Branch network</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">Locations operating beneath this Brand HQ.</p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">{brand.branches.length} total</span>
                     </div>
-                    <div className="divide-y divide-border">
+
+                    <div className="border border-border rounded-lg divide-y divide-border overflow-hidden">
                       {brand.branches.length ? brand.branches.slice(0, 4).map((branch: any) => (
-                        <div key={branch.id} className="px-3 py-2 flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-foreground truncate">{branch.branch_name}</p>
-                            <p className="text-[10px] text-muted-foreground truncate">{branch.location || "Location not set"}</p>
+                        <div key={branch.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-secondary/30 transition-colors">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-md bg-accent/10 text-accent flex items-center justify-center shrink-0 mt-0.5">
+                              <Building2 className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-semibold text-foreground truncate">{branch.branch_name}</p>
+                                <span className={cn(
+                                  "text-[9px] px-1.5 py-0.5 rounded-full font-semibold capitalize",
+                                  branch.status === "active" ? "bg-emerald-50 text-emerald-700" : branch.status === "suspended" ? "bg-red-50 text-red-700" : "bg-muted text-muted-foreground"
+                                )}>
+                                  {branch.status}
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3" />{branch.location || "Location not set"}</span>
+                                {branch.branch_email && <span className="inline-flex items-center gap-1"><Mail className="w-3 h-3" />{branch.branch_email}</span>}
+                              </p>
+                            </div>
                           </div>
-                          <span className={cn(
-                            "text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize",
-                            branch.status === "active" ? "bg-green-50 text-green-700" : branch.status === "suspended" ? "bg-red-50 text-red-700" : "bg-muted text-muted-foreground"
-                          )}>
-                            {branch.status}
-                          </span>
+                          {branch.branch_slug && (
+                            <a
+                              href={`https://anovra.africa/#/shop/${branch.branch_slug}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent hover:underline shrink-0"
+                            >
+                              Open storefront <ArrowRight className="w-3.5 h-3.5" />
+                            </a>
+                          )}
                         </div>
                       )) : (
-                        <div className="px-3 py-6 text-center text-xs text-muted-foreground">No branches created yet.</div>
+                        <div className="px-4 py-8 text-center">
+                          <Building2 className="w-6 h-6 text-muted-foreground/50 mx-auto mb-2" />
+                          <p className="text-xs font-semibold text-foreground">No branches created yet</p>
+                          <p className="text-[11px] text-muted-foreground mt-1">This Brand HQ has not added any branch locations.</p>
+                        </div>
                       )}
                     </div>
                   </div>
                 </article>
               ))}
               {filteredBrands.length === 0 && (
-                <div className="xl:col-span-2 bg-card border border-dashed border-border rounded-2xl p-10 text-center">
+                <div className="bg-card border border-dashed border-border rounded-xl p-10 text-center">
                   <Building2 className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-sm font-semibold text-foreground">No brand accounts found</p>
-                  <p className="text-xs text-muted-foreground mt-1">Approved Brand HQ accounts will appear here once registered.</p>
+                  <p className="text-sm font-semibold text-foreground">{search ? "No matching organisations" : "No brand organisations yet"}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{search ? "Try a different organisation or administrator name." : "Registered Brand HQ accounts will appear here with their branch networks."}</p>
                 </div>
               )}
             </div>
