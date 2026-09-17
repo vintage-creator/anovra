@@ -495,19 +495,12 @@ export default function App() {
         if (!sessionStorage.getItem("referral_recorded")) {
           sessionStorage.setItem("referral_recorded", "true");
           try {
-            const { data: staffMember } = await supabase
-              .from("admin_team")
-              .select("id")
-              .or(`username.eq."${cleanRef}",id.like."${cleanRef}%"`)
-              .maybeSingle();
-            if (staffMember) {
-              await supabase.from("team_referral_events").insert([{
-                team_member_id: staffMember.id,
-                event_type: "link_click",
-                city: "Nigeria",
-                metadata: { user_agent: navigator.userAgent }
-              }]);
-            }
+            await supabase.functions.invoke("track-referral-event", { body: {
+              referral_code: cleanRef,
+              event_type: "link_click",
+              city: "Nigeria",
+              metadata: { user_agent: navigator.userAgent },
+            } });
           } catch (e) {
             console.warn("Failed to record link click event:", e);
           }
@@ -698,12 +691,15 @@ export default function App() {
         if (view === "teamdashboard") {
           const { data: membership } = await supabase
             .from("team_members")
-            .select("id")
+            .select("id, status")
             .eq("email", user.email)
             .maybeSingle();
-          if (!membership && !isStaff && !isAdmin) {
+          const hasActiveMembership = membership && membership.status !== "suspended";
+          if (!hasActiveMembership && !isStaff && !isAdmin) {
             toast.error("Staff field workspace credentials required. Redirecting to your account dashboard.");
-            redirectLoggedInUserToDashboard();
+            await supabase.auth.signOut();
+            setViewState("teamlogin");
+            window.location.hash = "#/teamlogin";
           }
         }
       } catch (err) {

@@ -32,7 +32,7 @@ type TeamMember = {
   username: string;
   password: string;
   createdAt: string;
-  status: "active" | "suspended";
+  status: "active" | "suspended" | "removed";
 };
 
 const ingredientDB: any[] = [];
@@ -308,6 +308,8 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [teamSearch, setTeamSearch] = useState("");
+  const [teamStatusFilter, setTeamStatusFilter] = useState<"current" | "active" | "suspended" | "removed">("current");
 
   // Sub-tab toggling for team management
   const [teamSubTab, setTeamSubTab] = useState<"accounts" | "announcements" | "resources" | "targets">("accounts");
@@ -337,7 +339,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
   async function handlePublishAnnouncement(e: React.FormEvent) {
     e.preventDefault();
-    if (!annForm.title || !annForm.body) {
+    if (!annForm.title.trim() || !annForm.body.trim()) {
       toast.error("Please fill in all fields.");
       return;
     }
@@ -345,7 +347,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     try {
       const { data, error } = await supabase
         .from("team_announcements")
-        .insert([{ title: annForm.title, body: annForm.body, is_active: true }])
+        .insert([{ title: annForm.title.trim(), body: annForm.body.trim(), is_active: true }])
         .select()
         .single();
       if (error) throw error;
@@ -363,20 +365,25 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   async function handleDeleteAnnouncement(id: string) {
     const { error } = await supabase
       .from("team_announcements")
-      .delete()
+      .update({ is_active: false })
       .eq("id", id);
     if (error) {
       toast.error(error.message);
       return;
     }
     setAnnouncements((prev) => prev.filter((a) => a.id !== id));
-    toast.success("Announcement deleted successfully.");
+    toast.success("Announcement archived and removed from team dashboards.");
   }
 
   async function handleAddResource(e: React.FormEvent) {
     e.preventDefault();
     if (!resForm.title || !resourceFile) {
       toast.error("Please provide a title and select a file.");
+      return;
+    }
+    const allowedResourceTypes = ["application/pdf", "image/jpeg", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip", "application/x-zip-compressed"];
+    if (!allowedResourceTypes.includes(resourceFile.type) || resourceFile.size > 10 * 1024 * 1024) {
+      toast.error("Upload a PDF, JPG, PNG, DOCX or ZIP file no larger than 10MB.");
       return;
     }
     setIsUploadingRes(true);
@@ -401,8 +408,8 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       const { data, error } = await supabase
         .from("team_resources")
         .insert([{
-          title: resForm.title,
-          description: resForm.description,
+          title: resForm.title.trim(),
+          description: resForm.description.trim(),
           file_type: typeString,
           file_size: sizeString,
           file_url: publicUrl,
@@ -427,14 +434,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   async function handleDeleteResource(id: string) {
     const { error } = await supabase
       .from("team_resources")
-      .delete()
+      .update({ is_active: false })
       .eq("id", id);
     if (error) {
       toast.error(error.message);
       return;
     }
     setResources((prev) => prev.filter((r) => r.id !== id));
-    toast.success("Resource deleted successfully.");
+    toast.success("Resource archived and removed from team dashboards.");
   }
 
   async function handleSaveTargets(e: React.FormEvent) {
@@ -481,12 +488,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   }, []);
 
   async function handleCreateTeamMember() {
-    if (!teamForm.name || !teamForm.email || !teamForm.phone) {
+    if (!teamForm.name.trim() || !teamForm.email.trim() || !teamForm.phone.trim()) {
       toast.error("Please fill in all required fields.");
       return;
     }
-    const creds = generateCredentials(teamForm.name);
-
+    if (!idDocFile || !headshotFile) {
+      toast.error("Upload a valid ID document and a clear headshot before creating the account.");
+      return;
+    }
     setIsCreatingTeam(true);
     const tid = toast.loading("Saving team member record and sending credentials...");
     try {
@@ -503,9 +512,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             .from("vendor-documents")
             .getPublicUrl(fileName);
           uploadedHeadshotUrl = publicUrl;
-        } else {
-          console.error("Headshot upload failed:", uploadError);
-        }
+        } else throw uploadError;
       }
 
       // 2. Upload ID Document to Supabase Storage if present
@@ -521,36 +528,30 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             .from("vendor-documents")
             .getPublicUrl(fileName);
           uploadedIdFileName = publicUrl;
-        } else {
-          console.error("ID document upload failed:", uploadError);
-          uploadedIdFileName = idDocFile.name; // fallback to raw filename
-        }
+        } else throw uploadError;
       }
 
-      const { data, error } = await supabase.functions.invoke("send-onboarding-email", {
+      const { data, error } = await supabase.functions.invoke("manage-platform-team", {
         body: {
-          action: "create_team_member",
+          action: "create",
           name: teamForm.name,
           phone: teamForm.phone,
           email: teamForm.email,
           role: teamForm.role,
           id_file_name: uploadedIdFileName || teamForm.idFileName || "id_document.pdf",
           headshot_url: uploadedHeadshotUrl || "",
-          username: creds.username,
-          password: creds.password
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        const context = error.context ? await error.context.json().catch(() => null) : null;
+        throw new Error(context?.error || error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      const dbUser = data.member;
+      const issuedCredentials = data.credentials;
 
-      // Query database directly to get the created member's exact UUID
-      const { data: dbUser } = await supabase
-        .from("admin_team")
-        .select("*")
-        .eq("email", teamForm.email)
-        .maybeSingle();
-
-      toast.success("Team member successfully created and notified!");
+      toast.success(data.email_sent ? "Team member created and login details emailed." : "Team member created. Share the one-time login details securely.");
       
       const newMember: TeamMember = {
         id: dbUser?.id || data?.user?.id || Math.random().toString(),
@@ -560,14 +561,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         role: teamForm.role,
         idFileName: dbUser?.id_file_name || uploadedIdFileName || teamForm.idFileName || "id_document.pdf",
         headshotUrl: dbUser?.headshot_url || uploadedHeadshotUrl || "",
-        username: creds.username,
-        password: creds.password,
+        username: issuedCredentials.username,
+        password: issuedCredentials.password,
         status: "active",
         createdAt: dbUser?.created_at || new Date().toISOString()
       };
       
       setTeamMembers((t) => [newMember, ...t]);
-      setNewCredentials({ ...creds, name: teamForm.name });
+      setNewCredentials({ ...issuedCredentials, name: teamForm.name });
       setTeamForm({ name: "", phone: "", email: "", role: "Marketing", idFileName: "", headshotUrl: "" });
       setHeadshotFile(null);
       setIdDocFile(null);
@@ -584,6 +585,34 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
+  }
+
+  async function manageTeamMember(member: TeamMember, action: "reset_password" | "set_status", status?: "active" | "suspended" | "removed") {
+    const loadingId = toast.loading(action === "reset_password" ? "Resetting login securely..." : "Updating team access...");
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-platform-team", { body: {
+        action,
+        member_id: member.id,
+        status,
+      } });
+      if (error) {
+        const context = error.context ? await error.context.json().catch(() => null) : null;
+        throw new Error(context?.error || error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      if (action === "reset_password") {
+        setNewCredentials({ ...data.credentials, name: member.name });
+        setTeamMembers((current) => current.map((item) => item.id === member.id ? { ...item, status: "active" } : item));
+        toast.success(data.email_sent ? "A new temporary login was emailed." : "Login reset. Share the one-time credentials securely.");
+      } else if (status) {
+        setTeamMembers((current) => current.map((item) => item.id === member.id ? { ...item, status } : item));
+        toast.success(status === "active" ? "Team access restored." : status === "suspended" ? "Team access suspended." : "Team member access removed.");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Team account could not be updated.");
+    } finally {
+      toast.dismiss(loadingId);
+    }
   }
 
   // Calculate dynamic telemetry and statistics
@@ -1044,6 +1073,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     "Vendor Pro": "bg-accent/10 text-accent",
     Free: "bg-muted text-muted-foreground",
   };
+  const filteredTeamMembers = teamMembers.filter((member) => {
+    const query = teamSearch.trim().toLowerCase();
+    const matchesSearch = !query || [member.name, member.email, member.username, member.phone, member.role].some((value) => String(value || "").toLowerCase().includes(query));
+    const matchesStatus = teamStatusFilter === "current"
+      ? member.status !== "removed"
+      : member.status === teamStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="min-h-screen bg-background pb-12">
@@ -2710,23 +2747,25 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             {/* Sub-tab navigation */}
             <div className="flex border-b border-border mb-6 overflow-x-auto gap-2 scrollbar-none">
               {[
-                { id: "accounts", label: "Team Accounts" },
-                { id: "announcements", label: "Announcements" },
-                { id: "resources", label: "Resources & Docs" },
-                { id: "targets", label: "Performance Targets" },
+                { id: "accounts", label: "Team accounts", icon: Users, count: teamMembers.filter((member) => member.status !== "removed").length },
+                { id: "announcements", label: "Announcements", icon: Mail, count: announcements.length },
+                { id: "resources", label: "Resources", icon: FileText, count: resources.length },
+                { id: "targets", label: "Performance targets", icon: TrendingUp, count: targets.length },
               ].map((sub) => (
                 <button
                   key={sub.id}
                   onClick={() => setTeamSubTab(sub.id as any)}
                   className={cn(
-                    "px-4 py-2 border-b-2 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer",
+                    "px-3 sm:px-4 py-2.5 border-b-2 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-2",
                     teamSubTab === sub.id
                       ? "border-accent text-accent"
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
+                  <sub.icon className="w-3.5 h-3.5" />
                   {sub.label}
+                  <span className={cn("min-w-5 h-5 px-1 rounded-full inline-flex items-center justify-center text-[9px] font-mono", teamSubTab === sub.id ? "bg-accent/10 text-accent" : "bg-secondary text-muted-foreground")}>{sub.count}</span>
                 </button>
               ))}
             </div>
@@ -2740,7 +2779,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       Team accounts
                     </h2>
                 <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {teamMembers.length} team members · Marketing, Sales &amp; Support staff
+                  {teamMembers.filter((member) => member.status === "active").length} active · {teamMembers.filter((member) => member.status === "suspended").length} suspended · {teamMembers.filter((member) => member.status === "removed").length} former
                 </p>
               </div>
               {!showTeamForm && (
@@ -2749,23 +2788,46 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   className="flex items-center justify-center gap-1.5 text-sm bg-accent text-white px-4 py-2.5 rounded-lg hover:bg-accent/90 transition-colors font-medium w-full sm:w-auto"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
-                  + Create account
+                  <Users className="w-4 h-4" /> Create account
                 </button>
               )}
             </div>
 
+            <div className="bg-card border border-border rounded-xl p-3 mb-5 flex flex-col md:flex-row md:items-center gap-3">
+              <div className="relative flex-1 min-w-0">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="search"
+                  value={teamSearch}
+                  onChange={(event) => setTeamSearch(event.target.value)}
+                  placeholder="Search name, role, email or phone"
+                  className="w-full bg-input-background border border-border rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/25"
+                  aria-label="Search team accounts"
+                />
+              </div>
+              <div className="grid grid-cols-2 sm:flex gap-1.5 bg-secondary/60 p-1 rounded-lg" aria-label="Filter team accounts by status">
+                {(["current", "active", "suspended", "removed"] as const).map((status) => (
+                  <button key={status} type="button" onClick={() => setTeamStatusFilter(status)} className={cn("px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-colors", teamStatusFilter === status ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                    {status === "removed" ? "Former" : status}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Create form */}
             {showTeamForm && (
-              <div className="bg-card border border-border rounded-xl mb-6 overflow-hidden">
+              <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-[2px] p-3 sm:p-6 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="new-team-member-title" onMouseDown={(event) => { if (event.target === event.currentTarget && !isCreatingTeam) setShowTeamForm(false); }}>
+              <div className="bg-card border border-border rounded-xl overflow-hidden shadow-2xl w-full max-w-2xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col">
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                  <h3 className="font-medium text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    New team member
-                  </h3>
-                  <button onClick={() => setShowTeamForm(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+                  <div>
+                    <h3 id="new-team-member-title" className="font-semibold text-foreground text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Create team account</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Add identity, role and compliance documents. Login details are generated securely after creation.</p>
+                  </div>
+                  <button onClick={() => setShowTeamForm(false)} disabled={isCreatingTeam} className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50" aria-label="Close create team account">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="p-5 grid sm:grid-cols-2 gap-4">
+                <div className="p-5 grid sm:grid-cols-2 gap-4 overflow-y-auto">
                   {/* Full name */}
                   <div className="sm:col-span-2">
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -2834,7 +2896,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   {/* Valid ID upload */}
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      Valid ID <span className="text-xs text-muted-foreground font-normal">(NIN, passport, driver's licence)</span>
+                      Valid ID <span className="text-red-500">*</span> <span className="text-xs text-muted-foreground font-normal">(NIN, passport, driver's licence)</span>
                     </label>
                     <label className={cn(
                       "flex items-center gap-2 px-3 py-2.5 border border-dashed rounded-lg cursor-pointer transition-colors",
@@ -2868,7 +2930,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   {/* Headshot upload */}
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      Headshot photo <span className="text-xs text-muted-foreground font-normal">(clear, front-facing)</span>
+                      Headshot photo <span className="text-red-500">*</span> <span className="text-xs text-muted-foreground font-normal">(clear, front-facing)</span>
                     </label>
                     <label className={cn(
                       "flex items-center gap-2 px-3 py-2.5 border border-dashed rounded-lg cursor-pointer transition-colors",
@@ -2913,25 +2975,26 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     </div>
                   )}
                 </div>
-                <div className="px-5 pb-5 flex gap-2">
+                <div className="px-5 py-4 border-t border-border bg-secondary/30 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                   <button
                     onClick={handleCreateTeamMember}
-                    disabled={!teamForm.name || !teamForm.email || !teamForm.phone}
-                    className="flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-1 sm:flex-initial whitespace-nowrap"
+                    disabled={isCreatingTeam || !teamForm.name || !teamForm.email || !teamForm.phone || !idDocFile || !headshotFile}
+                    className="flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed w-full sm:w-auto whitespace-nowrap"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     <Check className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="hidden sm:inline">Create account &amp; generate login</span>
-                    <span className="sm:hidden">Create account</span>
+                    <span>{isCreatingTeam ? "Creating account..." : "Create account"}</span>
                   </button>
                   <button
                     onClick={() => setShowTeamForm(false)}
-                    className="px-4 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors flex-1 sm:flex-initial text-center font-medium border border-transparent hover:border-border/30"
+                    disabled={isCreatingTeam}
+                    className="px-4 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors w-full sm:w-auto text-center font-medium border border-border disabled:opacity-50"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     Cancel
                   </button>
                 </div>
+              </div>
               </div>
             )}
 
@@ -2946,18 +3009,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 </div>
               )}
 
-              {isCreatingTeam && (
-                <div className="bg-card border border-border border-dashed rounded-xl p-8 text-center w-full my-4 flex flex-col items-center justify-center gap-3">
-                  <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                  <p className="text-xs text-muted-foreground font-medium animate-pulse" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Saving new staff member and dispatching onboarding credentials...
-                  </p>
-                </div>
-              )}
-
               {!isLoading && teamMembers.length > 0 && (
-                teamMembers.map((m) => (
-                  <div key={m.id} className="bg-card border border-border rounded-xl p-4 flex items-start gap-4">
+                filteredTeamMembers.map((m) => (
+                  <div key={m.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex items-start gap-3 sm:gap-4 min-w-0">
                     {(() => {
                       const src = m.headshotUrl || (m as any).headshot_url;
                       return src && !src.startsWith("blob:") ? (
@@ -2975,9 +3029,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div>
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <p className="font-medium text-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.name}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <p className="font-semibold text-foreground text-sm break-words" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.name}</p>
                             <span className={cn(
                               "text-xs px-2 py-0.5 rounded-full font-medium",
                               m.role === "Marketing" ? "bg-blue-100 text-blue-700" :
@@ -2990,15 +3044,15 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                             </span>
                             <span className={cn(
                               "text-xs px-2 py-0.5 rounded-full font-medium",
-                              m.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                              m.status === "active" ? "bg-green-100 text-green-700" : m.status === "suspended" ? "bg-amber-100 text-amber-700" : "bg-secondary text-muted-foreground"
                             )}>
-                              {m.status === "active" ? "Active" : "Suspended"}
+                              {m.status === "active" ? "Active" : m.status === "suspended" ? "Suspended" : "Former"}
                             </span>
                           </div>
-                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                            <span>{m.phone}</span>
-                            <span>{m.email}</span>
-                            <span className="font-mono">{m.username}</span>
+                          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-1 text-xs text-muted-foreground min-w-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            <span className="truncate" title={m.phone}>{m.phone}</span>
+                            <span className="truncate" title={m.email}>{m.email}</span>
+                            <span className="font-mono truncate" title={m.username}>{m.username}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -3011,81 +3065,66 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                         </div>
                       </div>
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3 pt-3 border-t border-border/40">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate max-w-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           <Shield className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-                          <span>ID verified · </span>
-                          <span className="font-mono truncate max-w-[150px] sm:max-w-[200px]" title={m.idFileName || (m as any).id_file_name}>
-                            {m.idFileName || (m as any).id_file_name || "id_document.pdf"}
-                          </span>
+                          {(m.idFileName || (m as any).id_file_name || "").startsWith("http") ? (
+                            <a href={m.idFileName || (m as any).id_file_name} target="_blank" rel="noreferrer" className="font-semibold text-accent hover:underline">View verified ID</a>
+                          ) : <span>ID document recorded</span>}
                         </div>
-                        <div className="flex items-center gap-3.5 flex-wrap">
+                        <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
                           <button
-                            onClick={() => {
-                              const creds = generateCredentials(m.name);
-                              setNewCredentials({ ...creds, name: m.name });
-                            }}
-                            className="text-xs text-accent hover:underline font-semibold"
+                            onClick={() => manageTeamMember(m, "reset_password")}
+                            disabled={m.status === "removed"}
+                            className="text-xs text-accent font-semibold border border-accent/20 bg-accent/5 hover:bg-accent/10 rounded-lg px-3 py-2 disabled:opacity-40"
                             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                           >
-                            Regenerate login
+                            Reset login
                           </button>
+                          {m.status !== "removed" && (
                           <button
-                            onClick={async () => {
-                              const newStatus = m.status === "active" ? "suspended" : "active";
-                              const { error } = await supabase
-                                .from("admin_team")
-                                .update({ status: newStatus })
-                                .eq("id", m.id);
-                              if (error) {
-                                toast.error(error.message);
-                                return;
-                              }
-                              setTeamMembers((prev) =>
-                                prev.map((item) => (item.id === m.id ? { ...item, status: newStatus } : item))
-                              );
-                              toast.success(`Account successfully ${newStatus === "active" ? "activated" : "suspended"}.`);
-                            }}
+                            onClick={() => m.status === "active" ? setConfirmModal({ isOpen: true, title: "Suspend team access?", message: `${m.name} will be signed out and unable to use the team workspace until access is restored.`, confirmText: "Suspend access", type: "warning", onConfirm: async () => { setConfirmModal((current) => ({ ...current, isOpen: false })); await manageTeamMember(m, "set_status", "suspended"); } }) : manageTeamMember(m, "set_status", "active")}
                             className={cn(
-                              "text-xs hover:underline font-semibold",
-                              m.status === "active" ? "text-amber-600 hover:text-amber-700" : "text-green-600 hover:text-green-700"
+                              "text-xs font-semibold rounded-lg px-3 py-2 border",
+                              m.status === "active" ? "text-amber-700 border-amber-200 hover:bg-amber-50" : "text-green-700 border-green-200 hover:bg-green-50"
                             )}
                             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                           >
                             {m.status === "active" ? "Suspend" : "Activate"}
                           </button>
+                          )}
                           <button
+                            disabled={m.status === "removed"}
                             onClick={() => {
                               setConfirmModal({
                                 isOpen: true,
-                                title: "Remove Team Member",
-                                message: `Are you sure you want to remove ${m.name} from the platform team? They will lose dashboard access immediately.`,
-                                confirmText: "Remove Member",
+                                title: "Remove team access?",
+                                message: `${m.name} will be signed out and moved to Former staff. Their historical performance records will be preserved.`,
+                                confirmText: "Remove access",
                                 type: "danger",
                                 onConfirm: async () => {
-                                  const { error } = await supabase
-                                    .from("admin_team")
-                                    .delete()
-                                    .eq("id", m.id);
-                                  if (error) {
-                                    toast.error(error.message);
-                                    return;
-                                  }
-                                  setTeamMembers((prev) => prev.filter((item) => item.id !== m.id));
-                                  toast.success("Account successfully removed from team.");
                                   setConfirmModal((c) => ({ ...c, isOpen: false }));
+                                  await manageTeamMember(m, "set_status", "removed");
                                 }
                               });
                             }}
-                            className="text-xs text-red-600 hover:text-red-700 hover:underline font-semibold"
+                            className="col-span-2 sm:col-span-1 text-xs text-red-600 font-semibold border border-red-200 hover:bg-red-50 rounded-lg px-3 py-2 disabled:opacity-40"
                             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                           >
-                            Remove
+                            Remove access
                           </button>
                         </div>
                       </div>
                     </div>
                   </div>
                 ))
+              )}
+
+              {!isLoading && teamMembers.length > 0 && filteredTeamMembers.length === 0 && (
+                <div className="bg-card border border-dashed border-border rounded-xl p-10 text-center">
+                  <Search className="w-7 h-7 text-muted-foreground/60 mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-foreground">No matching team accounts</p>
+                  <p className="text-xs text-muted-foreground mt-1">Change the search term or status filter.</p>
+                </div>
               )}
 
               {!isLoading && teamMembers.length === 0 && !isCreatingTeam && !showTeamForm && (
@@ -3128,7 +3167,8 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             </div>
 
             {showAnnForm && (
-              <form onSubmit={handlePublishAnnouncement} className="bg-card border border-border rounded-xl p-5 space-y-4">
+              <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-[2px] p-4 flex items-center justify-center" role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.target === event.currentTarget && !isPublishingAnn) setShowAnnForm(false); }}>
+              <form onSubmit={handlePublishAnnouncement} className="bg-card border border-border rounded-xl p-5 space-y-4 w-full max-w-lg shadow-2xl">
                 <div className="flex items-center justify-between border-b border-border pb-3 mb-2">
                   <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider font-mono">Create Announcement</h4>
                   <button type="button" onClick={() => setShowAnnForm(false)} className="text-muted-foreground hover:text-foreground">
@@ -3140,6 +3180,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   <input
                     type="text"
                     required
+                    maxLength={120}
                     value={annForm.title}
                     onChange={(e) => setAnnForm({ ...annForm, title: e.target.value })}
                     className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
@@ -3150,6 +3191,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   <label className="block text-xs font-semibold text-muted-foreground mb-1.5 font-mono">Body Content</label>
                   <textarea
                     required
+                    maxLength={1200}
                     rows={4}
                     value={annForm.body}
                     onChange={(e) => setAnnForm({ ...annForm, body: e.target.value })}
@@ -3174,6 +3216,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   </button>
                 </div>
               </form>
+              </div>
             )}
 
             <div className="space-y-3">
@@ -3193,10 +3236,10 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       onClick={() => {
                         setConfirmModal({
                           isOpen: true,
-                          title: "Delete Announcement",
-                          message: `Are you sure you want to delete the announcement "${a.title}"? This cannot be undone.`,
-                          confirmText: "Delete",
-                          type: "danger",
+                          title: "Archive announcement?",
+                          message: `"${a.title}" will be removed from every team dashboard but retained in the database.`,
+                          confirmText: "Archive",
+                          type: "warning",
                           onConfirm: () => {
                             handleDeleteAnnouncement(a.id);
                             setConfirmModal((c) => ({ ...c, isOpen: false }));
@@ -3241,7 +3284,8 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             </div>
 
             {showResForm && (
-              <form onSubmit={handleAddResource} className="bg-card border border-border rounded-xl p-5 space-y-4">
+              <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-[2px] p-4 flex items-center justify-center" role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.target === event.currentTarget && !isUploadingRes) setShowResForm(false); }}>
+              <form onSubmit={handleAddResource} className="bg-card border border-border rounded-xl p-5 space-y-4 w-full max-w-2xl shadow-2xl max-h-[calc(100vh-2rem)] overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-border pb-3 mb-2">
                   <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider font-mono">Upload Resource</h4>
                   <button type="button" onClick={() => setShowResForm(false)} className="text-muted-foreground hover:text-foreground">
@@ -3254,6 +3298,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     <input
                       type="text"
                       required
+                      maxLength={120}
                       value={resForm.title}
                       onChange={(e) => setResForm({ ...resForm, title: e.target.value })}
                       className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
@@ -3265,6 +3310,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     <input
                       type="text"
                       value={resForm.description}
+                      maxLength={300}
                       onChange={(e) => setResForm({ ...resForm, description: e.target.value })}
                       className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent"
                       placeholder="Brief description of file contents"
@@ -3275,6 +3321,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     <input
                       type="file"
                       required
+                      accept=".pdf,.jpg,.jpeg,.png,.docx,.zip"
                       onChange={(e) => setResourceFile(e.target.files?.[0] || null)}
                       className="w-full text-xs text-muted-foreground file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-accent/15 file:text-accent hover:file:bg-accent/25 file:cursor-pointer"
                     />
@@ -3298,6 +3345,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   </button>
                 </div>
               </form>
+              </div>
             )}
 
             <div className="space-y-3">
@@ -3326,10 +3374,10 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       onClick={() => {
                         setConfirmModal({
                           isOpen: true,
-                          title: "Delete Resource",
-                          message: `Are you sure you want to delete "${r.title}"? This will remove the file from all staff portals immediately.`,
-                          confirmText: "Delete",
-                          type: "danger",
+                          title: "Archive resource?",
+                          message: `"${r.title}" will be removed from every team dashboard but retained for administrative records.`,
+                          confirmText: "Archive",
+                          type: "warning",
                           onConfirm: () => {
                             handleDeleteResource(r.id);
                             setConfirmModal((c) => ({ ...c, isOpen: false }));
@@ -3339,7 +3387,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                       className="w-full sm:w-auto flex items-center justify-center gap-1.5 text-muted-foreground hover:text-red-600 p-2 sm:p-1.5 rounded border border-border sm:border-transparent hover:bg-secondary transition-colors cursor-pointer flex-shrink-0"
                     >
                       <Trash2 className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-xs sm:hidden font-semibold">Delete Resource</span>
+                      <span className="text-xs sm:hidden font-semibold">Archive resource</span>
                     </button>
                   </div>
                 ))
@@ -3430,8 +3478,8 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="divide-y divide-border">
-                {teamMembers.length > 0 ? (
-                  teamMembers.map((m) => {
+                {teamMembers.some((member) => member.status !== "removed") ? (
+                  teamMembers.filter((member) => member.status !== "removed").map((m) => {
                     const mTargets = targets.filter((t) => t.team_member_id === m.id);
                     const vendorsTarget = mTargets.find((t) => t.metric === "vendors_onboarded")?.target || 0;
                     const scansTarget = mTargets.find((t) => t.metric === "scans_via_link")?.target || 0;

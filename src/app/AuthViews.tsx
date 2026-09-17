@@ -248,26 +248,19 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
         const storedRef = sessionStorage.getItem("referral_code");
         if (storedRef) {
           try {
-            const { data: staffMember } = await supabase
-              .from("admin_team")
-              .select("id")
-              .or(`username.eq."${storedRef}",id.like."${storedRef}%"`)
-              .maybeSingle();
-            if (staffMember) {
-              await supabase.from("team_referral_events").insert([{
-                team_member_id: staffMember.id,
-                event_type: "vendor_signup",
+            await supabase.functions.invoke("track-referral-event", { body: {
+              referral_code: storedRef,
+              event_type: "vendor_signup",
+              city: form.city || "Nigeria",
+              metadata: {
+                business_name: form.businessName,
+                vendor_name: form.fullName,
+                plan: "Trial Started",
+                owner: form.fullName,
+                products: 0,
                 city: form.city || "Nigeria",
-                metadata: {
-                  business_name: form.businessName,
-                  vendor_name: form.fullName,
-                  plan: "Trial Started",
-                  owner: form.fullName,
-                  products: 0,
-                  city: form.city || "Nigeria"
-                }
-              }]);
-            }
+              },
+            } });
           } catch (e) {
             console.warn("Failed to record referral vendor signup:", e);
           }

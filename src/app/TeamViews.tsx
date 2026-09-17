@@ -131,7 +131,7 @@ export function TeamLoginView({ setView }: { setView: (v: View) => void }) {
 }
 
 // ---- TEAM DASHBOARD ----
-type TeamDashTab = "overview" | "referrals" | "resources" | "leaderboard" | "settings";
+type TeamDashTab = "overview" | "referrals" | "leaderboard" | "announcements" | "resources" | "settings";
 
 export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
   const [tab, setTab] = useState<TeamDashTab>(() => (sessionStorage.getItem("active_team_tab") as TeamDashTab) || "overview");
@@ -142,6 +142,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
   const [resources, setResources] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [monthlyTargets, setMonthlyTargets] = useState<any[]>([]);
+  const [leaderboardRows, setLeaderboardRows] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Profile forms
@@ -166,16 +167,14 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) throw new Error("Not authenticated");
 
-      const { error } = await supabase
-        .from("admin_team")
-        .update({
-          name: profileForm.name,
-          phone: profileForm.phone,
-          headshot_url: profileForm.headshotUrl,
-        })
-        .or(`email.eq."${user.email}",username.eq."${user.email}"`);
-
+      const { data, error } = await supabase.functions.invoke("manage-platform-team", { body: {
+        action: "update_profile",
+        name: profileForm.name.trim(),
+        phone: profileForm.phone.trim(),
+        headshot_url: profileForm.headshotUrl,
+      } });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       
       setMember((prev: any) => ({
         ...prev,
@@ -270,7 +269,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
           .maybeSingle();
         if (membershipError) console.warn("Team membership lookup failed:", membershipError.message);
         
-        if (memberRec) {
+        if (memberRec && memberRec.status !== "suspended") {
           membership = memberRec;
         } else {
           // Fallback to admin_team table to resolve platform field officers
@@ -280,7 +279,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
             .or(`email.eq."${user.email}",username.eq."${user.email}"`)
             .maybeSingle();
           if (adminErr) console.warn("Admin team fallback lookup failed:", adminErr.message);
-          if (adminRec) {
+          if (adminRec?.status === "active") {
             membership = {
               id: adminRec.id,
               name: adminRec.name,
@@ -317,11 +316,12 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
       });
       setReferralLink(membership.referral_code ? `https://anovra.africa/#/scan?ref=${membership.referral_code}` : "");
 
-      const [{ data: events }, { data: resourceRows }, { data: announcementRows }, { data: targetRows }] = await Promise.all([
+      const [{ data: events }, { data: resourceRows }, { data: announcementRows }, { data: targetRows }, { data: leaderboardData }] = await Promise.all([
         supabase.from("team_referral_events").select("*").eq("team_member_id", membership.id).order("created_at", { ascending: false }),
         supabase.from("team_resources").select("*").eq("is_active", true).order("created_at", { ascending: false }),
         supabase.from("team_announcements").select("*").eq("is_active", true).order("created_at", { ascending: false }),
         supabase.from("team_targets").select("*").eq("team_member_id", membership.id),
+        supabase.rpc("get_platform_team_leaderboard"),
       ]);
 
       const localEvents = events || [];
@@ -332,6 +332,17 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
       setReferralEvents(localEvents);
       setResources(resourceRows || []);
       setAnnouncements(announcementRows || []);
+      setLeaderboardRows((leaderboardData || []).map((row: any) => ({
+        rank: Number(row.rank),
+        id: row.member_id,
+        name: row.member_name,
+        role: row.member_role,
+        scans: Number(row.scans || 0),
+        vendors: Number(row.vendors || 0),
+        revenue: `₦${Number(row.revenue || 0).toLocaleString()}`,
+        isMe: row.member_id === membership.id,
+        headshotUrl: row.headshot_url || "",
+      })));
       setMonthlyTargets((targetRows || []).map((target) => {
         const isVendors = target.metric === "vendors_onboarded";
         const isScans = target.metric === "scans_via_link";
@@ -385,16 +396,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
     { label: "Conversions", value: `₦${revenueGenerated.toLocaleString()}`, delta: revenueGenerated ? "Tracked payouts" : "No tracked payouts yet", up: true, icon: <Wallet className="w-4 h-4" /> },
   ];
 
-  const leaderboard = referralEvents.length ? [{
-    rank: 1,
-    name: member.name,
-    role: member.role,
-    scans: scansCompleted,
-    vendors: vendorsSignedUp,
-    revenue: `₦${revenueGenerated.toLocaleString()}`,
-    isMe: true,
-    headshotUrl: member.headshotUrl,
-  }] : [];
+  const leaderboard = leaderboardRows;
 
   const dailyScans = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, index) => ({
     day,
@@ -451,6 +453,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
     { id: "overview", label: "Overview", icon: LayoutDashboard },
     { id: "referrals", label: "Referrals", icon: LinkIcon },
     { id: "leaderboard", label: "Leaderboard", icon: Trophy },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
     { id: "resources", label: "Resources", icon: BookOpen },
     { id: "settings", label: "Profile & security", icon: Settings },
   ];
@@ -862,7 +865,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
             <div className="bg-card border border-border rounded-xl p-5">
               <h3 className="font-medium text-foreground mb-4">Your monthly targets</h3>
               <div className="space-y-4">
-                {monthlyTargets.map((t) => {
+                {monthlyTargets.length ? monthlyTargets.map((t) => {
                   const pct = t.target > 0 ? Math.min(100, Math.round((t.current / t.target) * 100)) : 0;
                   return (
                     <div key={t.label}>
@@ -877,7 +880,12 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                       </div>
                     </div>
                   );
-                })}
+                }) : (
+                  <div className="border border-dashed border-border rounded-lg p-6 text-center">
+                    <p className="text-sm font-semibold text-foreground">No monthly targets assigned</p>
+                    <p className="text-xs text-muted-foreground mt-1">Targets set by the Platform Admin will appear here.</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -909,25 +917,30 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
               )}
             </div>
 
-            {/* Announcements */}
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="font-medium text-foreground mb-4">Team announcements</h3>
-              <div className="space-y-3">
-                {announcements.length > 0 ? announcements.map((a, i) => (
-                  <div key={i} className="border-b border-border last:border-0 pb-3 last:pb-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-muted-foreground font-mono">{new Date(a.created_at || Date.now()).toLocaleDateString("en-GB")}</span>
-                      <span className="w-1 h-1 rounded-full bg-border" />
-                      <span className="text-xs font-semibold text-foreground">{a.title}</span>
+          </div>
+        )}
+
+        {tab === "announcements" && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Team announcements</h2>
+              <p className="text-sm text-muted-foreground mt-1">Operational updates published by Anovra administration.</p>
+            </div>
+            <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden">
+              {announcements.length > 0 ? announcements.map((announcement) => (
+                <article key={announcement.id} className="p-4 sm:p-5 flex items-start gap-3 sm:gap-4">
+                  <div className="w-9 h-9 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0"><Megaphone className="w-4 h-4" /></div>
+                  <div className="min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                      <h3 className="text-sm font-semibold text-foreground break-words">{announcement.title}</h3>
+                      <time className="text-[10px] text-muted-foreground font-mono shrink-0">{new Date(announcement.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</time>
                     </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{a.body}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed mt-2 whitespace-pre-wrap break-words">{announcement.body}</p>
                   </div>
-                )) : (
-                  <div className="border border-dashed border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
-                    No team announcements have been published yet.
-                  </div>
-                )}
-              </div>
+                </article>
+              )) : (
+                <div className="p-10 text-center"><Megaphone className="w-7 h-7 text-muted-foreground/50 mx-auto mb-3" /><p className="text-sm font-semibold text-foreground">No announcements yet</p><p className="text-xs text-muted-foreground mt-1">New operational updates will appear here.</p></div>
+              )}
             </div>
           </div>
         )}

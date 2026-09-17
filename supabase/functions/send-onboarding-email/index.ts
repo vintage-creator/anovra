@@ -112,64 +112,8 @@ serve(async (req) => {
 
     // Handle team member registration directly via Admin API to avoid fragile SQL triggers
     if (action === "create_team_member") {
-      if (!supabaseUrl || !serviceKey) {
-        throw new Error("Missing Supabase configuration env variables.");
-      }
-      const admin = createClient(supabaseUrl, serviceKey);
-
-      // 1. Create the user in auth.users
-      const { data: authData, error: authErr } = await admin.auth.admin.createUser({
-        email: payload.username,
-        password: payload.password,
-        email_confirm: true,
-        user_metadata: { role: 'staff', name: payload.name }
-      });
-
-      if (authErr) throw authErr;
-      if (!authData.user) throw new Error("Auth user creation failed.");
-
-      // 2. Insert into public.admin_team
-      const { error: insertErr } = await admin.from("admin_team").insert([{
-        id: authData.user.id,
-        name: payload.name,
-        phone: payload.phone,
-        email: payload.email,
-        role: payload.role,
-        id_file_name: payload.id_file_name,
-        headshot_url: payload.headshot_url,
-        username: payload.username,
-        password: payload.password,
-        status: "active"
-      }]);
-
-      if (insertErr) {
-        // Rollback created auth user if public table insertion fails
-        await admin.auth.admin.deleteUser(authData.user.id);
-        throw insertErr;
-      }
-
-      // 3. Send welcoming credentials email
-      const resendApiKey = Deno.env.get("RESEND_API_KEY");
-      if (resendApiKey) {
-        const message = `You have been added to the Anovra Platform Administration team as a staff member with the role of ${payload.role}. Your login email is ${payload.username} and your temporary password is ${payload.password}. Please sign in here: https://anovra.africa/#/teamlogin and change your password upon your first login.`;
-        
-        await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${resendApiKey}`,
-          },
-          body: JSON.stringify({
-            from: "Anovra <hello@anovra.africa>",
-            to: [payload.email],
-            subject: "Welcome to the Anovra Admin Team",
-            html: htmlShell("Welcome to the Anovra Admin Team", `<p>Hi ${escapeHtml(payload.name)},</p><p>${escapeHtml(message)}</p>`),
-          }),
-        });
-      }
-
-      return new Response(JSON.stringify({ success: true, user: authData.user }), {
-        status: 200,
+      return new Response(JSON.stringify({ error: "Team accounts must be created through the secure manage-platform-team function." }), {
+        status: 410,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
