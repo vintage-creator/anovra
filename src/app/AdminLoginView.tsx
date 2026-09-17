@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Eye, AlertCircle, ChevronRight } from "lucide-react";
 import type { View } from "./types";
+import { supabase } from "./utils/supabase";
 
 export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
   const [email, setEmail] = useState("");
@@ -9,22 +10,33 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Seeded credentials for admin
-  const ADMIN_EMAIL = "hello@anovra.africa";
-  const ADMIN_PASS = "@Skin_ana1";
-
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) { setError("Please enter your admin email and password."); return; }
     setError("");
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (email.trim().toLowerCase() === ADMIN_EMAIL && password === ADMIN_PASS) {
-        setView("admin");
-      } else {
-        setError("Invalid credentials. Check your email and password and try again.");
+
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      if (authError) throw authError;
+
+      const role = data.user?.user_metadata?.role;
+      const accountEmail = data.user?.email?.toLowerCase();
+      if (role !== "admin" && accountEmail !== "admin@anovra.africa" && accountEmail !== "hello@anovra.africa") {
+        await supabase.auth.signOut();
+        throw new Error("This account does not have administrator access.");
       }
-    }, 1200);
+
+      setView("admin");
+    } catch (loginError: any) {
+      setError(loginError?.message === "Invalid login credentials"
+        ? "The email address or password is incorrect. Please check your details and try again."
+        : loginError?.message || "Unable to sign in. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -63,7 +75,7 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
               <input
                 type="email"
                 autoComplete="username"
-                placeholder="hello@anovra.africa"
+                placeholder="admin@anovra.africa"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
@@ -132,12 +144,6 @@ export function AdminLoginView({ setView }: { setView: (v: View) => void }) {
             </button>
           </div>
 
-          {/* Demo hint */}
-          <div className="mt-5 p-3 bg-muted rounded-xl">
-            <p className="text-[11px] text-muted-foreground text-center leading-relaxed" style={{ fontFamily: "'DM Mono', monospace" }}>
-              admin · hello@anovra.africa / @Skin_ana1
-            </p>
-          </div>
         </div>
 
         {/* Back link */}

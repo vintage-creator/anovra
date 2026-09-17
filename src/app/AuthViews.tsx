@@ -1088,10 +1088,10 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
     if (!email || !password) { setError("Please enter your email and password."); return; }
     setError("");
     setLoading(true);
-    
+
     try {
       const { data, error: authErr } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim().toLowerCase(),
         password,
       });
 
