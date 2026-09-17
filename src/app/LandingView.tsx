@@ -1047,13 +1047,20 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     {t.price}
                   </p>
                   <p className="text-xs mb-3 text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
-                  <span className="mb-6 inline-flex w-fit rounded-full bg-[#008236]/10 px-2.5 py-1 text-[11px] font-bold text-[#008236] border border-[#008236]/20">
+                  <span
+                    className={cn(
+                      "mb-6 inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-bold border",
+                      t.highlight
+                        ? "bg-[#C86B3A]/10 text-[#C86B3A] border-[#C86B3A]/20"
+                        : "bg-[#008236]/10 text-[#008236] border-[#008236]/20"
+                    )}
+                  >
                     14-day free trial
                   </span>
                   <ul className="space-y-2.5 flex-1 mb-6">
                     {t.features.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-[#008236]" />
+                        <Check className={cn("w-3.5 h-3.5 mt-0.5 flex-shrink-0", t.highlight ? "text-[#C86B3A]" : "text-[#008236]")} />
                         <span className="text-muted-foreground">{f}</span>
                       </li>
                     ))}
