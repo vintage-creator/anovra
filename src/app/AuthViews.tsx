@@ -91,6 +91,8 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
     password: "",
     confirmPassword: "",
     referralCode: "",
+    headquarters: "",
+    brandTagline: "",
   });
   const [cacDocFile, setCacDocFile] = useState<File | null>(null);
 
@@ -136,7 +138,11 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
   // Vendor Step Validations
   const step1Valid = form.fullName.trim().length >= 3 && form.email.includes("@") && form.whatsapp.length === 10;
   const isCacValid = form.cac.trim().length >= 5 && form.cac.trim().length <= 14;
-  const step2Valid = isCacValid && form.businessName.trim().length >= 3 && form.cacDoc && socialAccounts[0].url.trim().length >= 3 && validSocialUrls;
+  const brandIdentityValid = accountKind !== "brand" || (
+    form.headquarters.trim().length >= 3 &&
+    form.brandTagline.trim().length >= 10
+  );
+  const step2Valid = isCacValid && form.businessName.trim().length >= 3 && form.cacDoc && socialAccounts[0].url.trim().length >= 3 && validSocialUrls && brandIdentityValid;
   const step3Valid = passwordScore >= 4 && passwordsMatch;
   const canSubmitVendor = step1Valid && step2Valid && step3Valid;
 
@@ -204,6 +210,8 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
             phone: selectedRole === "vendor" || selectedRole === "brand" ? "+234" + form.whatsapp : null,
             nafdac_number: selectedRole === "vendor" ? form.referralCode : null,
             slug: form.businessName,
+            location: selectedRole === "brand" ? form.headquarters.trim() : null,
+            tagline: selectedRole === "brand" ? form.brandTagline.trim() : null,
           },
         },
       });
@@ -422,6 +430,38 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                         Minimum 3 characters.
                       </p>
                     </div>
+
+                    {accountKind === "brand" && (
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className={labelCls}>Brand Headquarters *</label>
+                          <input
+                            className={inputCls}
+                            placeholder="e.g. Lagos, Nigeria"
+                            value={form.headquarters}
+                            onChange={(e) => set("headquarters", e.target.value)}
+                            autoComplete="organization"
+                            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                          />
+                          <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            Enter the organisation&apos;s head office, not a branch name.
+                          </p>
+                        </div>
+                        <div>
+                          <label className={labelCls}>Brand Description *</label>
+                          <input
+                            className={inputCls}
+                            placeholder="What your organisation is known for"
+                            value={form.brandTagline}
+                            onChange={(e) => set("brandTagline", e.target.value.slice(0, 140))}
+                            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                          />
+                          <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            Shown on the public Brand HQ profile. {form.brandTagline.length}/140
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <label className={labelCls}>CAC Certificate Upload *</label>

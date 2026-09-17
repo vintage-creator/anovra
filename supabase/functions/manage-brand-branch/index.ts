@@ -104,6 +104,8 @@ serve(async (req) => {
       const providedPassword = String(body.password || "").trim();
       if (branchName.length < 2) throw new Error("Branch name is required.");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(branchEmail)) throw new Error("A valid branch email is required.");
+      if (location.length < 3) throw new Error("A branch location is required.");
+      if (phone.replace(/\D/g, "").length < 10) throw new Error("A valid branch contact number is required.");
 
       const brandId = isAdmin && body.brand_id ? String(body.brand_id) : caller.id;
       const { data: brandProfile, error: brandError } = await admin
@@ -113,6 +115,9 @@ serve(async (req) => {
         .maybeSingle();
       if (brandError || !brandProfile) throw new Error("Brand profile not found.");
       if (!isAdmin && brandProfile.id !== caller.id) throw new Error("You can only create branches for your own brand.");
+      if (branchName.toLowerCase() === String(brandProfile.business_name || brandProfile.name || "").trim().toLowerCase()) {
+        throw new Error("The branch name must be distinct from the Brand HQ organisation name.");
+      }
 
       const brandSlug = slugify(brandProfile.slug || brandProfile.business_name || brandProfile.name || "brand");
       const baseBranchSlug = slugify(body.branch_slug || body.branchSlug || `${brandSlug}-${branchName}`);

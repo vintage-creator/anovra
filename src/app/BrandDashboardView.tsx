@@ -370,8 +370,20 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
   };
 
   const createBranch = async () => {
-    if (form.branchName.trim().length < 2 || !form.branchEmail.includes("@")) {
-      toast.error("Enter a branch name and valid email address.");
+    const branchName = form.branchName.trim();
+    const branchEmail = form.branchEmail.trim().toLowerCase();
+    const location = form.location.trim();
+    const phone = form.phone.trim();
+    if (branchName.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(branchEmail)) {
+      toast.error("Enter a branch name and valid branch email address.");
+      return;
+    }
+    if (branchName.toLowerCase() === String(brandProfile?.business_name || "").trim().toLowerCase()) {
+      toast.error("Use a distinct branch name, such as the brand name followed by its city or outlet.");
+      return;
+    }
+    if (location.length < 3 || phone.replace(/\D/g, "").length < 10) {
+      toast.error("Enter the branch location and a valid branch contact number.");
       return;
     }
     setCreating(true);
@@ -379,10 +391,10 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
       const { data, error } = await supabase.functions.invoke("manage-brand-branch", {
         body: {
           action: "create",
-          branchName: form.branchName,
-          branchEmail: form.branchEmail,
-          location: form.location,
-          phone: form.phone,
+          branchName,
+          branchEmail,
+          location,
+          phone,
           password: form.password || undefined,
         },
       });
@@ -803,10 +815,10 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                     </div>
                   </div>
                   <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    <Input label="Branch name" value={form.branchName} onChange={(value) => setForm((prev) => ({ ...prev, branchName: value }))} placeholder="Tulip Abuja" />
-                    <Input label="Branch email" value={form.branchEmail} onChange={(value) => setForm((prev) => ({ ...prev, branchEmail: value }))} placeholder="abuja@brand.com" />
-                    <Input label="Location" value={form.location} onChange={(value) => setForm((prev) => ({ ...prev, location: value }))} placeholder="Abuja, Nigeria" />
-                    <Input label="Phone" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))} placeholder="+234..." />
+                    <Input label="Branch name *" value={form.branchName} onChange={(value) => setForm((prev) => ({ ...prev, branchName: value }))} placeholder="Tulip Abuja" />
+                    <Input label="Branch email *" value={form.branchEmail} onChange={(value) => setForm((prev) => ({ ...prev, branchEmail: value }))} placeholder="abuja@brand.com" />
+                    <Input label="Branch location *" value={form.location} onChange={(value) => setForm((prev) => ({ ...prev, location: value }))} placeholder="Abuja, Nigeria" />
+                    <Input label="Branch phone *" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))} placeholder="+234..." />
                     <Input label="Temporary password" value={form.password} onChange={(value) => setForm((prev) => ({ ...prev, password: value }))} placeholder="Auto-generate if blank" />
                     <div className="rounded-xl bg-muted/40 border border-border p-3 flex items-start gap-3">
                       <Mail className="w-4 h-4 text-accent mt-0.5 shrink-0" />
