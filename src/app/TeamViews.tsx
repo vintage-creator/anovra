@@ -1,8 +1,14 @@
 import { useState, useEffect } from "react";
-import { Eye, AlertCircle, ChevronRight, Check, ExternalLink, MessageCircle, Store, Link as LinkIcon, Scan, Wallet, FileText, Megaphone } from "lucide-react";
+import {
+  Eye, AlertCircle, ChevronRight, Check, ExternalLink, MessageCircle, Store,
+  Link as LinkIcon, Scan, Wallet, FileText, Megaphone, LayoutDashboard,
+  Trophy, BookOpen, Settings, Menu, X, LogOut, Users,
+} from "lucide-react";
 import type { View } from "./types";
+import { cn } from "./types";
 import { supabase } from "./utils/supabase";
 import { toast } from "sonner";
+import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 
 // ---- TEAM LOGIN ----
 export function TeamLoginView({ setView }: { setView: (v: View) => void }) {
@@ -136,6 +142,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
   const [resources, setResources] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [monthlyTargets, setMonthlyTargets] = useState<any[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Profile forms
   const [profileForm, setProfileForm] = useState({
@@ -361,6 +368,16 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  async function handleSignOut() {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error(error.message || "Unable to sign out.");
+      return;
+    }
+    sessionStorage.removeItem("active_team_tab");
+    setView("teamlogin");
+  }
+
   const kpis = [
     { label: "Link clicks", value: String(linkClicks), delta: linkClicks ? "Live referral data" : "No live referrals yet", up: true, icon: <LinkIcon className="w-4 h-4" /> },
     { label: "Scans via your link", value: String(scansCompleted), delta: scansCompleted ? "Live referral data" : "No live referrals yet", up: true, icon: <Scan className="w-4 h-4" /> },
@@ -430,86 +447,108 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
     { stage: "Purchased", count: purchases, pct: Math.round((purchases / funnelBase) * 100), color: "#A04820" },
   ];
 
-  const tabs: { id: TeamDashTab; label: string }[] = [
-    { id: "overview", label: "Overview" },
-    { id: "referrals", label: "Referrals" },
-    { id: "leaderboard", label: "Leaderboard" },
-    { id: "resources", label: "Resources" },
-    { id: "settings", label: "Settings" },
+  const tabs: { id: TeamDashTab; label: string; icon: React.ElementType }[] = [
+    { id: "overview", label: "Overview", icon: LayoutDashboard },
+    { id: "referrals", label: "Referrals", icon: LinkIcon },
+    { id: "leaderboard", label: "Leaderboard", icon: Trophy },
+    { id: "resources", label: "Resources", icon: BookOpen },
+    { id: "settings", label: "Profile & security", icon: Settings },
   ];
 
   return (
-    <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      {/* Top bar */}
-      <header className="border-b border-border bg-card sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setView("landing")}
-              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-xl transition-transform hover:scale-105 active:scale-95 shrink-0"
-              aria-label="Anovra Home"
-            >
-              <img src="/logo.png" alt="Anovra Logo" className="h-14 sm:h-16 md:h-18 w-auto object-contain transition-transform group-hover:scale-105" />
-            </button>
-            <span className="text-border text-sm">·</span>
-            <span className="text-xs text-muted-foreground uppercase tracking-widest" style={{ fontFamily: "'DM Mono', monospace" }}>
-              Team Portal
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              {member.headshotUrl && !member.headshotUrl.startsWith("blob:") ? (
-                <img
-                  src={member.headshotUrl}
-                  alt={member.name}
-                  className="w-7 h-7 rounded-full object-cover flex-shrink-0 bg-secondary"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-accent/15 flex items-center justify-center">
-                  <span className="text-xs font-semibold text-accent">
+    <div className="min-h-screen bg-background pb-12" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <UnifiedDashboardHeader
+        currentView="teamdashboard"
+        setView={setView}
+        title="Team workspace"
+        subtitle="Referral performance, resources and account settings"
+        badgeText={member.role || "TEAM"}
+        role="admin"
+        showShopLink={false}
+        onMenuClick={() => setSidebarOpen((open) => !open)}
+        menuLabel={sidebarOpen ? "Close" : "Menu"}
+      />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 relative pt-2">
+        <div className="grid lg:grid-cols-[240px_minmax(0,1fr)] gap-6 items-start">
+          <aside className="hidden lg:flex bg-card border border-border rounded-xl py-5 px-3 sticky top-24 h-[calc(100vh-7rem)] flex-col justify-between overflow-hidden">
+            <div className="space-y-2 overflow-y-auto pr-1">
+              <div className="px-3 pb-4 mb-2 border-b border-border flex items-center gap-3 min-w-0">
+                {member.headshotUrl && !member.headshotUrl.startsWith("blob:") ? (
+                  <img src={member.headshotUrl} alt={member.name} className="w-9 h-9 rounded-full object-cover bg-secondary shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-accent/10 text-accent flex items-center justify-center text-xs font-bold shrink-0">
                     {member.name.split(/\s+/).filter(Boolean).map((part: string) => part[0]).join("").slice(0, 2).toUpperCase() || "TM"}
-                  </span>
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate" title={member.name}>{member.name}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{member.role}</p>
                 </div>
-              )}
-              <div className="hidden sm:block">
-                <p className="text-xs font-medium text-foreground leading-none">{member.name}</p>
-                <p className="text-xs text-muted-foreground leading-none mt-0.5">{member.role}</p>
+              </div>
+              {tabs.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.id} onClick={() => setTab(item.id)} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-left transition-colors", tab === item.id ? "bg-accent text-white shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted")}>
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button onClick={handleSignOut} className="w-full flex items-center gap-3 px-4 py-2.5 mt-4 border-t border-border pt-4 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+              <LogOut className="w-4 h-4" /> Sign out
+            </button>
+          </aside>
+
+          <div className={cn("fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] transition-[opacity,visibility] duration-300 lg:hidden", sidebarOpen ? "visible opacity-100" : "invisible opacity-0 pointer-events-none")} onClick={() => setSidebarOpen(false)} />
+          <aside className={cn("fixed inset-y-0 left-0 z-[60] w-72 max-w-[85vw] bg-card border-r border-border p-5 flex flex-col justify-between transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden", sidebarOpen ? "translate-x-0" : "-translate-x-full")}>
+            <div className="min-h-0 flex flex-col">
+              <div className="flex items-center justify-between pb-4 mb-5 border-b border-border">
+                <div className="flex items-center gap-2 min-w-0"><Users className="w-5 h-5 text-accent shrink-0" /><span className="font-semibold text-foreground truncate">Team menu</span></div>
+                <button onClick={() => setSidebarOpen(false)} className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted" aria-label="Close navigation"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="space-y-2 overflow-y-auto">
+                {tabs.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button key={item.id} onClick={() => { setTab(item.id); setSidebarOpen(false); }} className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-left transition-colors", tab === item.id ? "bg-accent text-white shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted")}>
+                      <Icon className="w-4 h-4 shrink-0" /><span>{item.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            <button
-              onClick={() => setView("teamlogin")}
-              className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg px-3 py-1.5 transition-colors"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+            <button onClick={handleSignOut} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg"><LogOut className="w-4 h-4" />Sign out</button>
+          </aside>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+          <main className="min-w-0 w-full">
         {/* Welcome */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div className="min-w-0">
+          <h1 className="text-2xl font-light text-foreground break-words" style={{ fontFamily: "'Fraunces', serif" }}>
             Good morning, {member.name.split(" ")[0]}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Here's what's happening with your referrals today.
+            Here is what is happening with your referrals today.
           </p>
+          </div>
+          <span className="self-start sm:self-auto max-w-full text-[11px] bg-secondary border border-border text-muted-foreground px-3 py-1.5 rounded-full font-mono truncate" title={member.id}>{member.role}{member.id ? ` · ${member.id}` : ""}</span>
         </div>
 
         {/* Referral link banner */}
-        <div className="bg-foreground rounded-2xl p-5 mb-7 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="bg-foreground rounded-xl p-4 sm:p-5 mb-7 flex flex-col sm:flex-row sm:items-center gap-4 overflow-hidden">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-white/40 uppercase tracking-widest mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
               Your referral link
             </p>
             <p className="text-sm text-white/90 font-mono truncate">{referralLink || "No referral link assigned yet"}</p>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="grid grid-cols-2 sm:flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
             <button
               onClick={copyLink}
               disabled={!referralLink}
-              className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
             >
               {copied ? <Check className="w-3.5 h-3.5" /> : <ExternalLink className="w-3.5 h-3.5" />}
               {copied ? "Copied!" : "Copy link"}
@@ -532,7 +571,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                   toast.success("Referral link copied! (Share sheet not supported on this browser)");
                 }
               }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-white/10 text-white/80 text-xs font-medium rounded-lg hover:bg-white/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 bg-white/10 text-white/80 text-xs font-medium rounded-lg hover:bg-white/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer min-w-0"
             >
               <MessageCircle className="w-3.5 h-3.5" />
               Share
@@ -540,35 +579,16 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[220px_1fr] gap-6 items-start">
-          <aside className="bg-card border border-border rounded-xl p-2 sticky top-24">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all ${
-                  tab === t.id
-                    ? "bg-accent text-white shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </aside>
-
-          <main className="min-w-0">
-
         {/* OVERVIEW */}
         {tab === "overview" && (
           <div className="space-y-6">
             {/* KPI grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
               {kpis.map((k) => (
-                <div key={k.label} className="bg-card border border-border rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-3">
+                <div key={k.label} className="bg-card border border-border rounded-xl p-4 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-3">
                     <span className="text-lg">{k.icon}</span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${k.up ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
+                    <span className={`text-[10px] font-medium px-2 py-1 rounded-full text-right leading-tight max-w-[70%] ${k.up ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
                       {k.delta}
                     </span>
                   </div>
@@ -586,7 +606,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                 <h3 className="font-medium text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   Scans via your link — this week
                 </h3>
-                <p className="text-xs text-muted-foreground mb-5">Total: 0 scans</p>
+                <p className="text-xs text-muted-foreground mb-5">Total: {scansCompleted.toLocaleString()} scans</p>
                 <div className="flex items-end gap-2 h-32">
                   {dailyScans.map((d) => (
                     <div key={d.day} className="flex-1 flex flex-col items-center gap-1.5">
@@ -777,20 +797,20 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
         {tab === "leaderboard" && (
           <div className="space-y-4">
             <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <div>
+              <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
+                <div className="min-w-0">
                   <h3 className="font-medium text-foreground">Team leaderboard</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">Ranked by tracked referral performance</p>
                 </div>
-                <span className="text-xs bg-accent/10 text-accent px-2.5 py-1 rounded-full font-medium">
-                  {member.id} · {member.role}
+                <span className="self-start sm:self-auto max-w-full text-xs bg-accent/10 text-accent px-2.5 py-1 rounded-full font-medium truncate" title={`${member.id} · ${member.role}`}>
+                  {member.role}{member.id ? ` · ${member.id}` : ""}
                 </span>
               </div>
               <div className="divide-y divide-border">
                 {leaderboard.length > 0 ? leaderboard.map((m) => (
                   <div
                     key={m.rank}
-                    className={`flex items-center gap-4 px-5 py-4 ${(m as any).isMe ? "bg-accent/5 border-l-2 border-l-accent" : ""}`}
+                    className={`grid grid-cols-[auto_auto_minmax(0,1fr)] sm:grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 min-w-0 ${(m as any).isMe ? "bg-accent/5 border-l-2 border-l-accent" : ""}`}
                   >
                     <span className="w-6 text-center text-lg flex-shrink-0">{m.badge || <span className="text-sm text-muted-foreground font-mono">{m.rank}</span>}</span>
                     {m.headshotUrl && !m.headshotUrl.startsWith("blob:") ? (
@@ -808,7 +828,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                       <p className="text-sm font-medium text-foreground truncate">
                         {m.name} {(m as any).isMe && <span className="text-xs text-accent font-normal">(you)</span>}
                       </p>
-                      <p className="text-xs text-muted-foreground">{m.role}</p>
+                      <p className="text-xs text-muted-foreground truncate">{m.role}</p>
                     </div>
                     <div className="hidden sm:grid grid-cols-3 gap-6 text-right">
                       <div>
@@ -823,6 +843,11 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
                         <p className="text-xs text-muted-foreground mb-0.5">Revenue</p>
                         <p className="text-sm font-mono font-medium text-foreground">{m.revenue}</p>
                       </div>
+                    </div>
+                    <div className="col-span-3 grid grid-cols-3 gap-2 sm:hidden pt-3 border-t border-border/70 text-center">
+                      <div><p className="text-[10px] text-muted-foreground">Scans</p><p className="text-xs font-mono font-semibold text-foreground mt-0.5">{m.scans.toLocaleString()}</p></div>
+                      <div><p className="text-[10px] text-muted-foreground">Vendors</p><p className="text-xs font-mono font-semibold text-foreground mt-0.5">{m.vendors}</p></div>
+                      <div className="min-w-0"><p className="text-[10px] text-muted-foreground">Revenue</p><p className="text-xs font-mono font-semibold text-foreground mt-0.5 truncate">{m.revenue}</p></div>
                     </div>
                   </div>
                 )) : (
