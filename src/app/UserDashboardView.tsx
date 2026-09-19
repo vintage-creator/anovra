@@ -223,7 +223,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               benefits: Array.isArray(s.benefits) ? s.benefits : [],
               area: s.skin_area || "Skin",
               createdAt: s.created_at,
-              link: `https://anovra.africa/results/${s.id.substring(0, 8)}`,
+              link: `https://anovra-api.vercel.app/#/userdashboard`,
             };
           });
           setAnalysesList(formatted);

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { appLink, button, detailsCard, emailShell, escapeHtml } from "../_shared/email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,16 +35,13 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
-function escapeHtml(value: unknown) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-}
-
 async function sendModerationEmail(admin: any, profile: any, action: string, reasonCode: string, details: string) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey || !profile.email) return false;
   const restored = action === "reactivate" || action === "unban";
   const subject = restored ? "Your Anovra account access has been restored" : `Your Anovra account has been ${action === "ban" ? "banned" : "suspended"}`;
   const statusText = restored ? "restored" : action === "ban" ? "banned" : "temporarily suspended";
+  const dashboardUrl = appLink(profile.account_type === "brand" ? "/#/branddashboard" : "/#/dashboard");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -51,7 +49,21 @@ async function sendModerationEmail(admin: any, profile: any, action: string, rea
       from: "Anovra <hello@anovra.africa>",
       to: [profile.email],
       subject,
-      html: `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:10px"><h2 style="color:#08783f">Account access ${escapeHtml(statusText)}</h2><p>Hi ${escapeHtml(profile.name || profile.business_name || "there")},</p><p>Your Anovra account access has been <strong>${escapeHtml(statusText)}</strong>.</p><p><strong>Reason:</strong> ${escapeHtml(labelForReason[reasonCode] || reasonCode)}</p><p>${escapeHtml(details)}</p>${restored ? "<p>You can now sign in and continue using your workspace.</p>" : "<p>Your data has been preserved. Reply to this email if you believe this action should be reviewed.</p>"}<p style="font-size:12px;color:#667085;margin-top:24px">Anovra Trust &amp; Safety</p></div>`,
+      html: emailShell({
+        eyebrow: "Trust & Safety",
+        title: `Account access ${statusText}`,
+        preview: subject,
+        body: `
+          <p style="margin:0 0 14px;">Hi ${escapeHtml(profile.name || profile.business_name || "there")},</p>
+          <p style="margin:0 0 14px;">Your Anovra account access has been <strong>${escapeHtml(statusText)}</strong>.</p>
+          ${detailsCard("Decision details", [
+            { label: "Reason", value: labelForReason[reasonCode] || reasonCode },
+            { label: "Details", value: details },
+          ])}
+          ${restored ? `${button("Open your workspace", dashboardUrl)}<p style="margin:14px 0 0;color:#667085;font-size:13px;">You can now sign in and continue using your workspace.</p>` : `<p style="margin:14px 0 0;color:#667085;font-size:13px;">Your data has been preserved. Reply to this email if you believe this decision should be reviewed.</p>`}
+        `,
+        footerNote: "Anovra Trust & Safety",
+      }),
     }),
   });
   const providerResponse = await response.json().catch(() => ({}));

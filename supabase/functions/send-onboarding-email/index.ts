@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { appLink, button, detailsCard, emailShell, escapeHtml, linkBox } from "../_shared/email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,7 +8,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const logo = "https://res.cloudinary.com/dcoxo8snb/image/upload/v1784749813/IMG_6932_umtukr.png";
 const adminEmail = "admin@anovra.africa";
 
 const subjects: Record<string, string> = {
@@ -36,65 +36,68 @@ const subjects: Record<string, string> = {
   customer_review_request: "How was your Anovra product experience?",
 };
 
-function escapeHtml(value: unknown) {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function htmlShell(title: string, body: string) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; padding: 24px; border: 1px solid #eee; border-radius: 12px; background: #fff;">
-      <div style="text-align:center; margin-bottom:24px;">
-        <img src="${logo}" alt="Anovra" style="height:64px; max-width:100%; object-fit:contain;" />
-      </div>
-      <h2 style="color:#008236; margin:0 0 16px; font-size:22px;">${escapeHtml(title)}</h2>
-      <div style="color:#253026; font-size:14px; line-height:1.6;">${body}</div>
-      <hr style="border:0; border-top:1px solid #eee; margin:24px 0;" />
-      <p style="font-size:11px; color:#777;">This is an automated Anovra notification.</p>
-    </div>
-  `;
-}
-
 function bodyFor(template: string, payload: any) {
   const name = escapeHtml(payload.name || "there");
   const brand = escapeHtml(payload.brand || payload.business_name || "your brand");
   const product = escapeHtml(payload.product || payload.product_name || "your product");
   const role = escapeHtml(payload.role || "member");
   const inviter = escapeHtml(payload.inviter || "A brand owner");
-  const link = escapeHtml(payload.link || "https://anovra.africa");
+  const link = appLink(payload.link || "/");
 
   if (template === "team_invite" || payload.action === "invite") {
-    return htmlShell(subjects.team_invite, `<p>Hi,</p><p><strong>${inviter}</strong> invited you to join their Anovra team as <strong>${role}</strong>.</p><p><a href="${link}" style="background:#008236;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:700;">Accept invitation</a></p>`);
+    return emailShell({
+      eyebrow: "Team invitation",
+      title: subjects.team_invite,
+      preview: "You have been invited to join an Anovra workspace.",
+      body: `<p style="margin:0 0 14px;">Hi,</p><p style="margin:0 0 14px;"><strong>${inviter}</strong> invited you to join their Anovra team as <strong>${role}</strong>.</p>${button("Accept invitation", link)}${linkBox("Invitation link", link)}`,
+    });
   }
   if (template.startsWith("admin_")) {
-    return htmlShell(subjects[template] || "Admin alert", `<p>${escapeHtml(payload.message || "A new admin action needs attention.")}</p><pre style="white-space:pre-wrap;background:#f6f7f5;border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:12px;">${escapeHtml(JSON.stringify(payload.metadata || {}, null, 2))}</pre>`);
+    const metadata = payload.metadata || {};
+    const rows = Object.entries(metadata).slice(0, 12).map(([key, value]) => ({
+      label: key.replace(/_/g, " "),
+      value: typeof value === "string" ? value : JSON.stringify(value),
+    }));
+    return emailShell({
+      eyebrow: "Admin alert",
+      title: subjects[template] || "Admin alert",
+      preview: payload.message || "A new admin action needs attention.",
+      body: `<p style="margin:0 0 14px;">${escapeHtml(payload.message || "A new admin action needs attention.")}</p>${rows.length ? detailsCard("Submitted details", rows) : ""}${button("Open Admin Dashboard", appLink("/#/admin"), "dark")}`,
+      footerNote: "This alert was sent to the Anovra administration inbox.",
+    });
   }
   if (template === "vendor_signup_trial_started") {
-    return htmlShell(subjects[template], `<p>Hi ${name},</p><p>Your 14-day Anovra trial for <strong>${brand}</strong> has started. During trial, you can test storefront, scan, team, API preview, webhooks, analytics, and catalogue workflows.</p>`);
+    return emailShell({
+      eyebrow: "Trial started",
+      title: subjects[template],
+      preview: "Your 14-day Anovra trial is active.",
+      body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0 0 14px;">Your 14-day Anovra trial for <strong>${brand}</strong> has started. During trial, you can test storefront, scan, team, API preview, webhooks, analytics, and catalogue workflows.</p>${button("Open your workspace", appLink("/#/signin"))}`,
+    });
   }
   if (template === "product_submitted") {
-    return htmlShell(subjects[template], `<p>Hi ${name},</p><p><strong>${product}</strong> has been submitted for Anovra safety review. It will show publicly after approval by Anovra.</p>`);
+    return emailShell({ eyebrow: "Product review", title: subjects[template], body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0;"><strong>${product}</strong> has been submitted for Anovra safety review. It will show publicly after approval by Anovra.</p>` });
   }
   if (template === "product_approved" || template === "product_rejected") {
-    return htmlShell(subjects[template], `<p>Hi ${name},</p><p><strong>${product}</strong> was ${template === "product_approved" ? "approved" : "not approved yet"}. ${escapeHtml(payload.message || "")}</p>`);
+    return emailShell({ eyebrow: "Product review", title: subjects[template], body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0;"><strong>${product}</strong> was ${template === "product_approved" ? "approved" : "not approved yet"}. ${escapeHtml(payload.message || "")}</p>${button("Open catalogue", appLink("/#/catalog"))}` });
   }
   if (template === "payment_success_receipt") {
-    return htmlShell(subjects[template], `<p>Hi ${name},</p><p>Your payment for the <strong>${escapeHtml(payload.plan || "selected")}</strong> plan was successful.</p><p>Amount: <strong>${escapeHtml(payload.amount || "")}</strong></p>`);
+    return emailShell({ eyebrow: "Payment", title: subjects[template], body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0 0 14px;">Your payment for the <strong>${escapeHtml(payload.plan || "selected")}</strong> plan was successful.</p>${detailsCard("Receipt summary", [{ label: "Amount", value: String(payload.amount || "Not provided") }, { label: "Plan", value: String(payload.plan || "Selected plan") }])}` });
   }
   if (template === "customer_scan_completed") {
-    return htmlShell(subjects[template], `<p>Hi ${name},</p><p>Your skin scan report is ready. Sign in to your dashboard to review your result and product matches.</p>`);
+    const reportLink = appLink(payload.link || "/#/userdashboard");
+    return emailShell({ eyebrow: "Skin analysis", title: subjects[template], preview: "Your skin scan report is ready.", body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0 0 14px;">Your skin scan report is ready. Sign in to your dashboard to review your result, product matches, ingredients, and routine.</p>${button("View my report", reportLink)}${linkBox("Report link", reportLink)}` });
   }
   if (template === "review_submitted") {
-    return htmlShell(subjects[template], `<p>Hi ${name},</p><p>Thanks for reviewing <strong>${brand}</strong>. Your review will appear after Anovra review.</p>`);
+    return emailShell({ eyebrow: "Storefront review", title: subjects[template], body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0;">Thanks for reviewing <strong>${brand}</strong>. Your review will appear after Anovra review.</p>` });
   }
   if (template === "customer_review_request") {
-    return htmlShell(subjects[template], `<p>Hi ${name},</p><p>If the product recommendation helped, please leave a storefront review so other customers can shop with more confidence.</p>`);
+    return emailShell({ eyebrow: "Review request", title: subjects[template], body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0 0 14px;">If the product recommendation helped, please leave a storefront review so other customers can shop with more confidence.</p>${button("Leave a review", link)}` });
   }
 
-  return htmlShell(subjects[template] || payload.subject || "Anovra notification", `<p>Hi ${name},</p><p>${escapeHtml(payload.message || "You have a new Anovra notification.")}</p>`);
+  return emailShell({
+    title: subjects[template] || payload.subject || "Anovra notification",
+    body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0;">${escapeHtml(payload.message || "You have a new Anovra notification.")}</p>`,
+  });
 }
 
 serve(async (req) => {

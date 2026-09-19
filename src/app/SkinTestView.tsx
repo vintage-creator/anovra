@@ -736,7 +736,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               await sendEmailNotification("customer_scan_completed", {
                 name: user.user_metadata?.full_name || "there",
                 email: user.email,
-                link: "https://anovra.africa/#/userdashboard",
+                link: "https://anovra-api.vercel.app/#/userdashboard",
               });
             }
           } catch (dbErr) {

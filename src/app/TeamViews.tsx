@@ -314,7 +314,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
         headshotUrl: membership.headshot_url || "",
         saving: false,
       });
-      setReferralLink(membership.referral_code ? `https://anovra.africa/#/scan?ref=${membership.referral_code}` : "");
+      setReferralLink(membership.referral_code ? `https://anovra-api.vercel.app/#/scan?ref=${membership.referral_code}` : "");
 
       const [{ data: events }, { data: resourceRows }, { data: announcementRows }, { data: targetRows }, { data: leaderboardData }] = await Promise.all([
         supabase.from("team_referral_events").select("*").eq("team_member_id", membership.id).order("created_at", { ascending: false }),

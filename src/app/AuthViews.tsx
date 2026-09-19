@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { supabase } from "./utils/supabase";
 import { sendEmailNotification } from "./utils/notifications";
 
+const ANOVRA_AUTH_REDIRECT_ORIGIN = "https://anovra-api.vercel.app";
+
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
     { label: "8+ characters", pass: password.length >= 8 },
@@ -199,6 +201,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
         email: form.email,
         password: form.password,
         options: {
+          emailRedirectTo: `${ANOVRA_AUTH_REDIRECT_ORIGIN}/auth/callback`,
           data: {
             full_name: form.fullName,
             email: form.email,
@@ -762,6 +765,7 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
         email: form.email,
         password: form.password,
         options: {
+          emailRedirectTo: `${ANOVRA_AUTH_REDIRECT_ORIGIN}/auth/callback`,
           data: {
             full_name: form.fullName,
             role: "customer",
@@ -1384,7 +1388,7 @@ export function ForgotPasswordView({ setView }: { setView: (v: View) => void }) 
 
     try {
       const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/#resetpassword`,
+        redirectTo: `${ANOVRA_AUTH_REDIRECT_ORIGIN}/#resetpassword`,
       });
       if (resetErr) throw resetErr;
       setSuccess(true);

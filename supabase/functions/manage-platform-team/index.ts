@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { appLink, button, credentialsGrid, emailShell, escapeHtml, linkBox } from "../_shared/email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,9 +11,6 @@ const roles = new Set(["Marketing", "Sales", "Support", "Representative", "Opera
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-}
-function escapeHtml(value: unknown) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 function randomPassword() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$";
@@ -25,6 +23,7 @@ function slugName(name: string) {
 async function sendCredentials(admin: any, payload: { recipient: string; name: string; username: string; password: string; subject: string }) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) return false;
+  const loginUrl = appLink("/#/teamlogin");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -32,7 +31,22 @@ async function sendCredentials(admin: any, payload: { recipient: string; name: s
       from: "Anovra <hello@anovra.africa>",
       to: [payload.recipient],
       subject: payload.subject,
-      html: `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:10px"><h2 style="color:#08783f">${escapeHtml(payload.subject)}</h2><p>Hi ${escapeHtml(payload.name)},</p><p>Your Anovra team workspace credentials are:</p><p><strong>Login:</strong> ${escapeHtml(payload.username)}<br><strong>Temporary password:</strong> ${escapeHtml(payload.password)}</p><p><a href="https://anovra.africa/#/teamlogin" style="display:inline-block;background:#08783f;color:white;padding:11px 16px;border-radius:7px;text-decoration:none">Sign in to Team Workspace</a></p><p>Please change the temporary password after signing in.</p></div>`,
+      html: emailShell({
+        eyebrow: "Team workspace",
+        title: payload.subject,
+        preview: "Your Anovra staff login details are ready.",
+        body: `
+          <p style="margin:0 0 14px;">Hi ${escapeHtml(payload.name)},</p>
+          <p style="margin:0 0 14px;">You have been added to the Anovra Platform Administration team. Use the login details below to access your staff workspace.</p>
+          ${credentialsGrid([
+            { label: "Login email", value: payload.username },
+            { label: "Temporary password", value: payload.password },
+          ])}
+          ${button("Sign in to Team Workspace", loginUrl)}
+          ${linkBox("Copyable sign-in link", loginUrl)}
+          <p style="margin:16px 0 0;color:#667085;font-size:13px;">For your security, change this temporary password after your first sign-in. Do not forward this email.</p>
+        `,
+      }),
     }),
   });
   const provider = await response.json().catch(() => ({}));

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { appLink, button, credentialsGrid, emailShell, escapeHtml, linkBox } from "../_shared/email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +37,9 @@ async function sendBranchEmail(payload: {
 }) {
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
   if (!resendApiKey) return false;
+  const signInUrl = appLink("/#/signin");
+  const shopUrl = appLink(`/#/shop/${payload.slug}`);
+  const scanUrl = appLink(`/#/scan/${payload.slug}`);
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -47,16 +51,22 @@ async function sendBranchEmail(payload: {
       from: "Anovra <hello@anovra.africa>",
       to: [payload.email],
       subject: `${payload.branchName} has been added to Anovra`,
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;border:1px solid #eee;border-radius:12px">
-          <h2 style="color:#008236;margin-top:0">Your branch workspace is ready</h2>
-          <p>${payload.brandName} has created an Anovra branch workspace for <strong>${payload.branchName}</strong>.</p>
-          <p><strong>Login email:</strong> ${payload.email}<br/><strong>Temporary password:</strong> ${payload.password}</p>
-          <p><strong>Storefront:</strong> https://anovra.africa/#/shop/${payload.slug}<br/><strong>Skin test:</strong> https://anovra.africa/#/scan/${payload.slug}</p>
-          <p><a href="https://anovra.africa/#/signin" style="background:#008236;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">Sign in to branch dashboard</a></p>
-          <p style="font-size:12px;color:#777">Please change this password after signing in.</p>
-        </div>
-      `,
+      html: emailShell({
+        eyebrow: "Branch workspace",
+        title: "Your branch workspace is ready",
+        preview: `${payload.branchName} can now use Anovra as a branch workspace.`,
+        body: `
+          <p style="margin:0 0 14px;">${escapeHtml(payload.brandName)} has created an Anovra branch workspace for <strong>${escapeHtml(payload.branchName)}</strong>.</p>
+          ${credentialsGrid([
+            { label: "Login email", value: payload.email },
+            { label: "Temporary password", value: payload.password },
+          ])}
+          ${button("Sign in to branch dashboard", signInUrl)}
+          ${linkBox("Branch storefront", shopUrl)}
+          ${linkBox("Branch skin test", scanUrl)}
+          <p style="margin:16px 0 0;color:#667085;font-size:13px;">Please change this temporary password after signing in.</p>
+        `,
+      }),
     }),
   });
   return response.ok;
@@ -216,8 +226,8 @@ serve(async (req) => {
         email_sent: emailSent,
         credentials: { email: branchEmail, password },
         links: {
-          shop: `https://anovra.africa/#/shop/${branchSlug}`,
-          scan: `https://anovra.africa/#/scan/${branchSlug}`,
+          shop: appLink(`/#/shop/${branchSlug}`),
+          scan: appLink(`/#/scan/${branchSlug}`),
         },
       });
     }
