@@ -49,6 +49,11 @@ function LockedOverlay({ label, onUpgrade }: { label: string; onUpgrade: () => v
   );
 }
 
+function aiGuideGreeting(name?: string) {
+  const intro = name ? `Hi ${name}.` : "Hi.";
+  return `${intro} I'm Anovra Care Guide. I can explain your latest skin test report, define skin terms, review ingredient safety notes, compare your product matches, and help turn your results into a simple AM/PM routine. Ask me about a concern, ingredient, product match, or routine step.`;
+}
+
 function buildRoutineFromProducts(products: any[], latestConcern: string) {
   const cleanConcern = latestConcern.toLowerCase();
   const relevantProducts = products
@@ -119,7 +124,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [chatMsg, setChatMsg] = useState("");
   const [chatTyping, setChatTyping] = useState(false);
   const [chatHistory, setChatHistory] = useState<{ from: "user" | "advisor"; text: string }[]>([
-    { from: "advisor", text: "Hi! I'm your certified skin adviser. I can review your latest analysis results and help you build a skincare plan. What would you like to know?" },
+    { from: "advisor", text: aiGuideGreeting() },
   ]);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [familyForm, setFamilyForm] = useState({ name: "", relationship: "", ageBand: "Adult", skinType: "Combination", concern: "", notes: "" });
@@ -196,9 +201,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           location: profile?.location || "",
         });
 
-        // Update chat adviser initial greeting with name
+        // Update AI guide initial greeting with name
         setChatHistory([
-          { from: "advisor", text: `Hi ${profileObj.name}! I'm your certified skin adviser. I can review your latest analysis results and help you build a skincare plan. What would you like to know?` }
+          { from: "advisor", text: aiGuideGreeting(profileObj.name) }
         ]);
 
         // Fetch scans
@@ -497,9 +502,34 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         .filter((h) => h.from === "user")
         .map((h) => h.text)
         .join("\n\n");
+      const latest = analysesList[0] || null;
+      const dashboardContext = {
+        customerName: userProfile?.name || "Customer",
+        latestAnalysis: latest ? {
+          area: latest.area,
+          skinType: latest.skinType,
+          concern: latest.concerns?.join(", "),
+          score: latest.score,
+          severity: latest.severity?.slice?.(0, 10) || [],
+          benefits: latest.benefits?.slice?.(0, 8) || [],
+        } : null,
+        productMatches: matchedProducts.slice(0, 6).map((product) => ({
+          name: product.name,
+          brand: product.brand,
+          concern: product.concern,
+          match: product.match,
+          price: product.price,
+        })),
+        routineSteps: routineList.slice(0, 6).map((step) => ({
+          step: step.step,
+          label: step.label,
+          product: step.product,
+          tip: step.tip,
+        })),
+      };
       const contents = [{
         role: "user",
-        parts: [{ text: userTranscript }]
+        parts: [{ text: `Dashboard context:\n${JSON.stringify(dashboardContext, null, 2)}\n\nCustomer questions:\n${userTranscript}` }]
       }];
 
       const { data, error } = await supabase.functions.invoke("chat-advisor", {
@@ -511,8 +541,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       
       setChatHistory([...updatedHistory, { from: "advisor" as const, text: reply }]);
     } catch (err) {
-      console.error("Gemini adviser call failed:", err);
-      setChatHistory([...updatedHistory, { from: "advisor" as const, text: "I'm experiencing connection issues. Please try again in a moment!" }]);
+      console.error("Gemini guide call failed:", err);
+      setChatHistory([...updatedHistory, { from: "advisor" as const, text: "I'm having trouble reaching Anovra Care Guide right now. Please try again in a moment." }]);
     } finally {
       setChatTyping(false);
     }
@@ -603,7 +633,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                     Your dashboard has moved to the free plan
                   </h2>
                   <p className="text-sm text-muted-foreground mt-4 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    You can still use your basic skin portal. Premium tools such as unlimited analyses, full history, family profiles, adviser chat, and deeper progress tracking require an upgrade.
+                    You can still use your basic skin portal. Premium tools such as unlimited analyses, full history, family profiles, Anovra Care Guide, and deeper progress tracking require an upgrade.
                   </p>
                   <button
                     type="button"
@@ -645,7 +675,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                         name: "Premium Glow",
                         price: "₦7,000/mo",
                         tag: "Advanced care",
-                        desc: "Adviser chat, monthly progress reports, family profiles, partner offers, and routine builder.",
+                        desc: "Anovra Care Guide, monthly progress reports, family profiles, partner offers, and routine builder.",
                         cta: "Upgrade",
                         featured: false,
                       },
@@ -1505,8 +1535,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 name: "Premium Glow",
                 price: "₦7,000",
                 period: "month",
-                desc: "Complete features including live dermatologist chats and routines.",
-                features: ["Everything in Glow Pass+", "Monthly progress reports & trend scores", "Direct chat with certified skin advisers", "Verified partner product offers", "Family skin profiles (up to 5 members)", "Skincare routine builder"],
+                desc: "Complete features including Anovra Care Guide, family profiles, progress reports, and routines.",
+                features: ["Everything in Glow Pass+", "Monthly progress reports & trend scores", "Anovra Care Guide for report, ingredient, routine, and product questions", "Verified partner product offers", "Family skin profiles (up to 5 members)", "Skincare routine builder"],
                 cta: trialAccessActive ? "Keep all features after trial" : (plan === "premium" ? "Current plan" : "Upgrade to Premium Glow"),
                 planKey: "premium" as const,
                 active: plan === "premium"
@@ -1569,17 +1599,38 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </>
       </div>
 
-      {/* ── Floating adviser chat (Premium) ── */}
+      {/* Floating Care Guide chat (Premium) */}
       {accessPlan === "premium" && (
         <div className="fixed bottom-6 right-6 z-50">
           {chatOpen && (
             <div className="w-[min(24rem,calc(100vw-2rem))] bg-card border border-border rounded-2xl shadow-xl overflow-hidden mb-3">
               <div className="bg-foreground px-4 py-3 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-primary-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Skin Adviser</p>
-                  <p className="text-xs text-white/50" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Certified · Usually replies in minutes</p>
+                  <p className="text-sm font-medium text-primary-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Anovra Care Guide</p>
+                  <p className="text-xs text-white/50" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Report, ingredient, routine & product support</p>
                 </div>
                 <button onClick={() => setChatOpen(false)} className="text-white/40 hover:text-white/70 transition-colors"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="px-4 pt-3 pb-1 border-b border-border/50">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Helpful prompts</p>
+                <div className="flex gap-1.5 overflow-x-auto pb-2">
+                  {[
+                    "Explain my latest report",
+                    "What do these skin terms mean?",
+                    "Which match should I start with?",
+                    "Build a simple AM/PM routine",
+                  ].map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => setChatMsg(prompt)}
+                      className="shrink-0 px-2.5 py-1.5 rounded-full bg-muted text-[11px] text-foreground hover:bg-accent/10 hover:text-accent transition-colors"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="h-72 overflow-y-auto p-4 space-y-3">
                 {chatHistory.map((m, i) => (
@@ -1604,7 +1655,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   value={chatMsg}
                   onChange={(e) => setChatMsg(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && sendChat()}
-                  placeholder="Ask about your skin..."
+                  placeholder="Ask about a report, term, ingredient or product..."
                   className="flex-1 bg-muted rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-accent/30"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 />

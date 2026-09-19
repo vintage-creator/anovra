@@ -1145,7 +1145,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   features: [
                     "Everything in Glow Pass+",
                     "Monthly skin progress report & score",
-                    "Direct chat with certified skin advisers",
+                    "Anovra Care Guide for report, ingredient, routine, and product questions",
                     "Exclusive discounts from Anovra vendors",
                     "Family skin profiles (up to 5 members)",
                     "Early access to new AI features",
