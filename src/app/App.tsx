@@ -470,10 +470,26 @@ export default function App() {
             console.warn("Session check team member lookup failed:", e);
           }
 
-          const role = user.user_metadata?.role || "customer";
-          if (role === "brand") {
+          let resolvedRole = user.user_metadata?.role || user.app_metadata?.role || "customer";
+          try {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("account_type, business_name")
+              .eq("id", user.id)
+              .maybeSingle();
+
+            if (profile?.account_type === "brand") {
+              resolvedRole = "brand";
+            } else if (profile?.account_type === "vendor" || profile?.account_type === "branch" || profile?.business_name) {
+              resolvedRole = "vendor";
+            }
+          } catch (e) {
+            console.warn("Session check profile role lookup failed:", e);
+          }
+
+          if (resolvedRole === "brand") {
             setView("branddashboard");
-          } else if (role === "vendor") {
+          } else if (resolvedRole === "vendor") {
             setView("dashboard");
           } else if (teamMemberRole === "Manager" || teamMemberRole === "Viewer") {
             setView("dashboard");
@@ -560,31 +576,27 @@ export default function App() {
           return;
         }
 
-        let role = user.user_metadata?.role || user.app_metadata?.role;
+        const metadataRole = user.app_metadata?.role || user.user_metadata?.role;
+        let role = metadataRole;
         const email = user.email?.toLowerCase();
-
-        // Resolve missing role from profiles for older vendor accounts
-        if (!role) {
-          try {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("business_name, account_type")
-              .eq("id", user.id)
-              .maybeSingle();
-            
-            if (profile?.account_type === "brand") {
-              role = "brand";
-            } else if (profile?.business_name) {
-              role = "vendor";
-            }
-          } catch (err) {}
-        }
 
         const { data: accessProfile } = await supabase
           .from("profiles")
-          .select("account_type, branch_status, verification_status, parent_brand_id")
+          .select("account_type, business_name, branch_status, verification_status, parent_brand_id")
           .eq("id", user.id)
           .maybeSingle();
+
+        if (metadataRole === "admin") {
+          role = "admin";
+        } else if (metadataRole === "vendor_staff") {
+          role = "vendor_staff";
+        } else if (accessProfile?.account_type === "brand") {
+          role = "brand";
+        } else if (accessProfile?.account_type === "vendor" || accessProfile?.account_type === "branch" || accessProfile?.business_name) {
+          role = "vendor";
+        } else {
+          role = metadataRole || "customer";
+        }
 
         if (["suspended", "banned"].includes(accessProfile?.verification_status || "")) {
           const accountState = accessProfile?.verification_status === "banned" ? "banned" : "suspended";
