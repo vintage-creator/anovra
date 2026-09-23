@@ -1307,6 +1307,13 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
       }
       toast.success("Signed in successfully!");
     } catch (err: any) {
+      if (/email[_ ]not[_ ]confirmed/i.test(err?.message || "")) {
+        sessionStorage.setItem("pending_verification_email", email.trim().toLowerCase());
+        sessionStorage.setItem("pending_verification_kind", accountKind === "any" ? "customer" : accountKind);
+        toast.info("Confirm your email before signing in. You can request a fresh verification link.");
+        setView("verifyemail");
+        return;
+      }
       setError(err.message || "Invalid credentials. Please verify your details.");
       toast.error(err.message || "Sign in failed.");
     } finally {
