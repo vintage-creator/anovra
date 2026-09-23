@@ -515,8 +515,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
   const [workflowAudience, setWorkflowAudience] = useState<"vendors" | "customers">("vendors");
   const [pricingAudience, setPricingAudience] = useState<"vendors" | "customers">("vendors");
   const openSignup = (kind: "vendor" | "brand" = "vendor") => {
-    sessionStorage.setItem("signup_account_kind", kind);
-    setView("signup");
+    setView(kind === "brand" ? "brandsignup" : "signup");
   };
 
   const features = [
@@ -564,7 +563,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
         "Shareable test link",
         "Basic analytics",
       ],
-      cta: "Start 14-day free trial",
+      cta: "Start 7-day free trial",
       highlight: false,
     },
     {
@@ -579,22 +578,21 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
         "Full analytics dashboard",
         "Priority support via WhatsApp",
       ],
-      cta: "Start 14-day free trial",
+      cta: "Start 7-day free trial",
       highlight: true,
     },
     {
-      name: "Brand",
-      price: "₦75,000",
+      name: "Premium Tier",
+      price: "₦45,000",
       sub: "per month",
       features: [
         "Everything in Vendor Pro",
         "REST API access",
         "Custom domain for test link",
-        "Multi-user team accounts",
         "SLA support",
         "Dedicated onboarding",
       ],
-      cta: "Start 14-day free trial",
+      cta: "Start 7-day free trial",
       highlight: false,
     },
   ];
@@ -924,7 +922,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                 </h3>
               </div>
               <span className="text-xs font-bold text-emerald-700 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
-                14-day trial
+                7-day trial
               </span>
             </div>
             <div className="space-y-3">
@@ -965,7 +963,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
             Transparent pricing in naira.
           </h2>
           <p className="text-center text-sm text-muted-foreground mb-12" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Start with a 14-day free trial, then choose the plan that fits how you use Anovra.
+            Start with a 7-day free trial, then choose the plan that fits how you use Anovra.
           </p>
 
           <div className="max-w-md mx-auto mb-10 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-white p-1 shadow-xs">
@@ -1008,7 +1006,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               </div>
               <div className="flex-1 h-px bg-border/60" />
               <span className="text-xs text-[#008236] bg-[#008236]/10 border border-[#008236]/30 px-3 py-1 rounded-full font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                14-day free trial on every plan
+                7-day free trial on every plan
               </span>
             </div>
             <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
@@ -1055,7 +1053,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                         : "bg-[#008236]/10 text-[#008236] border-[#008236]/20"
                     )}
                   >
-                    14-day free trial
+                    7-day free trial
                   </span>
                   <ul className="space-y-2.5 flex-1 mb-6">
                     {t.features.map((f) => (
@@ -1103,7 +1101,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
               </div>
               <div className="flex-1 h-px bg-border/60" />
               <span className="text-xs text-amber-800 bg-[#C86B3A]/10 border border-[#C86B3A]/30 px-2.5 py-1 rounded-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                14-day free trial on every plan
+                7-day free trial on every plan
               </span>
             </div>
             <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
@@ -1120,7 +1118,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     "Ingredient safety check",
                     "Results shared via link",
                   ],
-                  cta: "Start 14-day free trial",
+                  cta: "Start 7-day free trial",
                 },
                 {
                   name: "Glow Pass+",
@@ -1135,7 +1133,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     "Personalised ingredient glossary",
                     "Priority product matching",
                   ],
-                  cta: "Start 14-day free trial",
+                  cta: "Start 7-day free trial",
                 },
                 {
                   name: "Premium Glow",
@@ -1151,7 +1149,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     "Early access to new AI features",
                     "Personalised skincare routine builder",
                   ],
-                  cta: "Start 14-day free trial",
+                  cta: "Start 7-day free trial",
                 },
               ].map((t) => (
                 <div
@@ -1187,7 +1185,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   </p>
                   <p className="text-xs mb-3 text-white/70" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
                   <span className="mb-6 inline-flex w-fit rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold text-white border border-white/20">
-                    14-day free trial
+                    7-day free trial
                   </span>
                   <ul className="space-y-2.5 flex-1 mb-6">
                     {t.features.map((f) => (

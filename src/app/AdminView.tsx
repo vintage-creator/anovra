@@ -679,7 +679,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     const latestPayment = vendorPayments[0];
     const vendorMrr = latestPayment
       ? `₦${Number(latestPayment.amount || 0).toLocaleString()}`
-      : v.plan === "brand" ? "₦75,000" : (v.plan === "premium" ? "₦25,000" : v.plan === "basic" ? "₦12,500" : "₦0");
+      : v.plan === "brand" ? "₦45,000" : (v.plan === "premium" ? "₦25,000" : v.plan === "basic" ? "₦12,500" : "₦0");
     const joinedDate = new Date(v.created_at || Date.now()).toLocaleDateString("en-GB", {
       day: "numeric",
       month: "short",
@@ -1365,15 +1365,15 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     features: ["Unlimited skin tests", "Unlimited catalogue", "White-labelled results", "Website embed widget", "Priority support"],
                   },
                   {
-                    plan: "Brand Tier Plan",
-                    price: "₦75,000 / mo",
+                    plan: "Premium Tier Plan",
+                    price: "₦45,000 / mo",
                     count: brandCount,
                     total: totalPartnerAccounts || 1,
-                    mrr: `₦${(brandCount * 75000).toLocaleString()}`,
+                    mrr: `₦${(brandCount * 45000).toLocaleString()}`,
                     color: "bg-indigo-600",
                     textColor: "text-indigo-600",
                     badgeColor: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/25",
-                    features: ["Everything in Pro", "REST API key access", "Custom domain for test links", "Multi-user team accounts"],
+                    features: ["Everything in Pro", "REST API key access", "Custom domain for test links", "Dedicated onboarding"],
                   },
                 ].map((plan) => {
                   const pct = totalVendors > 0 ? Math.round((plan.count / totalVendors) * 100) : 0;

@@ -6,6 +6,52 @@ import { supabase } from "./utils/supabase";
 import { sendEmailNotification } from "./utils/notifications";
 
 const ANOVRA_AUTH_REDIRECT_ORIGIN = "https://anovra-api.vercel.app";
+const TRIAL_DAYS = 7;
+
+export const NIGERIA_LOCATIONS = [
+  "Abuja, Nigeria",
+  "Aba, Abia, Nigeria",
+  "Umuahia, Abia, Nigeria",
+  "Yola, Adamawa, Nigeria",
+  "Uyo, Akwa Ibom, Nigeria",
+  "Awka, Anambra, Nigeria",
+  "Bauchi, Nigeria",
+  "Yenagoa, Bayelsa, Nigeria",
+  "Makurdi, Benue, Nigeria",
+  "Maiduguri, Borno, Nigeria",
+  "Calabar, Cross River, Nigeria",
+  "Asaba, Delta, Nigeria",
+  "Warri, Delta, Nigeria",
+  "Abakaliki, Ebonyi, Nigeria",
+  "Benin City, Edo, Nigeria",
+  "Ado-Ekiti, Ekiti, Nigeria",
+  "Enugu, Nigeria",
+  "Gombe, Nigeria",
+  "Owerri, Imo, Nigeria",
+  "Dutse, Jigawa, Nigeria",
+  "Kaduna, Nigeria",
+  "Kano, Nigeria",
+  "Katsina, Nigeria",
+  "Birnin Kebbi, Kebbi, Nigeria",
+  "Lokoja, Kogi, Nigeria",
+  "Ilorin, Kwara, Nigeria",
+  "Lagos, Nigeria",
+  "Ikeja, Lagos, Nigeria",
+  "Lekki, Lagos, Nigeria",
+  "Victoria Island, Lagos, Nigeria",
+  "Nasarawa, Nigeria",
+  "Minna, Niger, Nigeria",
+  "Abeokuta, Ogun, Nigeria",
+  "Akure, Ondo, Nigeria",
+  "Osogbo, Osun, Nigeria",
+  "Ibadan, Oyo, Nigeria",
+  "Jos, Plateau, Nigeria",
+  "Port Harcourt, Rivers, Nigeria",
+  "Sokoto, Nigeria",
+  "Jalingo, Taraba, Nigeria",
+  "Damaturu, Yobe, Nigeria",
+  "Gusau, Zamfara, Nigeria",
+];
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -75,10 +121,18 @@ function isSocialUrl(url: string): boolean {
   }
 }
 
-export function SignUpView({ setView }: { setView: (v: View) => void }) {
-  const [accountKind, setAccountKind] = useState<"vendor" | "brand">(() =>
-    sessionStorage.getItem("signup_account_kind") === "brand" ? "brand" : "vendor"
-  );
+async function resolveAccountRole(user: { id: string; user_metadata?: { role?: string } }) {
+  const metadataRole = user.user_metadata?.role;
+  const { data: profile } = await supabase.from("profiles")
+    .select("account_type")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.account_type === "brand") return "brand";
+  if (profile?.account_type === "vendor" || profile?.account_type === "branch") return "vendor";
+  return metadataRole || profile?.account_type || "customer";
+}
+
+export function SignUpView({ setView, accountKind }: { setView: (v: View) => void; accountKind: "vendor" | "brand" }) {
   const selectedRole = accountKind;
   
   // Vendor state
@@ -104,7 +158,6 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
 
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [showPopupModal, setShowPopupModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -141,7 +194,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
   const step1Valid = form.fullName.trim().length >= 3 && form.email.includes("@") && form.whatsapp.length === 10;
   const isCacValid = form.cac.trim().length >= 5 && form.cac.trim().length <= 14;
   const brandIdentityValid = accountKind !== "brand" || (
-    form.headquarters.trim().length >= 3 &&
+    NIGERIA_LOCATIONS.includes(form.headquarters.trim()) &&
     form.brandTagline.trim().length >= 10
   );
   const step2Valid = isCacValid && form.businessName.trim().length >= 3 && form.cacDoc && socialAccounts[0].url.trim().length >= 3 && validSocialUrls && brandIdentityValid;
@@ -221,15 +274,13 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
 
       if (error) throw error;
       if (!data.user) throw new Error("Registration failed: User details could not be generated.");
+      if (data.user.identities?.length === 0) {
+        throw new Error("An account already uses this email address. Sign in or reset your password.");
+      }
 
       // 3. Trigger onboarding email Edge Function for vendors and brand accounts
       if (selectedRole === "vendor" || selectedRole === "brand") {
         try {
-          await sendEmailNotification("vendor_signup_trial_started", {
-            name: form.fullName,
-            email: form.email,
-            brand: form.businessName,
-          });
           await sendEmailNotification("admin_cac_submitted", {
             message: `${form.businessName || form.fullName} created a ${selectedRole === "brand" ? "brand" : "vendor"} account and submitted onboarding compliance details.`,
             metadata: {
@@ -270,8 +321,10 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
         }
       }
 
-      toast.success("Account created successfully!");
-      setShowPopupModal(true);
+      sessionStorage.setItem("pending_verification_email", form.email);
+      sessionStorage.setItem("pending_verification_kind", selectedRole);
+      toast.success("Account created. Check your email to verify it.");
+      setView("verifyemail");
     } catch (err: any) {
       toast.error(err.message || "Registration encountered an unexpected error.");
     } finally {
@@ -303,11 +356,11 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
               {accountKind === "brand" ? "Brand Registration" : "Vendor Registration"}
             </p>
             <h1 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Join the Platform
+              {accountKind === "brand" ? "Register your brand" : "Open your vendor storefront"}
             </h1>
             <p className="text-muted-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Already have an account?{" "}
-              <button onClick={() => setView("signin")} className="text-[#008236] font-semibold underline underline-offset-2 hover:text-[#006c2c] cursor-pointer">
+              <button onClick={() => setView(accountKind === "brand" ? "brandlogin" : "vendorlogin")} className="text-[#008236] font-semibold underline underline-offset-2 hover:text-[#006c2c] cursor-pointer">
                 Sign in
               </button>
             </p>
@@ -319,25 +372,6 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
             
              {/* VENDOR REGISTER FLOW (Multi-Step Wizard) */}
              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-2 p-1 bg-muted/60 border border-border rounded-2xl">
-                  {[
-                    { id: "vendor" as const, title: "Independent Vendor", desc: "Single storefront" },
-                    { id: "brand" as const, title: "Brand HQ", desc: "Multi-branch organisation" },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        sessionStorage.setItem("signup_account_kind", item.id);
-                        setAccountKind(item.id);
-                      }}
-                      className={`rounded-xl px-3 py-3 text-left transition-all ${accountKind === item.id ? "bg-card shadow-sm border border-border text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                    >
-                      <span className="block text-xs font-bold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.title}</span>
-                      <span className="block text-[10px] mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{item.desc}</span>
-                    </button>
-                  ))}
-                </div>
                 {/* Multi-step progress indicator */}
                 <div className="flex items-center gap-2 mb-2">
                   {[
@@ -432,6 +466,7 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                         <div>
                           <label className={labelCls}>Brand Headquarters *</label>
                           <input
+                            list="anovra-location-options"
                             className={inputCls}
                             placeholder="e.g. Lagos, Nigeria"
                             value={form.headquarters}
@@ -439,6 +474,9 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
                             autoComplete="organization"
                             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                           />
+                          <datalist id="anovra-location-options">
+                            {NIGERIA_LOCATIONS.map((item) => <option key={item} value={item} />)}
+                          </datalist>
                           <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                             Enter the organisation&apos;s head office, not a branch name.
                           </p>
@@ -696,33 +734,6 @@ export function SignUpView({ setView }: { setView: (v: View) => void }) {
           </div>
         </div>
 
-      {/* Success Popup Modal */}
-      {showPopupModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-card rounded-3xl max-w-md w-full p-6 sm:p-8 text-center border-2 border-border shadow-2xl relative">
-            <div className="w-16 h-16 rounded-full bg-[#008236]/15 border border-[#008236]/30 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-[#008236]" />
-            </div>
-            
-            <h3 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-              Verify Your Email Address
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              We have dispatched a verification code to <strong>{form.email}</strong>. Please open your inbox and click the confirmation link (or copy the OTP code) to activate your account.
-            </p>
-            <button
-              onClick={() => {
-                setShowPopupModal(false);
-                setView("signin");
-              }}
-              className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              Proceed to Sign In
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -737,7 +748,6 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
   });
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [showPopupModal, setShowPopupModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -775,7 +785,13 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
       });
 
       if (error) throw error;
-      setShowPopupModal(true);
+      if (data.user?.identities?.length === 0) {
+        throw new Error("An account already uses this email address. Sign in or reset your password.");
+      }
+      sessionStorage.setItem("pending_verification_email", form.email);
+      sessionStorage.setItem("pending_verification_kind", "customer");
+      toast.success("Account created. Check your email to verify it.");
+      setView("verifyemail");
     } catch (err: any) {
       toast.error(err.message || "Registration encountered an unexpected error.");
     } finally {
@@ -816,7 +832,7 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
             </h1>
             <p className="text-muted-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Already have an account?{" "}
-              <button onClick={() => setView("signin")} className="text-[#008236] font-semibold underline underline-offset-2 hover:text-[#006c2c] cursor-pointer">
+              <button onClick={() => setView("customerlogin")} className="text-[#008236] font-semibold underline underline-offset-2 hover:text-[#006c2c] cursor-pointer">
                 Sign in
               </button>
             </p>
@@ -957,38 +973,55 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
         </div>
       </div>
 
-      {/* Success Popup Modal */}
-      {showPopupModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-card rounded-3xl max-w-md w-full p-6 sm:p-8 text-center border-2 border-border shadow-2xl relative">
-            <div className="w-16 h-16 rounded-full bg-[#008236]/15 border border-[#008236]/30 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-[#008236]" />
-            </div>
-            
-            <h3 className="text-2xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-              Verify Your Email Address
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              We have dispatched a verification code to <strong>{form.email}</strong>. Please open your inbox and click the confirmation link (or copy the OTP code) to activate your account.
-            </p>
-            <button
-              onClick={() => {
-                setShowPopupModal(false);
-                setView("signin");
-              }}
-              className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              Proceed to Sign In
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-export function SignInView({ setView }: { setView: (v: View) => void }) {
+export function EmailVerificationPendingView({ setView }: { setView: (v: View) => void }) {
+  const email = sessionStorage.getItem("pending_verification_email") || "your email address";
+  const kind = sessionStorage.getItem("pending_verification_kind") || "customer";
+  const loginView: View = kind === "brand" ? "brandlogin" : kind === "vendor" ? "vendorlogin" : "customerlogin";
+
+  return (
+    <div className="min-h-screen bg-[#FAF7F2]/40 flex items-center justify-center p-4 sm:p-8">
+      <div className="max-w-lg w-full bg-card border border-border rounded-3xl p-6 sm:p-8 text-center shadow-xl">
+        <button onClick={() => setView("landing")} className="inline-flex mb-5">
+          <img src="/logo.png" alt="Anovra Logo" className="h-14 w-auto object-contain mx-auto" />
+        </button>
+        <div className="w-16 h-16 rounded-full bg-[#008236]/10 border border-[#008236]/25 flex items-center justify-center mx-auto mb-5">
+          <CheckCircle className="w-8 h-8 text-[#008236]" />
+        </div>
+        <p className="text-xs tracking-[0.2em] uppercase text-[#008236] font-bold mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>
+          Email verification
+        </p>
+        <h1 className="text-3xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
+          Check your inbox
+        </h1>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          We sent a verification link to <strong className="text-foreground">{email}</strong>. Open the email and click the confirmation button. After verification, you can sign in through the correct {kind === "brand" ? "Brand HQ" : kind === "vendor" ? "Vendor" : "Customer"} page.
+        </p>
+        <div className="grid gap-3">
+          <button
+            onClick={() => setView(loginView)}
+            className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            Go to sign in
+          </button>
+          <button
+            onClick={() => setView("landing")}
+            className="w-full py-3 rounded-xl border border-border text-foreground font-bold text-sm hover:bg-secondary transition-colors cursor-pointer"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            Back to homepage
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SignInView({ setView, accountKind = "any" }: { setView: (v: View) => void; accountKind?: "any" | "customer" | "vendor" | "brand" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -1040,7 +1073,7 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       if (verifyErr) throw verifyErr;
       if (!data.user) throw new Error("Verification failed: User profile not resolved.");
 
-      const userRole = data.user.user_metadata?.role;
+      const userRole = await resolveAccountRole(data.user);
       const cleanEmail = email.trim().toLowerCase();
 
       let isStaff = false;
@@ -1063,15 +1096,34 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       }
 
       let teamMemberRole: string | null = null;
+      let teamMemberSuspended = false;
       try {
         const { data: member } = await supabase
           .from("team_members")
-          .select("role")
+          .select("role, status")
           .eq("email", cleanEmail)
+          .limit(1)
           .maybeSingle();
-        if (member) teamMemberRole = member.role;
+        if (member?.status === "suspended") {
+          teamMemberSuspended = true;
+        }
+        if (member?.status === "active") teamMemberRole = member.role;
       } catch (err) {
         console.warn("Team member lookup bypassed:", err);
+      }
+      if (teamMemberSuspended) {
+        await supabase.auth.signOut();
+        throw new Error("Your branch team access is suspended. Contact your Brand HQ owner.");
+      }
+      if (accountKind !== "any") {
+        const allowed =
+          accountKind === "brand" ? userRole === "brand" :
+          accountKind === "vendor" ? userRole === "vendor" || teamMemberRole === "Manager" || teamMemberRole === "Viewer" :
+          userRole === "customer";
+        if (!allowed) {
+          await supabase.auth.signOut();
+          throw new Error(`This is the ${accountKind === "brand" ? "Brand HQ" : accountKind === "vendor" ? "Vendor" : "Customer"} sign-in page. Please use the correct login page for this account.`);
+        }
       }
 
       if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
@@ -1135,7 +1187,7 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       if (authErr) throw authErr;
       if (!data.user) throw new Error("Authentication failed: User profile not resolved.");
 
-      const userRole = data.user.user_metadata?.role;
+      const userRole = await resolveAccountRole(data.user);
       const cleanEmail = email.trim().toLowerCase();
 
       let isStaff = false;
@@ -1158,15 +1210,34 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
       }
 
       let teamMemberRole: string | null = null;
+      let teamMemberSuspended = false;
       try {
         const { data: member } = await supabase
           .from("team_members")
-          .select("role")
+          .select("role, status")
           .eq("email", cleanEmail)
+          .limit(1)
           .maybeSingle();
-        if (member) teamMemberRole = member.role;
+        if (member?.status === "suspended") {
+          teamMemberSuspended = true;
+        }
+        if (member?.status === "active") teamMemberRole = member.role;
       } catch (err) {
         console.warn("Team member lookup bypassed:", err);
+      }
+      if (teamMemberSuspended) {
+        await supabase.auth.signOut();
+        throw new Error("Your branch team access is suspended. Contact your Brand HQ owner.");
+      }
+      if (accountKind !== "any") {
+        const allowed =
+          accountKind === "brand" ? userRole === "brand" :
+          accountKind === "vendor" ? userRole === "vendor" || teamMemberRole === "Manager" || teamMemberRole === "Viewer" :
+          userRole === "customer";
+        if (!allowed) {
+          await supabase.auth.signOut();
+          throw new Error(`This is the ${accountKind === "brand" ? "Brand HQ" : accountKind === "vendor" ? "Vendor" : "Customer"} sign-in page. Please use the correct login page for this account.`);
+        }
       }
 
       if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
@@ -1228,13 +1299,13 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
             </button>
 
             <p className="text-xs tracking-[0.2em] uppercase text-[#C86B3A] font-bold mb-1.5" style={{ fontFamily: "'DM Mono', monospace" }}>
-              Secure Gateway
+              {accountKind === "brand" ? "Brand HQ Login" : accountKind === "vendor" ? "Vendor Login" : accountKind === "customer" ? "Customer Login" : "Secure Gateway"}
             </p>
             <h1 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Welcome back
+              {accountKind === "brand" ? "Brand HQ sign in" : accountKind === "vendor" ? "Vendor sign in" : accountKind === "customer" ? "Customer sign in" : "Welcome back"}
             </h1>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Sign in to access your account
+              {accountKind === "any" ? "Sign in to access your account" : "Use the dedicated login for this account type"}
             </p>
           </div>
         </div>
@@ -1366,6 +1437,12 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
                 Skincare vendor?{" "}
                 <button onClick={() => setView("signup")} className="text-[#C86B3A] underline underline-offset-2 hover:text-[#b05a2e] font-bold cursor-pointer">
                   Apply as Vendor
+                </button>
+              </p>
+              <p className="text-xs">
+                Established brand?{" "}
+                <button onClick={() => setView("brandsignup")} className="text-[#C86B3A] underline underline-offset-2 hover:text-[#b05a2e] font-bold cursor-pointer">
+                  Register Brand HQ
                 </button>
               </p>
             </div>

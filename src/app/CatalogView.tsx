@@ -15,6 +15,14 @@ import { toast } from "sonner";
 
 const catalogProducts: any[] = [];
 
+async function resolveCatalogueVendorId(user: { id: string; user_metadata?: Record<string, any> }) {
+  if (user.user_metadata?.role !== "vendor_staff") return user.id;
+  const { data: membership, error } = await supabase.from("team_members")
+    .select("vendor_id, status").eq("auth_user_id", user.id).eq("status", "active").maybeSingle();
+  if (error || !membership) throw new Error("Your branch team access is no longer active.");
+  return membership.vendor_id;
+}
+
 // ---- CATALOG FORM OPTIONS ----
 
 const PRODUCT_CATEGORIES = [
@@ -983,21 +991,17 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
 
   useEffect(() => {
     const fetchProducts = async () => {
-      const cached = sessionStorage.getItem("cached_vendor_products");
-      if (cached) {
-        setProductsList(JSON.parse(cached));
-      } else {
-        setCatalogLoading(true);
-      }
+      setCatalogLoading(true);
 
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        const vendorId = await resolveCatalogueVendorId(user);
 
         const { data, error } = await supabase
           .from("products")
           .select("*")
-          .eq("vendor_id", user.id);
+          .eq("vendor_id", vendorId);
 
         if (data && data.length > 0) {
           const formatted = data.map((p) => {
@@ -1079,10 +1083,8 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
             };
           });
           setProductsList(formatted);
-          sessionStorage.setItem("cached_vendor_products", JSON.stringify(formatted));
         } else {
           setProductsList([]);
-          sessionStorage.setItem("cached_vendor_products", JSON.stringify([]));
         }
       } catch (err) {
         console.error("Failed to load catalog products:", err);
@@ -1102,6 +1104,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Authentication required to save products.");
+      const vendorId = await resolveCatalogueVendorId(user);
 
       // Upload product images to Supabase Storage if files were provided
       const uploadedUrls = [...(newProd.images || [])];
@@ -1158,7 +1161,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
       finalDesc += `\n<!--ACTIVE_INGREDIENTS:${JSON.stringify(newProd.activeIngredients || [])}-->`;
 
       const dbPayload = {
-        vendor_id: user.id,
+        vendor_id: vendorId,
         name: newProd.name,
         brand: newProd.brand || "Own Brand",
         price: isNaN(rawPrice) ? 0 : rawPrice,
@@ -1241,7 +1244,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
         clicks: savedData.clicks || 0,
       };
 
-      await dispatchVendorWebhook(user.id, savedData.nafdac_status === "flagged" ? "product.flagged" : "catalog.updated", {
+      await dispatchVendorWebhook(vendorId, savedData.nafdac_status === "flagged" ? "product.flagged" : "catalog.updated", {
         product_id: savedData.id,
         product_name: savedData.name,
         status: savedData.nafdac_status,
@@ -1256,20 +1259,18 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
       }
       await sendEmailNotification("admin_product_review", {
         message: `${savedData.name} is pending Anovra safety review.`,
-        metadata: { vendor_id: user.id, product_id: savedData.id, status: savedData.nafdac_status },
+        metadata: { vendor_id: vendorId, product_id: savedData.id, status: savedData.nafdac_status },
       });
 
       if (newProd.id) {
         setProductsList((prev) => {
           const updated = prev.map((p) => p.id === newProd.id ? formattedProduct : p);
-          sessionStorage.setItem("cached_vendor_products", JSON.stringify(updated));
           return updated;
         });
         toast.success(savedData.nafdac_status === "approved" ? "Product successfully updated!" : "Product updated and sent for safety review. It will show up on your live storefront once approved.");
       } else {
         setProductsList((prev) => {
           const updated = [formattedProduct, ...prev];
-          sessionStorage.setItem("cached_vendor_products", JSON.stringify(updated));
           return updated;
         });
         toast.success("Product added and submitted for NAFDAC safety review. It will show up on your live storefront once approved.");
@@ -1305,7 +1306,6 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
 
           setProductsList((prev) => {
             const updated = prev.filter((p) => p.id !== id);
-            sessionStorage.setItem("cached_vendor_products", JSON.stringify(updated));
             return updated;
           });
           toast.success("Product successfully removed from catalogue!");

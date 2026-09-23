@@ -1,196 +1,139 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
 };
-
-const areaGuidance: Record<string, string> = {
-  face: [
-    "Evaluate facial acne, clogged pores, comedones, oil distribution, T-zone shine, cheek dryness, redness, dark spots, post-inflammatory hyperpigmentation, melasma-like patches, fine lines, pore visibility, texture, and tone evenness.",
-    "Pay close attention to forehead, cheeks, nose, chin, jawline, and under-eye areas if visible.",
-    "Recommend benefits suitable for facial products such as cleanser, serum, moisturizer, sunscreen, spot treatment, or barrier repair."
-  ].join(" "),
-  neck: [
-    "Evaluate neck and decolletage tone unevenness, dark folds, irritation, friction marks, dryness, crepey texture, fine lines, redness, and possible product sensitivity.",
-    "Do not over-index on facial acne unless it is clearly visible on the neck area.",
-    "Recommend benefits suitable for gentle exfoliation, hydration, tone evening, barrier support, and sunscreen use on the neck."
-  ].join(" "),
-  back: [
-    "Evaluate back acne, folliculitis-like bumps, clogged pores, oiliness, post-acne marks, hyperpigmentation, rough texture, dryness, and irritation from sweat or friction.",
-    "Pay attention to upper back, shoulders, and lower back if visible.",
-    "Recommend benefits suitable for body wash, non-comedogenic moisturizer, exfoliating body treatment, and dark-mark care."
-  ].join(" "),
-  hands: [
-    "Evaluate knuckle darkening, dryness, roughness, cracking, ashiness, irritation, sun spots, uneven tone, and hand barrier condition.",
-    "Pay attention to knuckles, wrists, backs of hands, palms, and cuticle-adjacent skin if visible.",
-    "Recommend benefits suitable for hand cream, barrier repair, gentle exfoliation, sunscreen, and tone-evening care."
-  ].join(" "),
-  legs: [
-    "Evaluate leg dryness, strawberry-leg appearance, visible bumps, ingrown-hair marks, hyperpigmentation, rough texture, keratosis-pilaris-like texture, ashiness, and irritation from shaving or friction.",
-    "Pay attention to thighs, shins, calves, knees, and ankles if visible.",
-    "Recommend benefits suitable for body lotion, exfoliating body treatment, soothing care, and tone-evening products."
-  ].join(" "),
-  "whole body": [
-    "Evaluate the visible body areas holistically. Compare face, neck, torso, arms, legs, and hands if visible for widespread dryness, uneven tone, inflammation, acne, hyperpigmentation, sun damage, and texture variation.",
-    "Identify the dominant body-wide concern, but mention if the concern appears localized to one area.",
-    "Recommend benefits suitable for a full routine, including cleanser or wash, treatment, moisturizer, and sunscreen where relevant."
-  ].join(" "),
-  "other area": [
-    "Evaluate only the visible skin region in the image. Focus on dryness, redness, irritation, bumps, texture, uneven tone, pigmentation, blemishes, and visible barrier stress.",
-    "If the body region is unclear, avoid pretending to know the exact anatomy. Describe the visible concern conservatively.",
-    "Recommend general skincare benefits that are safe for localized skin care and barrier support."
-  ].join(" ")
+const baseUrl = "https://skin-analysis-production-9c4b.up.railway.app";
+const areas: Record<string, string> = {
+  face: "face", neck: "neck", back: "back", hands: "hands", legs: "legs",
+  "whole body": "whole-body", "other area": "other",
 };
+const reply = (body: unknown, status = 200, retryAfter?: string | null) =>
+  new Response(JSON.stringify(body), { status, headers: {
+    ...corsHeaders, ...(retryAfter ? { "Retry-After": retryAfter } : {}),
+  } });
 
-function normalizeSkinArea(value?: string) {
-  const normalized = (value || "Face").trim().toLowerCase();
-  return areaGuidance[normalized] ? normalized : "face";
+function meta<T>(description: string, key: string, fallback: T): T {
+  const match = description.match(new RegExp(`<!--${key}:([\\s\\S]*?)-->`));
+  if (!match) return fallback;
+  try { return JSON.parse(match[1]); } catch { return fallback; }
 }
 
-serve(async (req) => {
-  // Handle CORS preflight request
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+async function callApi(path: string, body: unknown, key: string) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(115000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.ok) return { data: payload };
+  const detail = payload as { error?: string | { code?: string; message?: string }; retryable?: boolean };
+  return { error: typeof detail.error === "string" ? detail.error : detail.error?.message || "Skin analysis is unavailable.",
+    retryable: detail.retryable, status: response.status, retryAfter: response.headers.get("retry-after") };
+}
 
+serve(async (request) => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method !== "POST") return reply({ error: "Method not allowed." }, 405);
   try {
-    const { imageBase64, imageUrl, mimeType, skinArea } = await req.json();
-    const normalizedArea = normalizeSkinArea(skinArea);
-    const displayArea = normalizedArea
-      .split(" ")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
+    const requestOrigin = request.headers.get("origin");
+    const allowed = [
+      Deno.env.get("ANOVRA_APP_URL") || "https://anovra-api.vercel.app",
+      "https://anovra.africa", "https://www.anovra.africa",
+      "http://localhost:5173", "http://127.0.0.1:5173",
+    ];
+    if (requestOrigin && !allowed.includes(requestOrigin))
+      return reply({ error: "This scan source is not allowed." }, 403);
+    const key = Deno.env.get("SKIN_ANALYSIS_API_KEY");
+    if (!key) return reply({ error: "Skin analysis is not configured." }, 503);
+    const body = await request.json();
+    const imageBase64 = String(body.imageBase64 || "");
+    const skinArea = areas[String(body.skinArea || "").trim().toLowerCase()];
+    const vendorId = body.vendorId ? String(body.vendorId) : null;
+    if (!skinArea || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(imageBase64) || imageBase64.length > 7_000_000)
+      return reply({ error: "Choose a skin area and upload a JPEG, PNG, or WebP photo under 5 MB." }, 400);
+    if (vendorId && !/^[0-9a-f-]{36}$/i.test(vendorId)) return reply({ error: "Invalid storefront." }, 400);
 
-    if (!imageBase64 && !imageUrl) {
-      return new Response(JSON.stringify({ error: "Image base64 data or imageUrl is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    let base64Data = "";
-    let detectedMimeType = mimeType || "image/jpeg";
-    if (imageUrl) {
-      const imgRes = await fetch(imageUrl);
-      if (!imgRes.ok) throw new Error("Failed to fetch image from storage URL");
-      detectedMimeType = imgRes.headers.get("content-type") || detectedMimeType;
-      const arrayBuffer = await imgRes.arrayBuffer();
-      // Convert ArrayBuffer to base64 in Deno
-      const uint8 = new Uint8Array(arrayBuffer);
-      let binary = "";
-      for (let i = 0; i < uint8.length; i++) {
-        binary += String.fromCharCode(uint8[i]);
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const clientAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("cf-connecting-ip") || "unknown";
+    const hashBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${key}:${clientAddress}`));
+    const keyHash = Array.from(new Uint8Array(hashBytes)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    const { data: slotAcquired, error: limitError } = await db.rpc("acquire_skin_scan_slot", { p_key_hash: keyHash });
+    if (limitError) throw limitError;
+    if (!slotAcquired) return reply({ error: "You have reached the scan limit. Please try again in an hour." }, 429, "3600");
+    let sourceProducts: Record<string, unknown>[] = [];
+    let catalog: Record<string, unknown>[] = [];
+    if (vendorId) {
+      const { data: vendor, error: vendorError } = await db.from("profiles")
+        .select("id, account_type, branch_status, is_verified, verification_status, parent_brand_id, plan, created_at")
+        .eq("id", vendorId).maybeSingle();
+      if (vendorError || !vendor || !vendor.is_verified || vendor.verification_status !== "approved" ||
+          (vendor.account_type === "branch" && vendor.branch_status !== "active"))
+        return reply({ error: "This storefront is unavailable." }, 403);
+      let planOwner: { plan: string | null; created_at: string | null } = vendor;
+      if (vendor.parent_brand_id) {
+        const { data: parent } = await db.from("profiles")
+          .select("is_verified, verification_status, plan, created_at")
+          .eq("id", vendor.parent_brand_id).maybeSingle();
+        if (!parent?.is_verified || parent.verification_status !== "approved")
+          return reply({ error: "This storefront is unavailable." }, 403);
+        planOwner = parent;
       }
-      base64Data = btoa(binary);
-    } else if (imageBase64) {
-      base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
-    }
-
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!geminiApiKey) {
-      throw new Error("GEMINI_API_KEY is not configured for analyse-skin");
-    }
-    const models = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.0-flash"];
-
-    const promptText = `You are Anovra's skincare analysis engine for African skin tones, including Fitzpatrick IV-VI. Analyze this skin photo for the selected area: ${displayArea}.
-
-Area-specific analysis rules:
-${areaGuidance[normalizedArea]}
-
-General analysis rules:
-- Analyze only visible skin. Do not claim certainty about non-visible areas.
-- Identify visible skincare concerns such as acne, hyperpigmentation, dryness, uneven texture, blemishes, redness, oiliness, pore visibility, dark marks, fine lines, or barrier stress when present.
-- If the image is too blurry, too dark, not skin, or not suitable for analysis, return a conservative result that says the image quality is insufficient.
-- Do not diagnose medical disease. Use skincare assessment language, not medical certainty.
-- Provide a primary concern title, a concise skin type/result summary, an overall skin health score from 0 to 100, and three practical product-matching benefits.
-- Provide a severity array for common visible concerns. Each severity item must include label, level, and score. Use score 0-100 where 0 means not visible and 100 means highly visible. Use levels "Low", "Mild", "Moderate", or "Elevated".
-- Output strict JSON only. No Markdown, no code fences, no surrounding explanation.
-
-Return exactly this JSON shape:
-{
-  "concern": "Acne & Hyperpigmentation",
-  "result": "Oily/Combination Skin (Barrier Level: 79%)",
-  "score": 78,
-  "severity": [
-    { "label": "Hyperpigmentation", "level": "Moderate", "score": 62 },
-    { "label": "Acne / Blemishes", "level": "Mild", "score": 38 },
-    { "label": "T-Zone Oiliness", "level": "Elevated", "score": 70 },
-    { "label": "Fine Lines", "level": "Low", "score": 22 },
-    { "label": "Skin Hydration", "level": "Low", "score": 20 },
-    { "label": "Pore Visibility", "level": "Mild", "score": 45 },
-    { "label": "Redness", "level": "Low", "score": 18 },
-    { "label": "Barrier Health", "level": "Low", "score": 15 },
-    { "label": "Visible Texture", "level": "Mild", "score": 34 },
-    { "label": "Skin Tone Evenness", "level": "Moderate", "score": 55 },
-    { "label": "Dryness", "level": "Mild", "score": 28 },
-    { "label": "Inflammation Signs", "level": "Low", "score": 12 }
-  ],
-  "benefits": [
-    "Fades dark spots and post-acne marks in 4-6 weeks",
-    "Unclogs pores and regulates excess oil production",
-    "Strengthens the skin barrier against West African UV index"
-  ]
-}`;
-
-    const geminiPayload = {
-      contents: [
-        {
-          parts: [
-            { text: promptText },
-            {
-              inlineData: {
-                mimeType: detectedMimeType,
-                data: base64Data
-              }
-            }
-          ]
-        }
-      ]
-    };
-
-    let response: Response | null = null;
-    let lastError = "";
-    for (const model of models) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(geminiPayload)
+      const trialEnd = new Date(planOwner.created_at || 0).getTime() + 7 * 24 * 60 * 60 * 1000;
+      if ((!planOwner.plan || planOwner.plan === "free") && Date.now() > trialEnd)
+        return reply({ error: "This partner's trial has ended. The skin test is unavailable until they subscribe." }, 403);
+      const { data: products, error: productError } = await db.from("products").select("*")
+        .eq("vendor_id", vendorId).eq("nafdac_status", "approved").limit(50);
+      if (productError) throw productError;
+      sourceProducts = products || [];
+      catalog = sourceProducts.map((product) => {
+        const description = String(product.description || "");
+        return {
+          id: String(product.id), name: String(product.name), brand: String(product.brand || ""),
+          price: Number(product.price || 0), currency: "NGN", category: String(product.category || "Skincare"),
+          description: description.replace(/<!--[A-Z_]+:[\s\S]*?-->/g, "").trim(),
+          ingredients: [...meta<string[]>(description, "KEY_INGREDIENTS", []), ...meta<string[]>(description, "ACTIVE_INGREDIENTS", [])],
+          skinTypes: meta<string[]>(description, "SKINTYPES", []),
+          concerns: [], usage: meta<string>(description, "USAGE", ""),
+          imageUrl: String(product.image_url || meta<string[]>(description, "IMAGES", [])[0] || ""),
+          nafdacStatus: "approved",
+        };
       });
-
-      if (response.ok) break;
-      lastError = await response.text();
-      if (![429, 500, 502, 503, 504].includes(response.status)) break;
     }
 
-    if (!response || !response.ok) {
-      throw new Error(`Gemini API error: ${response?.status || "unknown"} - ${lastError}`);
-    }
+    const media = { type: "image", base64: imageBase64.split(",")[1],
+      mimeType: imageBase64.slice(5, imageBase64.indexOf(";")) };
+    const capture = await callApi("/v1/capture", { media, skinArea, options: { locale: "en-NG" } }, key);
+    if ("error" in capture) return reply(capture, capture.status, capture.retryAfter);
+    const verdict = capture.data as { accepted: boolean; capture?: { reject_reasons?: unknown[] }; capture_token?: string };
+    if (!verdict.accepted) return reply({ accepted: false, rejectReasons: verdict.capture?.reject_reasons || [] });
 
-    const data = await response.json();
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!candidateText) {
-      throw new Error("Empty candidate response from Gemini API");
-    }
-
-    // Clean any markdown formatting if returned (sometimes models return ```json ... ```)
-    const cleanedText = candidateText.trim().replace(/^```json/, "").replace(/```$/, "").trim();
-    const resultObj = JSON.parse(cleanedText);
-
-    return new Response(JSON.stringify(resultObj), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error: any) {
-    console.error("analyse-skin failed:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const analysis = await callApi("/v1/analyse", {
+      media, skinArea, captureToken: verdict.capture_token, catalog,
+      options: { locale: "en-NG", includeLegacy: true },
+    }, key);
+    if ("error" in analysis) return reply(analysis, analysis.status, analysis.retryAfter);
+    const result = analysis.data as {
+      accepted: boolean; capture?: { reject_reasons?: unknown[] };
+      legacy?: { concern: string; result: string; score: number; severity: unknown[]; benefits: string[] };
+      products?: Record<string, unknown>[]; ingredient_fallback?: unknown[]; treatment?: unknown[];
+      disclaimer?: string; no_issues_detected?: boolean;
+    };
+    if (!result.accepted) return reply({ accepted: false, rejectReasons: result.capture?.reject_reasons || [] });
+    if (!result.legacy) return reply({ error: "The scanner returned an incomplete report. Please try again." }, 502);
+    const products = (result.products || []).filter((item) => sourceProducts.some((source) => source.id === item.id));
+    return reply({ accepted: true, ...result.legacy, products,
+      ingredientFallback: result.ingredient_fallback || [],
+      treatmentPlan: result.treatment || [],
+      disclaimer: result.disclaimer, noIssuesDetected: result.no_issues_detected });
+  } catch (error) {
+    console.error("analyse-skin failed", error);
+    return reply({ error: "The scanner is temporarily unavailable. Please try again shortly." }, 502);
   }
 });

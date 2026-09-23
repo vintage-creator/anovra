@@ -37,7 +37,7 @@ async function sendBranchEmail(payload: {
 }) {
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
   if (!resendApiKey) return false;
-  const signInUrl = appLink("/#/signin");
+  const signInUrl = appLink("/#/vendorlogin");
   const shopUrl = appLink(`/#/shop/${payload.slug}`);
   const scanUrl = appLink(`/#/scan/${payload.slug}`);
 
@@ -245,6 +245,8 @@ serve(async (req) => {
         .maybeSingle();
       if (!membership) throw new Error("Branch membership not found.");
       if (!isAdmin && membership.brand_id !== caller.id) throw new Error("You can only update your own branches.");
+      if (membership.branch_id === membership.brand_id)
+        throw new Error("The flagship storefront is part of Brand HQ. Edit its identity in Brand HQ settings.");
 
       const updates: Record<string, string> = {};
       if (body.branch_name || body.branchName) updates.branch_name = String(body.branch_name || body.branchName).trim();

@@ -1,0 +1,10 @@
+{
+  "rewrites": [
+    { "source": "/auth/callback", "destination": "/" },
+    { "source": "/resetpassword", "destination": "/" },
+    { "source": "/shop/:slug*", "destination": "/" },
+    { "source": "/scan/:slug*", "destination": "/" },
+    { "source": "/brand/:slug*", "destination": "/" },
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}

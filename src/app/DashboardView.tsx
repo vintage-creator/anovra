@@ -18,11 +18,15 @@ import { toast } from "sonner";
 
 // ---- DASHBOARD TAB TYPES ----
 
-type DashTab = "overview" | "catalog" | "analytics" | "settings" | "team" | "api" | "support";
+type DashTab = "overview" | "catalog" | "analytics" | "settings" | "api" | "support";
 type VendorPlan = "free" | "basic" | "premium" | "brand";
 
 export function DashboardView({ setView }: { setView: (v: View) => void }) {
-  const [tab, setTab] = useState<DashTab>(() => (sessionStorage.getItem("active_vendor_tab") as DashTab) || "overview");
+  const [tab, setTab] = useState<DashTab>(() => {
+    const saved = sessionStorage.getItem("active_vendor_tab");
+    return saved && ["overview", "catalog", "analytics", "settings", "api", "support"].includes(saved)
+      ? saved as DashTab : "overview";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -42,7 +46,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [vendorPlan, setVendorPlan] = useState<VendorPlan>("free");
   const [trialActive, setTrialActive] = useState(true);
   const [trialEndsAt, setTrialEndsAt] = useState<Date | null>(null);
-  const [trialMsRemaining, setTrialMsRemaining] = useState(14 * 24 * 60 * 60 * 1000);
+  const [trialMsRemaining, setTrialMsRemaining] = useState(7 * 24 * 60 * 60 * 1000);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [upgradeTargetFeature, setUpgradeTargetFeature] = useState<string | null>(null);
   const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<"basic" | "premium" | "brand" | null>(null);
@@ -55,15 +59,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [onboardingUrgency, setOnboardingUrgency] = useState("Normal");
   const [onboardingNotes, setOnboardingNotes] = useState("");
   const [showApiDocs, setShowApiDocs] = useState(false);
-  const [showRoleSimModal, setShowRoleSimModal] = useState(false);
-  const [simulatedRoleInfo, setSimulatedRoleInfo] = useState<"Vendor" | "Manager" | "Viewer">("Vendor");
   const [embedPlatform, setEmbedPlatform] = useState<"html" | "shopify" | "wordpress">("html");
   const [teamRole, setTeamRole] = useState<"Vendor" | "Manager" | "Viewer">("Vendor");
 
-  const [teamMembers, setTeamMembers] = useState<any[]>([]);
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("Manager");
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [apiKeyPrefix, setApiKeyPrefix] = useState("");
   const [isGeneratingApiKey, setIsGeneratingApiKey] = useState(false);
@@ -80,6 +78,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [storeSaved, setStoreSaved] = useState(false);
   const [isEditingStorefront, setIsEditingStorefront] = useState(false);
   const [isBranchAccount, setIsBranchAccount] = useState(false);
+  const [showBrandUpgrade, setShowBrandUpgrade] = useState(false);
+  const [upgradingBrand, setUpgradingBrand] = useState(false);
 
   const shopSlug = profileSlug || (brandName || "your-brand").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "your-brand";
   const shopLink = `https://anovra.africa/#/shop/${shopSlug}`;
@@ -159,8 +159,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         try {
           const { data: membership } = await supabase
             .from("team_members")
-            .select("vendor_id, role")
+            .select("vendor_id, role, status")
             .eq("email", user.email)
+            .eq("status", "active")
+            .limit(1)
             .maybeSingle();
 
           if (membership && (membership.role === "Manager" || membership.role === "Viewer")) {
@@ -284,50 +286,20 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             setWebhookSaved(isValidWebhookUrl(profile.webhook_url));
           }
 
-          // Enforce 14-day trial check
+          // Enforce 7-day trial check
           const createdDate = user.created_at ? new Date(user.created_at) : new Date();
-          const trialEndDate = new Date(createdDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+          const trialEndDate = new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
           const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
           const planVal = (profile.plan || "free") as VendorPlan;
           setTrialEndsAt(trialEndDate);
           setTrialMsRemaining(Math.max(0, trialEndDate.getTime() - Date.now()));
-          setTrialActive(planVal === "free" && daysDiff <= 14);
-          if (planVal === "free" && daysDiff > 14) {
+          setTrialActive(planVal === "free" && daysDiff <= 7);
+          if (planVal === "free" && daysDiff > 7) {
             setTrialExpired(true);
           } else {
             setTrialExpired(false);
           }
 
-          // Populate team members list with the actual logged-in vendor admin
-          const ownerMember = {
-            name: profile.name || user.user_metadata?.full_name || "Vendor",
-            email: user.email || "",
-            role: "Vendor",
-            status: "active",
-            joined: "Joined"
-          };
-          setTeamMembers([
-            ownerMember
-          ]);
-
-          const { data: savedTeamMembers } = await supabase
-            .from("team_members")
-            .select("name, email, role, status, created_at")
-            .eq("vendor_id", effectiveVendorId)
-            .order("created_at", { ascending: false });
-
-          if (savedTeamMembers && savedTeamMembers.length > 0) {
-            setTeamMembers([
-              ownerMember,
-              ...savedTeamMembers.map((m) => ({
-                name: m.name || m.email,
-                email: m.email,
-                role: m.role,
-                status: m.status,
-                joined: m.created_at ? new Date(m.created_at).toLocaleDateString("en-GB") : "—"
-              }))
-            ]);
-          }
         }
 
         // 2. Fetch products list
@@ -621,7 +593,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       setUpgradeTargetFeature("Custom domain mapping");
       setUpgradeTargetPlan("brand");
       setShowPremiumModal(true);
-      toast.warning("Custom domain setup is a Brand plan feature. Upgrade to unlock.");
+      toast.warning("Custom domain setup is a Premium Tier feature. Upgrade to unlock.");
       return;
     }
     const domain = normalizeDomain(customDomain);
@@ -702,7 +674,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       const prices = {
         basic: 12500,
         premium: 25000,
-        brand: 75000,
+        brand: 45000,
       };
       const amount = prices[planKey] * 100; // in kobo
 
@@ -844,7 +816,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     { id: "overview", label: "Overview", icon: Activity },
     { id: "catalog", label: "Product Catalogue", icon: Package },
     { id: "analytics", label: "Analytics", icon: TrendingUp },
-    { id: "team", label: "Team", icon: Users },
     { id: "api", label: "API & Dev", icon: Key },
     { id: "support", label: "Support", icon: LifeBuoy },
     { id: "settings", label: "Settings", icon: Settings },
@@ -856,7 +827,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     catalog: isBranchAccount ? "Manage this branch's live safety-screened product catalogue" : "Manage your live safety-screened product catalogue",
     analytics: isBranchAccount ? "Branch customer scan reports & conversion activity" : "Live customer scan reports & product funnel conversions",
     settings: isBranchAccount ? "Branch profile, test link, billing, and storefront settings" : "Custom domains, compliance logs & partner profiles",
-    team: isBranchAccount ? "Manage branch operators and permissions" : "Manage vendor account operators & permissions",
     api: isBranchAccount ? "Branch API credentials, webhooks, and developer endpoints" : "Access credentials, webhooks & developer endpoints",
     support: isBranchAccount ? "Get branch setup and launch support from Anovra" : "Connect with Anovra account specialists",
   } satisfies Record<DashTab, string>;
@@ -881,7 +851,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         )}
       >
         {/* Top Section */}
-        <div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {/* Logo and close button */}
           <div className="p-5 border-b border-border flex items-center justify-between">
             <button onClick={() => setView("landing")} className="flex items-center cursor-pointer" title="Go to home">
@@ -911,47 +881,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 {isVerified ? "Verified" : "Pending"}
               </span>
             </div>
-
-            {/* Segmented Switch Toggle for Role Simulation */}
-            {!isBranchAccount && (
-            <div className="mt-3.5 bg-[#FAF7F2] dark:bg-zinc-900 border border-border/80 rounded-xl p-2 shadow-2xs">
-              <div className="flex items-center justify-between mb-1.5 px-1">
-                <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Simulate Role View</span>
-                <button 
-                  onClick={() => {
-                    setSimulatedRoleInfo(teamRole);
-                    setShowRoleSimModal(true);
-                  }}
-                  className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors p-0.5 bg-transparent border-0 outline-none focus:outline-none flex items-center justify-center"
-                  title="View permissions breakdown matrix"
-                >
-                  <BookOpen className="w-3 h-3 text-[#008236]" />
-                </button>
-              </div>
-              <div className="grid grid-cols-3 gap-0.5 bg-secondary p-0.5 rounded-lg text-[9px] font-bold text-center border border-border/40">
-                {[
-                  { id: "Vendor" as const, label: "Vendor" },
-                  { id: "Manager" as const, label: "Manager" },
-                  { id: "Viewer" as const, label: "Viewer" }
-                ].map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => {
-                      setSimulatedRoleInfo(r.id);
-                      setShowRoleSimModal(true);
-                    }}
-                    className={cn(
-                      "py-1 rounded text-[10px] font-semibold transition-all cursor-pointer border-0 bg-transparent outline-none focus:outline-none",
-                      teamRole === r.id ? "bg-white dark:bg-zinc-800 shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-                    )}
-                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            )}
 
             <div className="mt-3.5 bg-card border border-border/80 rounded-lg p-2 flex items-center justify-between gap-1.5 shadow-2xs">
               <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[130px]" title={shopLink}>
@@ -1007,7 +936,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         </div>
 
         {/* Bottom sign out panel */}
-        <div className="p-4 border-t border-border">
+        <div className="p-4 border-t border-border shrink-0">
           <button
             onClick={handleSignOut}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors cursor-pointer"
@@ -1033,10 +962,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 <Lock className="w-8 h-8 text-amber-700 dark:text-amber-400" />
               </div>
               <h2 className="text-3xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-                Your 14-Day Free Trial Has Expired
+                Your 7-Day Free Trial Has Expired
               </h2>
               <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Your free trial of Anovra Skincare Partner has ended. To continue managing your safety-screened catalogue, team accounts, custom domains, and viewing live customer scans, please select a plan below.
+                Your free trial of Anovra Skincare Partner has ended. To continue managing your safety-screened catalogue, custom domains, integrations, and live customer scans, please select a plan below.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto text-left">
@@ -1504,7 +1433,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 <div>
                   <p className="font-bold text-foreground">You are unlocking: {upgradeTargetFeature}</p>
                   <p className="text-muted-foreground mt-0.5">
-                    This feature is exclusive to {upgradeTargetPlan === "basic" ? "Basic, Vendor Pro, or Brand" : upgradeTargetPlan === "premium" ? "Vendor Pro or Brand" : "the Brand Plan"}. We have highlighted the eligible plans below.
+                    This feature is exclusive to {upgradeTargetPlan === "basic" ? "Basic, Vendor Pro, or Brand" : upgradeTargetPlan === "premium" ? "Vendor Pro or Brand" : "the Premium Tier"}. We have highlighted the eligible plans below.
                   </p>
                 </div>
               </div>
@@ -1608,18 +1537,17 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               )}>
                 <div>
                   <div className="flex justify-between items-start">
-                    <span className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Brand</span>
+                    <span className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Premium Tier</span>
                     <span className="text-[9px] bg-secondary text-muted-foreground border border-border/80 px-2 py-0.5 rounded-md font-mono uppercase font-bold">Enterprise</span>
                   </div>
                   <div className="mt-2.5">
-                    <span className="text-2xl font-light font-mono text-foreground">₦75,000</span>
+                    <span className="text-2xl font-light font-mono text-foreground">₦45,000</span>
                     <span className="text-xs text-muted-foreground font-mono">/mo</span>
                   </div>
                   <ul className="mt-4 space-y-2 text-[10.5px] text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Everything in Vendor Pro</li>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Full developer REST API</li>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Custom domain mapping</li>
-                    <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Multi-user team accounts</li>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Contractual uptime SLA</li>
                     <li className="flex items-start gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" /> Dedicated onboarding guide</li>
                   </ul>
@@ -1845,6 +1773,50 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       {/* ── SETTINGS ── */}
       {tab === "settings" && (
         <div className="space-y-6 w-full">
+          {!isBranchAccount && teamRole === "Vendor" && (
+            <section className="bg-card border border-border rounded-lg p-5 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">Grow into Brand HQ</h3>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+                    Keep this storefront as your flagship, then add branches and manage their team access from Brand HQ.
+                  </p>
+                </div>
+                <button onClick={() => setShowBrandUpgrade((value) => !value)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#008236] px-4 py-2.5 text-sm font-semibold text-[#008236] hover:bg-[#008236]/5">
+                  {showBrandUpgrade ? "Close" : "Move to Brand HQ"} <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+              {showBrandUpgrade && (
+                <div className="mt-5 border-t border-border pt-5">
+                  <p className="text-sm text-foreground">Your existing shop URL, approved products, and scan history will stay with your flagship location. Your account will open the Brand HQ workspace after the move.</p>
+                  <button disabled={upgradingBrand}
+                    onClick={async () => {
+                      setUpgradingBrand(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("upgrade-vendor-to-brand", { body: {} });
+                        if (error) {
+                          const response = (error as any).context as Response | undefined;
+                          const detail = await response?.clone().json().catch(() => null);
+                          throw new Error(detail?.error || error.message);
+                        }
+                        if (!data?.success) throw new Error(data?.error || "Could not move this account.");
+                        await supabase.auth.refreshSession();
+                        toast.success("Brand HQ is ready. Your store is now your flagship.");
+                        setView("branddashboard");
+                      } catch (error: any) {
+                        toast.error(error.message || "Could not move this account.");
+                      } finally {
+                        setUpgradingBrand(false);
+                      }
+                    }}
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#008236] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+                    {upgradingBrand ? "Moving account..." : "Confirm move to Brand HQ"}
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             
             {/* Left Column */}
@@ -1891,7 +1863,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                           setUpgradeTargetFeature("White-labelled results page");
                           setUpgradeTargetPlan("premium");
                           setShowPremiumModal(true);
-                          toast.warning("White-labeling requires Vendor Pro or Brand tier. Upgrade to unlock!");
+                          toast.warning("White-labelling requires Vendor Pro or Premium Tier. Upgrade to unlock.");
                           return;
                         }
                         const nextVal = !whiteLabelEnabled;
@@ -2184,7 +2156,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               <div>
                 <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
                 <p className="text-xs text-muted-foreground mt-1 max-w-3xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Start on Free, try all premium features for 14 days, then choose a paid tier to keep advanced tools such as white-labelled results, custom domains, webhooks, and priority WhatsApp support.
+                  Start on Free, try all premium features for 7 days, then choose a paid tier to keep advanced tools such as white-labelled results, custom domains, webhooks, and priority WhatsApp support.
                 </p>
               </div>
               {vendorPlan === "free" && (
@@ -2223,8 +2195,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   name: "Free Tier",
                   price: "₦0/mo",
                   desc: trialActive
-                    ? "14-day premium feature trial, storefront preview, product catalogue setup, scan testing, and basic workspace access."
-                    : "Basic workspace access after trial. Premium storefront, API, webhooks, custom domain, and team features require an upgrade.",
+                    ? "7-day premium feature trial, storefront preview, product catalogue setup, scan testing, and basic workspace access."
+                    : "Basic workspace access after trial. Premium storefront, API, webhooks, and custom domain features require an upgrade.",
                   isContact: false
                 },
                 { 
@@ -2243,9 +2215,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 },
                 { 
                   key: "brand", 
-                  name: "Brand Tier", 
-                  price: "₦75,000/mo", 
-                  desc: "Everything in Pro, plus REST API access, custom domain for test link, multi-user team accounts, SLA support, onboarding.",
+                  name: "Premium Tier",
+                  price: "₦45,000/mo",
+                  desc: "Everything in Pro, plus REST API access, custom domain for test link, SLA support, and onboarding.",
                   isContact: false
                 },
               ].map((p) => {
@@ -2267,7 +2239,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       </span>
                     ) : p.isContact ? (
                       <a
-                        href="mailto:sales@anovra.africa?subject=Anovra Brand Tier Inquiry"
+                        href="mailto:sales@anovra.africa?subject=Anovra Premium Tier Inquiry"
                         className="w-full text-center py-1.5 text-[10px] bg-secondary text-foreground hover:bg-muted font-bold rounded-lg transition-colors block decoration-none"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
@@ -2291,156 +2263,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       )}
 
       {/* ── TEAM ── */}
-      {tab === "team" && (
-        <div className="space-y-6 w-full">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Team Accounts */}
-            <div className="lg:col-span-3 bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Team accounts</h3>
-                      <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Brand</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Add up to 5 team members with different access levels.</p>
-                  </div>
-                  {teamRole === "Vendor" ? (
-                    <button
-                      onClick={() => setShowInvite((v) => !v)}
-                      className="flex items-center gap-1.5 text-xs px-3.5 py-2 bg-[#008236] text-white rounded-lg hover:bg-[#006c2c] transition-colors font-medium shadow-xs cursor-pointer"
-                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Invite member
-                    </button>
-                  ) : (
-                    <button
-                      disabled
-                      className="flex items-center gap-1.5 text-xs px-3.5 py-2 bg-muted text-muted-foreground border border-border rounded-lg font-medium cursor-not-allowed"
-                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                      title="Only the Brand Owner can invite team members"
-                    >
-                      <Lock className="w-3.5 h-3.5 text-muted-foreground" /> Invite member (Locked)
-                    </button>
-                  )}
-                </div>
-
-                {showInvite && (
-                  <div className="px-5 py-4 bg-muted/30 border-b border-border">
-                    <p className="text-xs font-medium text-foreground mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Invite a new team member</p>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        value={inviteEmail}
-                        onChange={(e) => setInviteEmail(e.target.value)}
-                        placeholder="colleague@yourcompany.com"
-                        className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] transition-colors"
-                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                      />
-                      <select
-                        value={inviteRole}
-                        onChange={(e) => setInviteRole(e.target.value)}
-                        className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236]"
-                      >
-                        <option value="Manager">Manager</option>
-                        <option value="Viewer">Viewer</option>
-                      </select>
-                      <button
-                        onClick={async () => {
-                          if (!inviteEmail.trim() || !inviteEmail.includes("@")) {
-                            toast.error("Please enter a valid email address.");
-                            return;
-                          }
-                          const namePart = inviteEmail.split("@")[0];
-                          const mName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-                          setTeamMembers((prev) => [
-                            ...prev,
-                            { name: mName, email: inviteEmail, role: inviteRole, status: "invited", joined: "—" }
-                          ]);
-
-                          // Dispatch invitation email securely via Supabase client invoke wrapper
-                          try {
-                            const { data: { user } } = await supabase.auth.getUser();
-                            if (user) {
-                              await supabase
-                                .from("team_members")
-                                .upsert({
-                                  vendor_id: user.id,
-                                  name: mName,
-                                  email: inviteEmail,
-                                  role: inviteRole,
-                                  status: "invited",
-                                }, { onConflict: "vendor_id,email" });
-                            }
-                            await supabase.functions.invoke("send-onboarding-email", {
-                              body: {
-                                email: inviteEmail,
-                                name: mName,
-                                action: "invite",
-                                inviter: brandName,
-                                role: inviteRole
-                              }
-                            });
-                          } catch (e) {
-                            console.error("Failed to send invitation email:", e);
-                          }
-
-                          setShowInvite(false);
-                          setInviteEmail("");
-                          toast.success(`Invitation successfully sent to ${inviteEmail}!`);
-                        }}
-                        className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
-                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                      >
-                        Send invite
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-2.5 bg-secondary/35 p-2.5 rounded-lg border border-border/40 leading-relaxed font-sans" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {inviteRole === "Manager" && "• Manager: Can manage products and catalogue entries. Restructured from accessing settings like domains, billing, or platform integration."}
-                      {inviteRole === "Viewer" && "• Viewer: Read-only access. Can inspect product catalogue, customer scans, and dashboard statistics but cannot save modifications."}
-                    </p>
-                  </div>
-                )}
-
-                <div className="divide-y divide-border">
-                  {teamMembers.map((m) => {
-                    const initials = m.name ? m.name.split(/\s+/).filter(Boolean).map((n) => n[0]).join("").toUpperCase() : "U";
-                    return (
-                      <div key={m.email} className="flex items-center justify-between gap-3 px-5 py-3.5 flex-wrap sm:flex-nowrap">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-9 h-9 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-bold flex items-center justify-center flex-shrink-0 text-xs">
-                            {initials}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.name}</p>
-                            <p className="text-xs text-muted-foreground truncate font-mono">{m.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${m.role === "Vendor" ? "bg-foreground text-primary-foreground" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.role}</span>
-                          <span className={`text-xs px-2.5 py-0.5 rounded-full ${m.status === "active" ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400" : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.status}</span>
-                          {m.role !== "Vendor" && teamRole === "Vendor" && (
-                            <button
-                              onClick={() => {
-                                setTeamMembers((prev) => prev.filter((member) => member.email !== m.email));
-                                toast.success(`Removed ${m.name} from team.`);
-                              }}
-                              className="text-xs text-red-500 hover:text-red-700 font-semibold px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
-                              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── API & DEV ── */}
       {tab === "api" && (
         <div className="space-y-6 w-full">
@@ -2485,7 +2307,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   ) : (
                     <div className="bg-muted/30 border border-dashed border-border rounded-lg p-4 text-center space-y-3">
                       <p className="text-xs text-muted-foreground leading-normal font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        REST API key access is a Brand feature. Please upgrade to see plans and access endpoint authentication keys.
+                        REST API key access is a Premium Tier feature. Upgrade to access endpoint authentication keys.
                       </p>
                       <button
                         onClick={() => {
@@ -2570,7 +2392,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   ) : (
                     <div className="bg-muted/30 border border-dashed border-border rounded-lg p-4 text-center space-y-3">
                       <p className="text-xs text-muted-foreground leading-normal font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Webhook endpoints are available on the Vendor Basic, Pro, or Brand plans.
+                        Webhook endpoints are available on Basic, Vendor Pro, and Premium Tier plans.
                       </p>
                       <button
                         onClick={() => {
@@ -2640,7 +2462,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       <button
                         onClick={() => {
                           setShowPremiumModal(true);
-                          toast.warning("Priority WhatsApp support requires Vendor Pro or Brand tier. Upgrade to unlock!");
+                          toast.warning("Priority WhatsApp support requires Vendor Pro or Premium Tier. Upgrade to unlock.");
                         }}
                         className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zinc-400 text-white text-xs font-bold rounded-lg hover:bg-zinc-500 transition-colors shrink-0 shadow-xs cursor-pointer"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -2666,7 +2488,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Brand</span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Preview enterprise support terms during trial. Contractual SLA activation starts on a paid Brand plan.
+                    Preview enterprise support terms during trial. Contractual SLA activation starts on a paid Premium Tier plan.
                   </p>
                 </div>
                 <div className="p-5 space-y-3">
@@ -2690,7 +2512,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         setUpgradeTargetFeature("Uptime SLA guarantees");
                         setUpgradeTargetPlan("brand");
                         setShowPremiumModal(true);
-                        toast.info("Uptime SLA guarantees are exclusive to the Brand Plan. Upgrade to unlock.");
+                        toast.info("Uptime SLA guarantees are exclusive to the Premium Tier. Upgrade to unlock.");
                       }}
                       className="w-full text-center mt-3 text-xs text-accent hover:text-accent/80 font-bold cursor-pointer border-t border-border/40 pt-2 bg-transparent border-0 outline-none focus:outline-none flex items-center justify-center gap-1.5"
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -2753,7 +2575,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     setUpgradeTargetFeature("Dedicated 1-on-1 onboarding support");
                     setUpgradeTargetPlan("brand");
                     setShowPremiumModal(true);
-                    toast.warning("Dedicated 1-on-1 onboarding requires the Brand plan. Upgrade to unlock!");
+                    toast.warning("Dedicated onboarding requires Premium Tier. Upgrade to unlock.");
                   }}
                   className="flex items-center gap-1.5 text-xs sm:text-sm text-accent hover:text-accent/80 font-bold transition-colors mt-2 bg-transparent border-0 outline-none cursor-pointer"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -3020,142 +2842,6 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 {isSubmittingOnboarding ? "Sending..." : "Send request"}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {showRoleSimModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-card rounded-3xl max-w-lg w-full p-6 sm:p-8 border border-border shadow-2xl relative">
-            <button 
-              onClick={() => setShowRoleSimModal(false)}
-              className="absolute top-5 right-5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors p-1.5 hover:bg-secondary rounded-full"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center gap-3.5 mb-6 text-left">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600">
-                <Shield className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-light text-foreground leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
-                  {simulatedRoleInfo} View Simulation
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Testing Role-Based Access Controls (RBAC) live in the editor
-                </p>
-              </div>
-            </div>
-
-            {/* Dynamic Role explanation callout */}
-            <div className="mb-5 p-3.5 bg-secondary/80 border border-border/50 rounded-2xl text-left text-[11px] leading-relaxed text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              <p className="font-bold text-foreground mb-1">
-                {simulatedRoleInfo === "Vendor" ? "About the Vendor (Owner) role:" : "Why invite team members under this role?"}
-              </p>
-              {simulatedRoleInfo === "Vendor" && (
-                <p>As the primary Vendor, you are the direct partner of Anovra who registered this organisation. You hold full ownership access and can invite other team members (like Managers or Viewers) to collaborate.</p>
-              )}
-              {simulatedRoleInfo === "Manager" && (
-                <p>Invite managers (like store supervisors or product catalogue leads) to actively curate your brand catalogue and review customer skin scans. Their access excludes changing billing or developer settings.</p>
-              )}
-              {simulatedRoleInfo === "Viewer" && (
-                <p>Invite viewers (like point-of-sale staff or retail consultants) to search matching products and look up skin logs. They are completely locked out of edits or settings.</p>
-              )}
-            </div>
-
-            {/* Sim Permissions breakdown */}
-            <div className="mb-6">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5 font-mono text-left">Capabilities Matrix</p>
-              <div className="border border-border/80 rounded-2xl overflow-hidden bg-muted/20">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-muted/40 border-b border-border/60">
-                      <th className="px-4 py-2 font-semibold text-muted-foreground text-[10px] uppercase font-mono">Permission Scope</th>
-                      <th className="px-4 py-2 font-semibold text-muted-foreground text-[10px] text-right uppercase font-mono">Access Level</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40 font-medium text-foreground">
-                    {simulatedRoleInfo === "Vendor" && (
-                      <>
-                        <tr>
-                          <td className="px-4 py-2.5">Catalogue & Diagnostics</td>
-                          <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">Full Control</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-2.5">Billing & Subscriptions</td>
-                          <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">Full Control</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-2.5">Custom Domains & Webhooks</td>
-                          <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">Full Control</td>
-                        </tr>
-                      </>
-                    )}
-                    {simulatedRoleInfo === "Manager" && (
-                      <>
-                        <tr>
-                          <td className="px-4 py-2.5">Add & Edit Products</td>
-                          <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">Allowed</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-2.5">View Scan Diagnostics</td>
-                          <td className="px-4 py-2.5 text-right text-foreground/80">Read Only</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-2.5">Billing, Domains & Webhooks</td>
-                          <td className="px-4 py-2.5 text-right text-red-600 font-bold">Locked</td>
-                        </tr>
-                      </>
-                    )}
-                    {simulatedRoleInfo === "Viewer" && (
-                      <>
-                        <tr>
-                          <td className="px-4 py-2.5">Browse Catalogue & Products</td>
-                          <td className="px-4 py-2.5 text-right text-foreground/80">Read Only</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-2.5">View Customer Scans</td>
-                          <td className="px-4 py-2.5 text-right text-foreground/80">Read Only</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-2.5">Add Products & Edit Settings</td>
-                          <td className="px-4 py-2.5 text-right text-red-600 font-bold">Locked</td>
-                        </tr>
-                      </>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Login flow graphic representation */}
-            <div className="border-t border-border/60 pt-4 mb-8 text-left">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3.5 font-mono">Team Login Sequence</p>
-              <div className="grid grid-cols-3 gap-2.5 text-center">
-                {[
-                  { label: "1. Invite Code", desc: "Sent via email invitation" },
-                  { label: "2. Team Portal", desc: "Inputs email & unique code" },
-                  { label: "3. Workspace", desc: "Access limited by role" }
-                ].map((s) => (
-                  <div key={s.label} className="p-2.5 bg-muted/40 border border-border/50 rounded-xl flex flex-col justify-between">
-                    <p className="text-[10.5px] font-bold text-foreground leading-snug">{s.label}</p>
-                    <p className="text-[9px] text-muted-foreground leading-normal mt-1">{s.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                setTeamRole(simulatedRoleInfo);
-                setShowRoleSimModal(false);
-                toast.info(`Simulation switched to ${simulatedRoleInfo} mode.`);
-              }}
-              className="w-full py-3.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white font-bold text-xs transition-colors shadow-sm cursor-pointer"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              Continue Simulation
-            </button>
           </div>
         </div>
       )}

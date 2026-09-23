@@ -11,6 +11,8 @@ import { cn } from "./types";
 import { supabase } from "./utils/supabase";
 import { toast } from "sonner";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
+import { BrandTeamSection } from "./BrandTeamSection";
+import { NIGERIA_LOCATIONS } from "./AuthViews";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip";
 import {
   DropdownMenu,
@@ -20,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 
-type BrandTab = "overview" | "branches" | "products" | "activity";
+type BrandTab = "overview" | "branches" | "products" | "team" | "activity";
 type ProductFormState = {
   id: string;
   branchId: string;
@@ -130,6 +132,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
     { id: "overview" as BrandTab, label: "Overview", icon: LayoutDashboard },
     { id: "branches" as BrandTab, label: "Branches", icon: Building2 },
     { id: "products" as BrandTab, label: "Products", icon: Package },
+    { id: "team" as BrandTab, label: "Team", icon: Users },
     { id: "activity" as BrandTab, label: "Activity", icon: Activity },
   ];
 
@@ -817,7 +820,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                   <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <Input label="Branch name *" value={form.branchName} onChange={(value) => setForm((prev) => ({ ...prev, branchName: value }))} placeholder="Tulip Abuja" />
                     <Input label="Branch email *" value={form.branchEmail} onChange={(value) => setForm((prev) => ({ ...prev, branchEmail: value }))} placeholder="abuja@brand.com" />
-                    <Input label="Branch location *" value={form.location} onChange={(value) => setForm((prev) => ({ ...prev, location: value }))} placeholder="Abuja, Nigeria" />
+                    <Input label="Branch location *" value={form.location} onChange={(value) => setForm((prev) => ({ ...prev, location: value }))} placeholder="Start typing a city" list="branch-location-options" />
                     <Input label="Branch phone *" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))} placeholder="+234..." />
                     <Input label="Temporary password" value={form.password} onChange={(value) => setForm((prev) => ({ ...prev, password: value }))} placeholder="Auto-generate if blank" />
                     <div className="rounded-xl bg-muted/40 border border-border p-3 flex items-start gap-3">
@@ -861,7 +864,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                     <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
                       <Input label="Branch name" value={editingBranch.branchName} onChange={(value) => setEditingBranch((prev) => prev ? { ...prev, branchName: value } : prev)} placeholder="Tulip Abuja" />
                       <Input label="Branch email" value={editingBranch.branchEmail} onChange={(value) => setEditingBranch((prev) => prev ? { ...prev, branchEmail: value } : prev)} placeholder="abuja@brand.com" />
-                      <Input label="Location" value={editingBranch.location} onChange={(value) => setEditingBranch((prev) => prev ? { ...prev, location: value } : prev)} placeholder="Abuja, Nigeria" />
+                      <Input label="Location" value={editingBranch.location} onChange={(value) => setEditingBranch((prev) => prev ? { ...prev, location: value } : prev)} placeholder="Start typing a city" list="branch-location-options" />
                       <Input label="Phone" value={editingBranch.phone} onChange={(value) => setEditingBranch((prev) => prev ? { ...prev, phone: value } : prev)} placeholder="+234..." />
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -956,6 +959,8 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                 setTab={setTab}
               />
             )}
+
+            {tab === "team" && <BrandTeamSection branches={enrichedBranches} />}
 
             {tab === "activity" && (
               <section className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -1298,7 +1303,7 @@ function BrandSidebar({
   );
 }
 
-function Input({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
+function Input({ label, value, onChange, placeholder, list }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; list?: string }) {
   return (
     <label className="block">
       <span className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-1 font-mono">{label}</span>
@@ -1306,8 +1311,10 @@ function Input({ label, value, onChange, placeholder }: { label: string; value: 
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        list={list}
         className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-accent"
       />
+      {list && <datalist id={list}>{NIGERIA_LOCATIONS.map((location) => <option key={location} value={location} />)}</datalist>}
     </label>
   );
 }
@@ -1913,6 +1920,7 @@ function BranchDetail({
   if (!branch) {
     return null;
   }
+  const isFlagship = branch.branch_id === brandProfile?.id;
 
   const activityRows = [
     ...(branch.productRows || []).map((product: any) => ({
@@ -2038,13 +2046,13 @@ function BranchDetail({
                 <ChevronDown className="w-3 h-3 text-muted-foreground" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-2xl shadow-lg border border-border bg-card">
-                <DropdownMenuItem
+                {!isFlagship && <DropdownMenuItem
                   onClick={() => onEditBranch(branch)}
                   className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl cursor-pointer hover:bg-muted focus:bg-muted outline-none"
                 >
                   <Edit className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <span>Edit branch details</span>
-                </DropdownMenuItem>
+                </DropdownMenuItem>}
                 <DropdownMenuItem
                   onClick={() => copy(branch.shopUrl, `${branch.id}-detail-shop`)}
                   className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl cursor-pointer hover:bg-muted focus:bg-muted outline-none"
@@ -2065,8 +2073,8 @@ function BranchDetail({
                   </div>
                   {copied === `${branch.id}-detail-scan` && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                 </DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1" />
-                {branch.status !== "inactive" ? (
+                {!isFlagship && <DropdownMenuSeparator className="my-1" />}
+                {!isFlagship && (branch.status !== "inactive" ? (
                   <DropdownMenuItem
                     onClick={() => onStatus(branch.branch_id, "inactive")}
                     disabled={savingBranchId === branch.branch_id}
@@ -2084,7 +2092,7 @@ function BranchDetail({
                     <RefreshCw className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>Restore active branch</span>
                   </DropdownMenuItem>
-                )}
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -2368,13 +2376,13 @@ function BranchDetail({
                       Catalogue updates, customer skin tests, and sales records will build a live chronological timeline here as they happen.
                     </p>
                   </div>
-                  <button
+                  {!isFlagship && <button
                     onClick={() => onEditBranch(branch)}
                     className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-muted text-foreground hover:bg-secondary text-xs font-semibold transition-all"
                   >
                     <Edit className="w-3.5 h-3.5" />
                     <span>Edit branch profile</span>
-                  </button>
+                  </button>}
                 </div>
               )}
             </div>

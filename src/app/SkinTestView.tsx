@@ -23,36 +23,6 @@ const SKIN_AREAS = [
   { name: "Other area", desc: "Any other visible skin area not listed above", photo: "1577746838851-816a43ca8733", guide: "rect", icon: ScanSearch },
 ];
 
-const ANALYSIS_STEPS_LABELS = [
-  "Normalising image exposure and white balance…",
-  "Evaluating skin texture and surface detail…",
-  "Scoring pigmentation and tone evenness…",
-  "Detecting acne severity and blemishes…",
-  "Assessing redness, dryness and oiliness…",
-  "Measuring pore visibility and fine lines…",
-  "Checking skin tone consistency…",
-  "Detecting visible inflammation…",
-  "Generating personalised skin report…",
-  "Searching verified vendor products…",
-  "Ranking recommendations by match score…",
-  "Applying ingredient safety checks…",
-];
-
-const SKIN_REPORT_CONCERNS = [
-  { label: "Hyperpigmentation", severity: 62, level: "Moderate", color: "#F59E0B" },
-  { label: "Acne / Blemishes", severity: 38, level: "Mild", color: "#EAB308" },
-  { label: "T-Zone Oiliness", severity: 70, level: "Elevated", color: "#F59E0B" },
-  { label: "Fine Lines", severity: 22, level: "Low", color: "#22C55E" },
-  { label: "Skin Hydration", severity: 20, level: "Normal", color: "#22C55E" },
-  { label: "Pore Visibility", severity: 45, level: "Mild", color: "#EAB308" },
-  { label: "Redness", severity: 18, level: "Low", color: "#22C55E" },
-  { label: "Barrier Health", severity: 15, level: "Good", color: "#22C55E" },
-  { label: "Visible Texture", severity: 34, level: "Mild", color: "#EAB308" },
-  { label: "Skin Tone Evenness", severity: 55, level: "Moderate", color: "#F59E0B" },
-  { label: "Dryness", severity: 28, level: "Mild", color: "#EAB308" },
-  { label: "Inflammation Signs", severity: 12, level: "Low", color: "#22C55E" },
-];
-
 type SeverityLevel = "Low" | "Mild" | "Moderate" | "Elevated";
 
 type ScanSeverity = {
@@ -129,13 +99,6 @@ const cleanProductDescription = (text: string) =>
     .replace(/<!--ACTIVE_INGREDIENTS:([\s\S]*?)-->/g, "")
     .trim();
 
-const tokenize = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s/+-]/g, " ")
-    .split(/\s+/)
-    .filter((word) => word.length > 2);
-
 const buildWhatsappUrl = (phone: string | null | undefined, productName: string) => {
   if (!phone) return null;
   const digits = phone.replace(/\D/g, "");
@@ -148,14 +111,14 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const [activeScanSlug] = useState(getScanSlugFromUrl);
   const [selectedArea, setSelectedArea] = useState("");
   const [uploadMode, setUploadMode] = useState<"image" | "video" | null>("image");
-  const [progress, setProgress] = useState(0);
   const [expandedCard, setExpandedCard] = useState<number | null>(0);
   const [expandedSection, setExpandedSection] = useState<{ card: number; section: string } | null>(null);
   const [filters, setFilters] = useState({ country: "", state: "", city: "", vendor: "", category: "" });
   const [showFilters, setShowFilters] = useState(false);
   const [vendorProfile, setVendorProfile] = useState<any | null>(null);
   const [matchedProducts, setMatchedProducts] = useState<MatchedProduct[]>([]);
-  const [matchingProducts, setMatchingProducts] = useState(false);
+  const [ingredientFallback, setIngredientFallback] = useState<string[]>([]);
+  const [scanId, setScanId] = useState("");
   const [trialExpired, setTrialExpired] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
@@ -173,7 +136,6 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     setView?.("userdashboard");
   };
 
-  // Gemini scan state
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [scanResult, setScanResult] = useState<{
@@ -190,6 +152,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const qualityTimerRef = useRef<number | null>(null);
+  const analysisStartedRef = useRef(false);
   const vendorDisplayName = vendorProfile?.business_name || vendorProfile?.name || titleFromSlug(activeScanSlug);
   const hasVendorBrand = Boolean(vendorDisplayName);
 
@@ -437,7 +400,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       }
       const fetchVendor = async () => {
         try {
-          let query = supabase.from("profiles").select("id, name, business_name, white_label, plan, phone, created_at, slug, account_type, branch_status, verification_status, parent_brand_id");
+          let query = supabase.from("profiles").select("id, name, business_name, white_label, plan, phone, created_at, slug, account_type, branch_status, is_verified, verification_status, parent_brand_id");
           
           if (!isSystemDomain) {
             query = query.eq("custom_domain", hostname);
@@ -449,21 +412,21 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             
           if (error && error.message.includes("white_label")) {
             // Fallback: Query base columns only if settings columns do not exist
-            let fallbackQuery = supabase.from("profiles").select("id, name, business_name, plan, phone, created_at, slug, account_type, branch_status, verification_status, parent_brand_id");
+            let fallbackQuery = supabase.from("profiles").select("id, name, business_name, plan, phone, created_at, slug, account_type, branch_status, is_verified, verification_status, parent_brand_id");
             if (!isSystemDomain) {
               fallbackQuery = fallbackQuery.eq("custom_domain", hostname);
             } else {
               fallbackQuery = fallbackQuery.or(`slug.eq.${slug},business_name.ilike.${slug.replace(/-/g, " ")}`);
             }
             const { data: baseData } = await fallbackQuery.maybeSingle();
-            if ((baseData?.account_type === "branch" && baseData.branch_status !== "active") || ["suspended", "banned"].includes(baseData?.verification_status || "")) {
+            if (!baseData?.is_verified || (baseData?.verification_status || "pending") !== "approved" || (baseData?.account_type === "branch" && baseData.branch_status !== "active")) {
               setVendorProfile(null);
               setTrialExpired(true);
               return;
             }
             if (baseData?.account_type === "branch" && baseData.parent_brand_id) {
-              const { data: parentBrand } = await supabase.from("profiles").select("verification_status").eq("id", baseData.parent_brand_id).maybeSingle();
-              if (["suspended", "banned"].includes(parentBrand?.verification_status || "")) {
+              const { data: parentBrand } = await supabase.from("profiles").select("is_verified, verification_status").eq("id", baseData.parent_brand_id).maybeSingle();
+              if (!parentBrand?.is_verified || (parentBrand?.verification_status || "pending") !== "approved") {
                 setVendorProfile(null);
                 setTrialExpired(true);
                 return;
@@ -476,19 +439,19 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               });
               const joinedYear = baseData.created_at ? new Date(baseData.created_at) : new Date();
               const daysDiff = (Date.now() - joinedYear.getTime()) / (1000 * 60 * 60 * 24);
-              if ((baseData.plan || "free") === "free" && daysDiff > 14) {
+              if ((baseData.plan || "free") === "free" && daysDiff > 7) {
                 setTrialExpired(true);
               }
             }
           } else if (data) {
-            if ((data.account_type === "branch" && data.branch_status !== "active") || ["suspended", "banned"].includes(data.verification_status || "")) {
+            if (!data.is_verified || (data.verification_status || "pending") !== "approved" || (data.account_type === "branch" && data.branch_status !== "active")) {
               setVendorProfile(null);
               setTrialExpired(true);
               return;
             }
             if (data.account_type === "branch" && data.parent_brand_id) {
-              const { data: parentBrand } = await supabase.from("profiles").select("verification_status").eq("id", data.parent_brand_id).maybeSingle();
-              if (["suspended", "banned"].includes(parentBrand?.verification_status || "")) {
+              const { data: parentBrand } = await supabase.from("profiles").select("is_verified, verification_status").eq("id", data.parent_brand_id).maybeSingle();
+              if (!parentBrand?.is_verified || (parentBrand?.verification_status || "pending") !== "approved") {
                 setVendorProfile(null);
                 setTrialExpired(true);
                 return;
@@ -497,7 +460,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             setVendorProfile(data);
             const joinedYear = data.created_at ? new Date(data.created_at) : new Date();
             const daysDiff = (Date.now() - joinedYear.getTime()) / (1000 * 60 * 60 * 24);
-            if ((data.plan || "free") === "free" && daysDiff > 14) {
+            if ((data.plan || "free") === "free" && daysDiff > 7) {
               setTrialExpired(true);
             }
           }
@@ -509,185 +472,69 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     }
   }, [activeScanSlug]);
 
-  const healthScore = scanResult ? scanResult.score : 68;
-  const scanId = scanResult
-    ? `T-${Math.abs(`${scanResult.concern}-${scanResult.score}-${selectedArea}`.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)).toString().padStart(4, "0").slice(-4)}`
-    : "Pending";
-  const visibleSeverity = scanResult?.severity?.length
-    ? scanResult.severity
-    : SKIN_REPORT_CONCERNS.map((c) => ({
-      label: c.label,
-      level: (scanResult && c.label.toLowerCase().includes(scanResult.concern.toLowerCase().split(" ")[0])
-        ? "Moderate"
-        : "Low") as SeverityLevel,
-      score: scanResult && c.label.toLowerCase().includes(scanResult.concern.toLowerCase().split(" ")[0])
-        ? Math.max(50, scanResult.score)
-        : 15,
-    }));
+  const healthScore = scanResult?.score ?? 0;
+  const visibleSeverity = scanResult?.severity || [];
 
   useEffect(() => {
-    if (!scanResult || !vendorProfile?.id) {
-      setMatchedProducts([]);
-      return;
-    }
-
-    const fetchMatchedProducts = async () => {
-      setMatchingProducts(true);
-      try {
-        const { data, error } = await supabase
-          .from("products")
-          .select("*")
-          .eq("vendor_id", vendorProfile.id)
-          .eq("nafdac_status", "approved");
-
-        if (error) throw error;
-
-        const queryText = [
-          scanResult.concern,
-          scanResult.result,
-          ...(scanResult.benefits || []),
-          ...(scanResult.severity || []).filter((item) => item.score >= 30).map((item) => item.label),
-        ].join(" ");
-        const queryTokens = new Set(tokenize(queryText));
-        const vendorName = vendorProfile.business_name || vendorProfile.name || "Vendor";
-
-        const formatted = (data || []).map((product) => {
-          const descriptionText = product.description || "";
-          const images = parseJsonMeta<string[]>(descriptionText, "IMAGES", []);
-          const benefitsText = parseJsonMeta<string>(descriptionText, "BENEFITS", "");
-          const usageInstructions = parseJsonMeta<string>(descriptionText, "USAGE", "");
-          const precautions = parseJsonMeta<string>(descriptionText, "PRECAUTIONS", "");
-          const skinTypes = parseJsonMeta<string[]>(descriptionText, "SKINTYPES", []);
-          const keyIngredients = parseJsonMeta<string[]>(descriptionText, "KEY_INGREDIENTS", []);
-          const activeIngredients = parseJsonMeta<string[]>(descriptionText, "ACTIVE_INGREDIENTS", []);
-          const ingredients = [...keyIngredients, ...activeIngredients];
-          const cleanDescription = cleanProductDescription(descriptionText);
-          const benefits = benefitsText
-            .split("\n")
-            .map((benefit) => benefit.replace(/^[•\-\*]\s*/, "").trim())
-            .filter(Boolean);
-          const searchable = [
-            product.name,
-            product.brand,
-            product.category,
-            cleanDescription,
-            benefitsText,
-            usageInstructions,
-            precautions,
-            skinTypes.join(" "),
-            ingredients.join(" "),
-          ].join(" ");
-          const productTokens = new Set(tokenize(searchable));
-          const overlap = [...queryTokens].filter((token) => productTokens.has(token));
-          const severityBoost = (scanResult.severity || []).reduce((sum, item) => {
-            return productTokens.has(item.label.toLowerCase().split(" ")[0]) ? sum + Math.min(18, Math.round(item.score / 5)) : sum;
-          }, 0);
-          const categoryBoost = product.category && queryText.toLowerCase().includes(String(product.category).toLowerCase()) ? 12 : 0;
-          const score = Math.max(45, Math.min(98, 58 + overlap.length * 5 + severityBoost + categoryBoost));
-          const matchReasons = overlap.slice(0, 3).map((token) => `Matches ${token} signals from your scan`);
-
-          return {
-            id: product.id,
-            rank: 0,
-            score,
-            name: product.name,
-            brand: product.brand || vendorName,
-            price: `₦${Number(product.price || 0).toLocaleString()}`,
-            priceVal: Number(product.price || 0),
-            photo: product.image_url || images[0] || "",
-            images,
-            category: product.category || "Skincare",
-            description: cleanDescription,
-            benefits,
-            usageInstructions,
-            precautions,
-            skinTypes,
-            ingredients,
-            matchReasons,
-            vendorName,
-            whatsappUrl: buildWhatsappUrl(vendorProfile.phone, product.name),
-          };
-        })
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 6)
-          .map((product, index) => ({ ...product, rank: index + 1 }));
-
-        setMatchedProducts(formatted);
-      } catch (err) {
-        console.error("Failed to match live catalogue products:", err);
-        setMatchedProducts([]);
-      } finally {
-        setMatchingProducts(false);
-      }
-    };
-
-    fetchMatchedProducts();
-  }, [scanResult, vendorProfile]);
-
-  useEffect(() => {
-    if (step !== 3) return;
+    if (step !== 3 || analysisStartedRef.current) return;
+    analysisStartedRef.current = true;
     
-    setProgress(0);
     setAnalyzingError(null);
     setScanResult(null);
 
-    // 1. Animate progress bar to simulate processing visually
-    let progressVal = 0;
-    const interval = setInterval(() => {
-      progressVal = Math.min(92, progressVal + 2.5);
-      setProgress(progressVal);
-    }, 110);
-
-    // 2. Invoke real Gemini Multimodal analysis Edge Function
     const runAnalysis = async () => {
       try {
-        let finalImageUrl = "";
-        
-        // Upload photo to Supabase Storage skin-scans bucket
-        if (selectedFile) {
-          const fileExt = selectedFile.name.split('.').pop() || 'jpg';
-          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-          const filePath = `${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from("skin-scans")
-            .upload(filePath, selectedFile, {
-              cacheControl: '3600',
-              upsert: true
-            });
-
-          if (!uploadError) {
-            const { data: { publicUrl } } = supabase.storage
-              .from("skin-scans")
-              .getPublicUrl(filePath);
-            finalImageUrl = publicUrl;
-          } else {
-            console.warn("Storage upload failed, falling back to base64 payload:", uploadError.message);
-          }
-        }
-
-        const payload: { imageUrl?: string; imageBase64?: string; mimeType: string; skinArea: string } = {
-          mimeType: selectedFile?.type || "image/jpeg",
-          skinArea: selectedArea || "Face"
-        };
-
-        if (finalImageUrl) {
-          payload.imageUrl = finalImageUrl;
-        } else if (imageBase64) {
-          payload.imageBase64 = imageBase64;
-        } else {
-          throw new Error("No image data available for analysis.");
-        }
-
+        if (!imageBase64) throw new Error("Choose a photo before starting your skin test.");
         const { data: resultData, error: invokeError } = await supabase.functions.invoke("analyse-skin", {
-          body: payload
+          body: { imageBase64, skinArea: selectedArea, vendorId: vendorProfile?.id || null }
         });
-        if (invokeError) throw invokeError;
-        if (!resultData || !resultData.concern) throw new Error("Could not extract diagnostic skin report.");
+        if (invokeError) {
+          const response = (invokeError as any).context as Response | undefined;
+          const detail = await response?.clone().json().catch(() => null);
+          throw new Error(detail?.error || invokeError.message);
+        }
+        if (resultData?.accepted === false) {
+          const reasons = (resultData.rejectReasons || []).map((item: { message?: string; guidance?: string }) =>
+            [item.message, item.guidance].filter(Boolean).join(" "));
+          throw new Error(reasons.join(" ") || "This photo cannot be analysed. Please retake it in clear, even light.");
+        }
+        if (!resultData?.accepted || !resultData.concern) throw new Error("The scanner returned an incomplete report. Please try again.");
 
-        clearInterval(interval);
-        setProgress(100);
         setScanResult(resultData);
+        setIngredientFallback(resultData.ingredientFallback || []);
+        const { data: approvedProducts } = vendorProfile?.id
+          ? await supabase.from("products").select("*").eq("vendor_id", vendorProfile.id).eq("nafdac_status", "approved")
+          : { data: [] };
+        const productById = new Map((approvedProducts || []).map((product) => [product.id, product]));
+        setMatchedProducts((resultData.products || []).map((match: any, index: number) => {
+          const product = productById.get(match.id);
+          const description = String(product?.description || "");
+          const images = parseJsonMeta<string[]>(description, "IMAGES", []);
+          return {
+            id: match.id,
+            rank: Number(match.rank || index + 1),
+            score: Number(match.score || 0),
+            name: match.name,
+            brand: match.brand || product?.brand || vendorDisplayName || "",
+            price: `₦${Number(match.price ?? product?.price ?? 0).toLocaleString()}`,
+            priceVal: Number(match.price ?? product?.price ?? 0),
+            photo: match.image_url || product?.image_url || images[0] || "",
+            images,
+            category: product?.category || "Skincare",
+            description: cleanProductDescription(description),
+            benefits: match.benefits || [],
+            usageInstructions: match.how_to_use || "",
+            precautions: (match.warnings || []).join(" "),
+            skinTypes: parseJsonMeta<string[]>(description, "SKINTYPES", []),
+            ingredients: [
+              ...parseJsonMeta<string[]>(description, "KEY_INGREDIENTS", []),
+              ...parseJsonMeta<string[]>(description, "ACTIVE_INGREDIENTS", []),
+            ],
+            matchReasons: match.why ? [match.why] : [],
+            vendorName: vendorDisplayName || "",
+            whatsappUrl: match.purchase_url || buildWhatsappUrl(vendorProfile?.phone, match.name),
+          };
+        }));
 
         // Record referral scan completed event if ref exists
         const storedRef = sessionStorage.getItem("referral_code");
@@ -696,7 +543,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             await supabase.functions.invoke("track-referral-event", { body: {
               referral_code: storedRef,
               event_type: "scan_completed",
-              city: "Nigeria",
+              city: filters.city || "",
               metadata: { device: navigator.userAgent },
             } });
           } catch (e) {
@@ -709,15 +556,18 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
         if (user) {
           try {
             const vendorId = vendorProfile?.id || null;
-            const { data: scanRow } = await supabase.from("scans").insert([{
+            const { data: scanRow, error: scanError } = await supabase.from("scans").insert([{
               customer_id: user.id,
               vendor_id: vendorId,
               concern: resultData.concern,
               result: resultData.result,
-              city: filters.city || "Lagos",
+              city: filters.city || "Unknown",
               score: resultData.score,
               severity: resultData.severity || [],
               benefits: resultData.benefits || [],
+              matched_products: resultData.products || [],
+              ingredient_fallback: resultData.ingredientFallback || [],
+              treatment_plan: resultData.treatmentPlan || [],
               skin_area: selectedArea || "Face",
               image_quality: {
                 brightness: captureQuality.brightness,
@@ -725,12 +575,14 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 guided_capture: Boolean(selectedFile?.name?.startsWith("skin-scan-")),
               }
             }]).select().maybeSingle();
+            if (scanError) throw scanError;
+            if (scanRow?.id) setScanId(scanRow.id.slice(0, 8).toUpperCase());
             await dispatchVendorWebhook(vendorId, "scan.completed", {
               scan_id: scanRow?.id,
               concern: resultData.concern,
               result: resultData.result,
               skin_area: selectedArea || "Face",
-              city: filters.city || "Lagos",
+              city: filters.city || "Unknown",
             });
             if (user.email) {
               await sendEmailNotification("customer_scan_completed", {
@@ -744,31 +596,16 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           }
         }
 
-        setTimeout(() => setStep(4), 800);
+        setStep(4);
       } catch (err: any) {
         console.error("AI analysis failed:", err);
-        clearInterval(interval);
-        
-        let friendlyMsg = "We encountered a temporary connection issue. Please check your internet connection and try again.";
-        const msg = String(err.message || "");
-        if (msg.includes("Failed to send a request") || msg.includes("fetch") || msg.includes("net::ERR")) {
-          friendlyMsg = "Unable to connect to the skin scanner engine. Please check your internet connection and try again.";
-        } else if (msg.includes("400") || msg.includes("Bad Request") || msg.includes("Payload Too Large")) {
-          friendlyMsg = "The photo uploaded is too large or has an unsupported format. Please try a smaller file (under 5MB) in PNG/JPEG format.";
-        }
-        setAnalyzingError(friendlyMsg);
+        setAnalyzingError(err.message || "The scanner is temporarily unavailable. Please try again.");
       }
     };
 
     runAnalysis();
 
-    return () => clearInterval(interval);
   }, [step, selectedFile, imageBase64, vendorProfile, filters.city]);
-
-  const currentAnalysisStep = Math.min(
-    Math.floor((progress / 100) * ANALYSIS_STEPS_LABELS.length),
-    ANALYSIS_STEPS_LABELS.length - 1
-  );
 
   function toggleSection(cardRank: number, section: string) {
     if (expandedSection?.card === cardRank && expandedSection?.section === section) {
@@ -779,6 +616,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   }
 
   function resetFlow() {
+    analysisStartedRef.current = false;
     setStep(1);
     setSelectedArea("");
     setUploadMode(null);
@@ -809,7 +647,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           Skin test unavailable
         </h2>
         <p className="text-sm text-muted-foreground max-w-sm mb-6 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          This partner's 14-day trial access has ended, so their customer skin test link is temporarily unavailable.
+          This partner link is not available yet. The account must be verified by Anovra and have active trial or plan access before customers can use the skin test.
         </p>
         {setView && (
           <button
@@ -1137,7 +975,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               </p>
               <div className="flex flex-col gap-2">
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => { analysisStartedRef.current = false; setStep(2); }}
                   className="w-full bg-[#008236] hover:bg-[#006c2c] text-white font-bold py-3 rounded-xl transition-all text-xs cursor-pointer"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
@@ -1145,7 +983,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 </button>
                 <button
                   onClick={() => {
-                    // Force a restart of the analysis
+                    analysisStartedRef.current = false;
                     setStep(1);
                     setTimeout(() => {
                       setStep(3);
@@ -1162,16 +1000,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             <>
               <div className="w-28 h-28 rounded-full bg-[#008236]/10 flex items-center justify-center mx-auto mb-8 relative">
                 <Activity className="w-12 h-12 text-[#008236] animate-pulse" />
-                <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 112 112">
-                  <circle cx="56" cy="56" r="52" fill="none" stroke="rgba(200,107,58,0.15)" strokeWidth="4" />
-                  <circle
-                    cx="56" cy="56" r="52" fill="none" stroke="#008236" strokeWidth="4"
-                    strokeDasharray={`${2 * Math.PI * 52}`}
-                    strokeDashoffset={`${2 * Math.PI * 52 * (1 - progress / 100)}`}
-                    strokeLinecap="round"
-                    style={{ transition: "stroke-dashoffset 0.08s linear" }}
-                  />
-                </svg>
+                <div className="absolute inset-0 rounded-full border-4 border-[#008236]/15 border-t-[#008236] animate-spin" />
               </div>
 
               <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>AI scan active</p>
@@ -1181,33 +1010,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
               <div className="min-h-[2rem] mb-6">
                 <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {ANALYSIS_STEPS_LABELS[currentAnalysisStep]}
+                  Checking photo quality and preparing your personalised report. This can take about a minute.
                 </p>
               </div>
-
-              {/* Characteristics being evaluated */}
-              <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto mb-8">
-                {["Texture", "Pigmentation", "Acne", "Pores", "Wrinkles", "Fine Lines", "Redness", "Dryness", "Oiliness", "Tone", "Inflammation", "Blemishes"].map((attr, idx) => {
-                  const evaluated = idx < Math.floor((progress / 100) * 12);
-                  return (
-                    <div
-                      key={attr}
-                      className={cn(
-                        "text-xs py-1.5 px-2 rounded-full border transition-all duration-300",
-                        evaluated ? "border-[#008236]/40 bg-[#008236]/10 text-[#008236] font-medium" : "border-border bg-secondary text-muted-foreground"
-                      )}
-                      style={{ fontFamily: "'DM Mono', monospace" }}
-                    >
-                      {evaluated && <span className="mr-1">✓</span>}{attr}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="w-full bg-muted rounded-full h-1.5 max-w-xs mx-auto">
-                <div className="bg-[#008236] h-1.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
-              </div>
-              <p className="text-xs text-muted-foreground mt-2" style={{ fontFamily: "'DM Mono', monospace" }}>{Math.round(progress)}%</p>
 
               <p className="text-xs text-muted-foreground mt-8 max-w-xs mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 Results are AI-powered personalised recommendations — not a medical diagnosis.
@@ -1226,7 +1031,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="bg-gradient-to-br from-[#008236] to-[#005a25] text-white rounded-3xl p-6 sm:p-8 mb-6 shadow-xl border border-[#008236]/20">
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <p className="text-xs text-white/60 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>ANALYSIS COMPLETE · Scan ID {scanId}</p>
+                <p className="text-xs text-white/60 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>ANALYSIS COMPLETE{scanId ? ` · Scan ID ${scanId}` : ""}</p>
                 <h2 className="text-3xl font-light mb-1" style={{ fontFamily: "'Fraunces', serif" }}>Your skin report</h2>
                 <p className="text-sm text-white/80" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   Area: <span className="text-white font-bold">{selectedArea}</span>
@@ -1253,8 +1058,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             {/* Skin type + condition */}
             <div className="flex flex-wrap gap-3 mb-6">
               {[
-                { label: "Skin Type", value: scanResult ? scanResult.result : "Combination (oily T-zone, dry cheeks)" },
-                { label: "Skin Condition", value: scanResult ? scanResult.concern : "Mild inflammatory, post-acne pigmentation" },
+                { label: "Skin Type", value: scanResult?.result || "Not determined" },
+                { label: "Skin Condition", value: scanResult?.concern || "No concerns detected" },
               ].map((item) => (
                 <div key={item.label} className="bg-white/10 border border-white/10 rounded-2xl px-4 py-3 flex-1 min-w-[200px]">
                   <p className="text-[10px] text-white/50 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>{item.label.toUpperCase()}</p>
@@ -1266,6 +1071,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             {/* Concerns with severity bars */}
             <div>
               <p className="text-xs text-white/60 mb-3.5 uppercase tracking-wider font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Detected skin concerns & severity</p>
+              {visibleSeverity.length === 0 && <p className="text-sm text-white/80">No visible concerns detected in this photo.</p>}
               <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3.5">
                 {visibleSeverity.map((c) => {
                   const level = c.level;
@@ -1295,9 +1101,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   Personalised recommendations ready
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {scanResult 
-                    ? `Based on your scan, Anovra's engine has identified products targeting ${scanResult.concern.toLowerCase()} (${scanResult.result}). Target benefits: ${scanResult.benefits.join(', ')}.`
-                    : "Based on your scan, Anovra's engine has identified products targeting hyperpigmentation, T-zone oil control, and barrier repair. 3 products from verified vendors matched your skin profile."}
+                  {matchedProducts.length
+                    ? `${matchedProducts.length} approved ${matchedProducts.length === 1 ? "product" : "products"} matched to your report. ${scanResult?.benefits.join(" ")}`
+                    : `Your report is ready. ${scanResult?.benefits.join(" ") || "Review your report for the next steps."}`}
                 </p>
               </div>
             </div>
@@ -1395,28 +1201,19 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
           {/* Product recommendation cards */}
           <div className="space-y-4.5 mb-6">
-            {matchingProducts && (
-              <div className="bg-card border border-border rounded-2xl p-6 text-center">
-                <div className="w-10 h-10 rounded-full border-4 border-[#008236]/20 border-t-[#008236] animate-spin mx-auto mb-3" />
-                <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Matching products from {vendorDisplayName || "this vendor"}...
-                </p>
-              </div>
-            )}
-
-            {!matchingProducts && filteredMatchedProducts.length === 0 && (
+            {filteredMatchedProducts.length === 0 && (
               <div className="bg-card border border-border rounded-2xl p-8 text-center">
                 <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                 <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   No live catalogue matches yet
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  This vendor does not have approved products matching your scan in the live catalogue yet.
+                  {ingredientFallback.length ? ingredientFallback.join(" ") : "This storefront has no approved products matching your report yet."}
                 </p>
               </div>
             )}
 
-            {!matchingProducts && filteredMatchedProducts.map((rec, i) => (
+            {filteredMatchedProducts.map((rec, i) => (
               <div key={rec.id} className="bg-card border-2 border-border rounded-2xl overflow-hidden hover:shadow-md transition-all duration-300">
                 {/* Card header */}
                 <button

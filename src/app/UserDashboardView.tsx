@@ -54,34 +54,6 @@ function aiGuideGreeting(name?: string) {
   return `${intro} I'm Anovra Care Guide. I can explain your latest skin test report, define skin terms, review ingredient safety notes, compare your product matches, and help turn your results into a simple AM/PM routine. Ask me about a concern, ingredient, product match, or routine step.`;
 }
 
-function buildRoutineFromProducts(products: any[], latestConcern: string) {
-  const cleanConcern = latestConcern.toLowerCase();
-  const relevantProducts = products
-    .filter((product) => {
-      const searchable = [product.name, product.brand, product.category, product.description].join(" ").toLowerCase();
-      return cleanConcern && searchable.includes(cleanConcern.split(/\s+/)[0]);
-    })
-    .concat(products)
-    .filter(Boolean);
-
-  const uniqueProducts = Array.from(new Map(relevantProducts.map((product) => [product.id || product.name, product])).values()).slice(0, 6);
-  if (uniqueProducts.length === 0) return [];
-
-  const labels = [
-    { step: "AM 1", label: "Cleanse", tip: "Start with clean, dry skin before applying active products." },
-    { step: "AM 2", label: "Treat", tip: "Apply a thin layer and avoid combining too many actives at once." },
-    { step: "AM 3", label: "Protect", tip: "Use sunscreen during the day, especially when treating pigmentation or texture." },
-    { step: "PM 1", label: "Cleanse", tip: "Remove sunscreen, oil and daily build-up before night care." },
-    { step: "PM 2", label: "Repair", tip: "Give active ingredients time to work while protecting the skin barrier." },
-    { step: "PM 3", label: "Moisturise", tip: "Seal in hydration and pause if irritation appears." },
-  ];
-
-  return uniqueProducts.map((product, index) => ({
-    ...labels[index],
-    product: product.name,
-  }));
-}
-
 function FormattedChatText({ text }: { text: string }) {
   const normalised = text
     .replace(/\*\*/g, "")
@@ -143,7 +115,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [loading, setLoading] = useState(true);
   const [trialExpired, setTrialExpired] = useState(false);
   const [trialEndsAt, setTrialEndsAt] = useState<Date | null>(null);
-  const [trialMsRemaining, setTrialMsRemaining] = useState(14 * 24 * 60 * 60 * 1000);
+  const [trialMsRemaining, setTrialMsRemaining] = useState(7 * 24 * 60 * 60 * 1000);
   const [showTrialExpiredNotice, setShowTrialExpiredNotice] = useState(true);
 
   useEffect(() => {
@@ -177,14 +149,14 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           .eq("id", user.id)
           .maybeSingle();
 
-        // Enforce 14-day trial check
+        // Enforce 7-day trial check
         const createdDate = profile?.created_at ? new Date(profile.created_at) : (user.created_at ? new Date(user.created_at) : new Date());
-        const endsAt = new Date(createdDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+        const endsAt = new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
         setTrialEndsAt(endsAt);
         setTrialMsRemaining(Math.max(0, endsAt.getTime() - Date.now()));
         const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
         const rawPlan = profile?.plan || "free";
-        if (rawPlan === "free" && daysDiff > 14) {
+        if (rawPlan === "free" && daysDiff > 7) {
           setTrialExpired(true);
         }
 
@@ -224,7 +196,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               concerns: [s.concern],
               skinType: s.result || "Normal",
               score: s.score !== null && s.score !== undefined && !Number.isNaN(Number(s.score)) ? Math.round(Number(s.score)) : null,
-              products: 0,
+              products: Array.isArray(s.matched_products) ? s.matched_products.length : 0,
               severity: Array.isArray(s.severity) ? s.severity : [],
               benefits: Array.isArray(s.benefits) ? s.benefits : [],
               area: s.skin_area || "Skin",
@@ -234,34 +206,27 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           });
           setAnalysesList(formatted);
 
-          const latestConcern = scans[0].concern;
-          const cleanConcern = latestConcern.toLowerCase();
-
-          // Query approved products to match
-          const { data: dbProducts } = await supabase
-            .from("products")
-            .select("*")
-            .eq("nafdac_status", "approved");
-
-          if (dbProducts && dbProducts.length > 0) {
-            setRoutineList(buildRoutineFromProducts(dbProducts, latestConcern));
-            const matches = dbProducts.map((p) => {
-              const isMatch = p.category?.toLowerCase().includes(cleanConcern) || 
-                              p.description?.toLowerCase().includes(cleanConcern) ||
-                              cleanConcern.includes(p.category?.toLowerCase() || "");
-              return {
-                name: p.name,
-                brand: p.brand || "Own Brand",
-                concern: p.category || "General Skincare",
-                match: isMatch ? "98%" : "85%",
-                price: `₦${Number(p.price).toLocaleString()}`,
-                badge: isMatch ? "Top pick" : "",
-              };
-            });
-            setMatchedProducts(matches);
-          } else {
-            setRoutineList([]);
-          }
+          const savedMatches = Array.isArray(scans[0].matched_products) ? scans[0].matched_products : [];
+          setMatchedProducts(savedMatches.map((match: any, index: number) => ({
+            name: match.name,
+            brand: match.brand || "Partner product",
+            concern: Array.isArray(match.matched_conditions) ? match.matched_conditions.join(", ") : scans[0].concern,
+            match: `${Math.round(Number(match.score || 0))}%`,
+            price: `₦${Number(match.price || 0).toLocaleString()}`,
+            badge: index === 0 ? "Top match" : "",
+          })));
+          const savedTreatments = Array.isArray(scans[0].treatment_plan) ? scans[0].treatment_plan : [];
+          setRoutineList(savedTreatments.flatMap((item: any) => {
+            const frequency = String(item.frequency || "").toLowerCase();
+            const periods = frequency.includes("am") && frequency.includes("pm") ? ["AM", "PM"]
+              : frequency.includes("pm") || frequency.includes("night") ? ["PM"] : ["AM"];
+            return periods.map((period) => ({
+              step: `${period} ${item.condition || item.name}`,
+              label: item.name,
+              product: item.what_to_do,
+              tip: item.why,
+            }));
+          }));
         }
 
         try {
@@ -1484,7 +1449,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   <span className="inline-flex text-[10px] uppercase tracking-wider font-bold text-[#008236] bg-[#008236]/10 border border-[#008236]/20 px-2.5 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>
                     Current plan
                   </span>
-                  <h3 className="text-2xl font-light text-foreground mt-3" style={{ fontFamily: "'Fraunces', serif" }}>14-day free trial</h3>
+                  <h3 className="text-2xl font-light text-foreground mt-3" style={{ fontFamily: "'Fraunces', serif" }}>7-day free trial</h3>
                   <p className="text-sm text-muted-foreground mt-1 max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     Full customer dashboard access is active during your trial. When it ends, advanced tools require a paid plan.
                   </p>

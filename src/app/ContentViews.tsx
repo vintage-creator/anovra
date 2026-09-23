@@ -485,7 +485,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "support",
       q: "Which plan is best for me?",
-      a: "For users: Glow Pass is ideal for occasional skin check-ups. Glow Pass+ is perfect for users actively building a skincare routine and tracking progress. Premium Glow is designed for users who want expert guidance, family profiles, and premium benefits. For businesses: Basic is best for small skincare shops. Vendor Pro includes a 14-day free trial, allowing businesses to experience Anovra's advanced features before subscribing. Brand is built for established brands, clinics, and enterprises that require custom integrations and advanced team management."
+      a: "For users: Glow Pass is ideal for occasional skin check-ups. Glow Pass+ suits users building a skincare routine and tracking progress. Premium Glow offers deeper guidance, family profiles, and partner benefits. For businesses: Basic suits small skincare shops. Vendor Pro adds unlimited tests, a larger catalogue, and analytics. Premium Tier adds API access, a custom domain, and onboarding. Every new account starts with a 7-day trial."
     },
     {
       cat: "support",

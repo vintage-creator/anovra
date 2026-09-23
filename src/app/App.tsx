@@ -23,7 +23,7 @@ import { ShopView } from "./ShopView";
 import { DashboardView } from "./DashboardView";
 import { CatalogView } from "./CatalogView";
 import { SkinTestView } from "./SkinTestView";
-import { SignUpView, CustomerSignUpView, SignInView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
+import { SignUpView, CustomerSignUpView, SignInView, EmailVerificationPendingView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
 import { TeamLoginView, TeamDashboardView } from "./TeamViews";
 import { supabase } from "./utils/supabase";
 import { AboutView, ContactView } from "./ContentViews";
@@ -113,21 +113,21 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => setView("signin")}
+                  onClick={() => setView("customerlogin")}
                   className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700 focus:bg-emerald-500/10 focus:text-emerald-700 data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-700 outline-none"
                 >
                   <User className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="text-sm font-medium">Sign in as a User</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => setView("signin")}
+                  onClick={() => setView("vendorlogin")}
                   className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700 focus:bg-emerald-500/10 focus:text-emerald-700 data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-700 outline-none"
                 >
                   <Store className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="text-sm font-medium">Sign in as a Vendor</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => setView("signin")}
+                  onClick={() => setView("brandlogin")}
                   className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700 focus:bg-emerald-500/10 focus:text-emerald-700 data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-700 outline-none"
                 >
                   <Users className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -149,13 +149,12 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
             {/* Join as Vendor Button (Green with White Text) */}
             <button
               onClick={() => {
-                sessionStorage.setItem("signup_account_kind", "vendor");
                 setView("signup");
               }}
               className="text-sm px-4 py-2 rounded-lg bg-[#008236] hover:bg-[#006c2c] text-white font-bold shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              <span>Join as Vendor / Brand</span>
+              <span>Join as Vendor</span>
               <ArrowRight className="w-3.5 h-3.5 text-white" />
             </button>
           </div>
@@ -226,21 +225,21 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                     Account Sign In
                   </p>
                   <button
-                    onClick={() => handleNavClick("signin")}
+                    onClick={() => handleNavClick("customerlogin")}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary text-left"
                   >
                     <User className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Sign in as a User</span>
                   </button>
                   <button
-                    onClick={() => handleNavClick("signin")}
+                    onClick={() => handleNavClick("vendorlogin")}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary text-left"
                   >
                     <Store className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Sign in as a Vendor</span>
                   </button>
                   <button
-                    onClick={() => handleNavClick("signin")}
+                    onClick={() => handleNavClick("brandlogin")}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary text-left"
                   >
                     <Users className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -259,12 +258,11 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                   </button>
                   <button
                     onClick={() => {
-                      sessionStorage.setItem("signup_account_kind", "vendor");
                       handleNavClick("signup");
                     }}
                     className="w-full py-3 rounded-xl bg-[#008236] text-white font-bold hover:bg-[#006c2c] transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>Join as Vendor / Brand</span>
+                    <span>Join as Vendor</span>
                     <ArrowRight className="w-4 h-4 text-white" />
                   </button>
                 </div>
@@ -363,7 +361,7 @@ export default function App() {
     }
     const validViews: View[] = [
       "landing", "dashboard", "catalog", "skintest", "admin",
-      "adminlogin", "shop", "brand", "signin", "signup", "customersignup", "forgotpassword",
+      "adminlogin", "shop", "brand", "signin", "vendorlogin", "brandlogin", "customerlogin", "signup", "brandsignup", "customersignup", "verifyemail", "forgotpassword",
       "resetpassword", "teamlogin", "teamdashboard", "branddashboard", "about", "contact",
       "userdashboard"
     ];
@@ -439,10 +437,23 @@ export default function App() {
 
     // Parse email verification redirect params
     const handleEmailConfirmation = async () => {
-      const urlStr = window.location.href;
-      if (urlStr.includes("type=signup") || urlStr.includes("code=")) {
-        // Wait briefly for Supabase client to process authentication tokens
-        await new Promise((r) => setTimeout(r, 600));
+      const callbackUrl = new URL(window.location.href);
+      const code = callbackUrl.searchParams.get("code");
+      const fragment = new URLSearchParams(callbackUrl.hash.replace(/^#/, ""));
+      const isSignup = callbackUrl.searchParams.get("type") === "signup" || fragment.get("type") === "signup";
+      if (isSignup || code || callbackUrl.pathname === "/auth/callback") {
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+              toast.error("This verification link has expired or has already been used. Please sign in or request a new link.");
+              setView("verifyemail");
+              return;
+            }
+          }
+        }
+        if (!code) await new Promise((resolve) => setTimeout(resolve, 600));
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           sessionStorage.setItem("show_welcome", "true");
@@ -466,17 +477,20 @@ export default function App() {
             setView("dashboard");
           } else if (teamMemberRole === "Manager" || teamMemberRole === "Viewer") {
             setView("dashboard");
-          } else if (teamMemberRole === "Representative" || teamMemberRole === "Representative") {
+          } else if (teamMemberRole === "Representative") {
             setView("teamdashboard");
           } else {
             setView("userdashboard");
           }
           // Clean the URL by stripping signup query parameters
           window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+        } else {
+          toast.error("We could not verify this link. Please request a new confirmation email or sign in if you have already verified.");
+          setView("verifyemail");
         }
       }
     };
-    handleEmailConfirmation();
+    void handleEmailConfirmation();
 
     // Capture referral query parameter from URL
     const captureReferral = async () => {
@@ -526,6 +540,8 @@ export default function App() {
 
       setIsValidatingRoute(true);
       try {
+        const isPublicVendorScan = view === "skintest" && window.location.hash.startsWith("#/scan/");
+        if (isPublicVendorScan) return;
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           if (view === "skintest" || view === "userdashboard") {
@@ -574,8 +590,9 @@ export default function App() {
           const accountState = accessProfile?.verification_status === "banned" ? "banned" : "suspended";
           await supabase.auth.signOut();
           toast.error(`This account has been ${accountState}. Check your email for the decision details or contact Anovra support.`);
-          setViewState("signin");
-          window.location.hash = "#/signin";
+          const loginView = role === "brand" ? "brandlogin" : role === "vendor" || role === "vendor_staff" ? "vendorlogin" : "customerlogin";
+          setViewState(loginView);
+          window.location.hash = `#/${loginView}`;
           return;
         }
 
@@ -588,8 +605,8 @@ export default function App() {
           if (["suspended", "banned"].includes(parentBrand?.verification_status || "")) {
             await supabase.auth.signOut();
             toast.error("This branch is unavailable while its Brand HQ account is under review.");
-            setViewState("signin");
-            window.location.hash = "#/signin";
+            setViewState("vendorlogin");
+            window.location.hash = "#/vendorlogin";
             return;
           }
         }
@@ -613,13 +630,22 @@ export default function App() {
         try {
           const { data: member } = await supabase
             .from("team_members")
-            .select("role")
+            .select("role, status")
             .eq("email", email)
+            .limit(1)
             .maybeSingle();
-          if (member && (member.role === "Manager" || member.role === "Viewer")) {
+          if (member?.status === "active" && (member.role === "Manager" || member.role === "Viewer")) {
             isTeamStaff = true;
           }
         } catch (err) {}
+
+        if (role === "vendor_staff" && !isTeamStaff) {
+          await supabase.auth.signOut();
+          toast.error("Your branch team access is no longer active.");
+          setViewState("vendorlogin");
+          window.location.hash = "#/vendorlogin";
+          return;
+        }
 
         const userRole = role || "customer";
 
@@ -662,8 +688,8 @@ export default function App() {
             if (accessProfile?.account_type === "branch" && accessProfile.branch_status !== "active") {
               await supabase.auth.signOut();
               toast.error("This branch workspace is not active. Contact your Brand Admin.");
-              setViewState("signin");
-              window.location.hash = "#/signin";
+              setViewState("vendorlogin");
+              window.location.hash = "#/vendorlogin";
               return;
             }
           }
@@ -732,8 +758,13 @@ export default function App() {
     "shop",
     "brand",
     "signin",
+    "vendorlogin",
+    "brandlogin",
+    "customerlogin",
     "signup",
+    "brandsignup",
     "customersignup",
+    "verifyemail",
     "forgotpassword",
     "resetpassword",
     "adminlogin",
@@ -772,8 +803,13 @@ export default function App() {
         {view === "shop" && <ShopView setView={setView} />}
         {view === "brand" && <BrandPublicView setView={setView} />}
         {view === "signin" && <SignInView setView={setView} />}
-        {view === "signup" && <SignUpView setView={setView} />}
+        {view === "vendorlogin" && <SignInView setView={setView} accountKind="vendor" />}
+        {view === "brandlogin" && <SignInView setView={setView} accountKind="brand" />}
+        {view === "customerlogin" && <SignInView setView={setView} accountKind="customer" />}
+        {view === "signup" && <SignUpView setView={setView} accountKind="vendor" />}
+        {view === "brandsignup" && <SignUpView setView={setView} accountKind="brand" />}
         {view === "customersignup" && <CustomerSignUpView setView={setView} />}
+        {view === "verifyemail" && <EmailVerificationPendingView setView={setView} />}
         {view === "forgotpassword" && <ForgotPasswordView setView={setView} />}
         {view === "resetpassword" && <ResetPasswordView setView={setView} />}
         {view === "teamlogin" && <TeamLoginView setView={setView} />}

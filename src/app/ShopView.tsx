@@ -89,10 +89,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
   useEffect(() => {
     const loadProducts = async () => {
       const cacheKey = `cached_shop_products_${activeSlug || "marketplace"}`;
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        setProductsList(JSON.parse(cached));
-      }
+      setProductsList([]);
 
       try {
         if (activeSlug) {
@@ -116,7 +113,14 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         // 1. Fetch profiles to match by stored slug, business name slug, or custom domain
         const { data: profiles } = await supabase.from("profiles").select("*");
         const marketplaceProfiles = (profiles || [])
-          .filter((p) => p.business_name && !isPlaceholderName(p.business_name) && p.account_type !== "brand" && !["suspended", "banned"].includes(p.verification_status))
+          .filter((p) =>
+            p.business_name
+            && !isPlaceholderName(p.business_name)
+            && p.account_type !== "brand"
+            && p.is_verified === true
+            && (p.verification_status || "pending") === "approved"
+            && (p.account_type !== "branch" || p.branch_status === "active")
+          )
           .map((p) => ({ id: p.id, name: p.business_name, slug: p.slug || slugify(p.business_name), verified: p.is_verified }));
         setVendorOptions(marketplaceProfiles);
         let targetProfile = profiles?.find((p) => {
@@ -144,23 +148,31 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         if (!targetProfile && !isMarketplace) {
           setProfileNotFound(true);
           setVendorProfileId(null);
+          setProductsList([]);
           setGenerating(false);
           return;
         }
+        const canPreviewOwnStore = Boolean(isPreviewMode && user && targetProfile?.id === user.id);
+        const isApprovedForPublic = Boolean(targetProfile?.is_verified) && (targetProfile?.verification_status || "pending") === "approved";
         if (
-          (targetProfile?.account_type === "branch" && targetProfile.branch_status !== "active")
-          || ["suspended", "banned"].includes(targetProfile?.verification_status)
+          !canPreviewOwnStore && targetProfile && (
+            !isApprovedForPublic
+            || (targetProfile.account_type === "branch" && targetProfile.branch_status !== "active")
+            || ["suspended", "banned"].includes(targetProfile.verification_status)
+          )
         ) {
           setProfileNotFound(true);
           setVendorProfileId(null);
+          setProductsList([]);
           setGenerating(false);
           return;
         }
-        if (targetProfile?.account_type === "branch" && targetProfile.parent_brand_id) {
+        if (!canPreviewOwnStore && targetProfile?.account_type === "branch" && targetProfile.parent_brand_id) {
           const parentProfile = profiles?.find((profile) => profile.id === targetProfile.parent_brand_id);
-          if (["suspended", "banned"].includes(parentProfile?.verification_status)) {
+          if (!parentProfile?.is_verified || (parentProfile?.verification_status || "pending") !== "approved") {
             setProfileNotFound(true);
             setVendorProfileId(null);
+            setProductsList([]);
             setGenerating(false);
             return;
           }

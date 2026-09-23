@@ -70,8 +70,8 @@ function bodyFor(template: string, payload: any) {
     return emailShell({
       eyebrow: "Trial started",
       title: subjects[template],
-      preview: "Your 14-day Anovra trial is active.",
-      body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0 0 14px;">Your 14-day Anovra trial for <strong>${brand}</strong> has started. During trial, you can test storefront, scan, team, API preview, webhooks, analytics, and catalogue workflows.</p>${button("Open your workspace", appLink("/#/signin"))}`,
+      preview: "Your 7-day Anovra trial is active.",
+      body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0 0 14px;">Your 7-day Anovra trial for <strong>${brand}</strong> has started. During trial, you can test your storefront, scan link, catalogue, API preview, webhooks, and analytics workflows.</p>${button("Open your workspace", appLink("/#/vendorlogin"))}`,
     });
   }
   if (template === "product_submitted") {
