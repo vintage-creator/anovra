@@ -529,8 +529,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     { id: "history" as UserTab, label: "My Analyses", icon: <Scan className="w-4 h-4" /> },
     { id: "recommendations" as UserTab, label: "Recommendations", icon: <ShoppingBag className="w-4 h-4" /> },
     { id: "ingredients" as UserTab, label: "Ingredients", icon: <FlaskConical className="w-4 h-4" /> },
-    { id: "progress" as UserTab, label: "Progress", icon: <BarChart2 className="w-4 h-4" /> },
     { id: "routine" as UserTab, label: "My Routine", icon: <Calendar className="w-4 h-4" /> },
+    { id: "progress" as UserTab, label: "My Progress", icon: <BarChart2 className="w-4 h-4" /> },
     { id: "family" as UserTab, label: "Family", icon: <Users className="w-4 h-4" /> },
     { id: "settings" as UserTab, label: "Billing & Plans", icon: <Settings className="w-4 h-4" /> },
   ];
@@ -560,12 +560,35 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     );
   }
 
-  const progressScores = scoredAnalyses.map((a, idx) => {
+  const severityName = (item: any) => String(item?.name || item?.concern || item?.label || item?.condition || item?.metric || "Skin concern");
+  const severityValue = (item: any) => String(item?.severity || item?.level || item?.status || item?.value || item?.score || "Recorded");
+  const progressScores = scoredAnalyses
+    .slice()
+    .reverse()
+    .map((a) => ({
+      month: new Date(a.createdAt || a.date).toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
+      score: a.score
+    }));
+  const previousAnalysis = analysesList[1] || null;
+  const concernRows = (latestAnalysis?.severity || []).slice(0, 8).map((item: any) => {
+    const name = severityName(item);
+    const previous = (previousAnalysis?.severity || []).find((entry: any) => severityName(entry).toLowerCase() === name.toLowerCase());
+    const currentValue = severityValue(item);
+    const previousValue = previous ? severityValue(previous) : "—";
     return {
-      month: new Date(scoredAnalyses[scoredAnalyses.length - 1 - idx].date).toLocaleDateString("en-GB", { month: "short" }),
-      score: scoredAnalyses[scoredAnalyses.length - 1 - idx].score
+      name,
+      current: currentValue,
+      previous: previousValue,
+      trend: previousValue === "—" ? "New" : currentValue === previousValue ? "Stable" : "Changed",
     };
   });
+  const routineGroups = [
+    { label: "Morning", title: "Morning routine", steps: routineSteps.filter((s) => s.step.startsWith("AM")), color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-100" },
+    { label: "Evening", title: "Evening routine", steps: routineSteps.filter((s) => s.step.startsWith("PM")), color: "text-indigo-700", bg: "bg-indigo-50", border: "border-indigo-100" },
+  ];
+  const nextCheckIn = latestAnalysis?.createdAt
+    ? new Date(new Date(latestAnalysis.createdAt).getTime() + 14 * 24 * 60 * 60 * 1000)
+    : null;
 
   return (
     <div className="min-h-screen bg-background pb-12">
@@ -916,9 +939,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           {/* Quick links */}
           <div className="grid sm:grid-cols-3 gap-4">
             {[
+              { icon: <Calendar className="w-4 h-4 text-green-600" />, title: "My skincare routine", desc: "Your personalised AM & PM routine steps", tab: "routine" as UserTab },
               { icon: <BarChart2 className="w-4 h-4 text-accent" />, title: "Skin progress report", desc: "See how your skin score has changed over time", tab: "progress" as UserTab },
               { icon: <BookOpen className="w-4 h-4 text-blue-500" />, title: "Ingredient glossary", desc: "Safe vs flagged ingredients for your skin type", tab: "ingredients" as UserTab },
-              { icon: <Calendar className="w-4 h-4 text-green-600" />, title: "My skincare routine", desc: "Your personalised AM & PM routine steps", tab: "routine" as UserTab },
             ].map((q) => (
               <button key={q.title} onClick={() => setTab(q.tab)} className="text-left bg-card border border-border rounded-xl p-4 hover:border-accent/30 transition-colors group">
                 <div className="mb-3">{q.icon}</div>
@@ -1090,38 +1113,64 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       {/* ── PROGRESS ── */}
       {tab === "progress" && (
         <div className="space-y-5">
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Monthly skin progress report</h2>
-              <PlanBadge required="premium" current={accessPlan} />
+          <section className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm overflow-hidden relative">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#008236] via-[#C86B3A] to-[#0f766e]" />
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-2xl sm:text-3xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>My Skin Progress</h2>
+                  <PlanBadge required="premium" current={accessPlan} />
+                </div>
+                <p className="text-sm text-muted-foreground max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  See how your skin score, concerns, and routine response change between saved analyses.
+                </p>
+              </div>
+              <button
+                onClick={() => openCustomerSkinTest()}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                <Scan className="w-4 h-4" />
+                Re-analyse
+              </button>
             </div>
-            <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your skin score trend over the past 7 months.</p>
-          </div>
+          </section>
 
-          <div className="relative bg-card border border-border rounded-xl p-5">
+          <div className="relative bg-card border border-border rounded-2xl p-5 shadow-sm">
             {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
-            {progressScores.length > 0 ? (
-              <div className="mb-4 h-64 rounded-xl border border-border bg-background p-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={progressScores} margin={{ top: 12, right: 18, left: -18, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                    <Tooltip
-                      formatter={(value) => [`${value} / 100`, "Skin score"]}
-                      contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))", fontSize: 12 }}
-                    />
-                    <Line type="monotone" dataKey="score" stroke="#008236" strokeWidth={3} dot={{ r: 4, fill: "#008236" }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+            <div className="grid lg:grid-cols-[180px_1fr] gap-5 mb-5">
+              <div className="rounded-2xl border border-accent/20 bg-accent/5 p-5 flex flex-col justify-center text-center">
+                <p className="text-xs text-muted-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Current skin score</p>
+                <p className="text-5xl font-light text-accent" style={{ fontFamily: "'Fraunces', serif" }}>
+                  {latestAnalysis && typeof latestAnalysis.score === "number" ? latestAnalysis.score : "—"}
+                </p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  {scoredAnalyses.length > 1 ? `${scoredAnalyses[0].score - scoredAnalyses[1].score} pts vs last scan` : "Run 2 scans to compare"}
+                </p>
               </div>
-            ) : (
-              <div className="mb-4 h-36 rounded-xl border border-dashed border-border bg-muted/30 flex items-center justify-center text-center px-4">
-                <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your progress chart appears after scans with saved AI scores.</p>
+              <div className="min-h-[260px] rounded-2xl border border-border bg-background p-4">
+                {progressScores.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={progressScores} margin={{ top: 12, right: 18, left: -18, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                      <Tooltip
+                        formatter={(value) => [`${value} / 100`, "Skin score"]}
+                        contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                      />
+                      <Line type="monotone" dataKey="score" stroke="#008236" strokeWidth={3} dot={{ r: 4, fill: "#008236" }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full min-h-[220px] flex items-center justify-center text-center px-4">
+                    <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your progress chart appears after scans with saved AI scores.</p>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
-            <div className="border-t border-border pt-4 grid sm:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-3 gap-4">
               {[
                 {
                   label: "Current score",
@@ -1149,17 +1198,95 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 </div>
               ))}
             </div>
-            <div className="mt-4 grid sm:grid-cols-2 gap-4">
-              {[
-                { label: "Tracked concern", value: latestAnalysis?.concerns?.join(", ") || "No concern yet" },
-                { label: "Latest scan area", value: latestAnalysis?.area || "No area saved yet" },
-              ].map((item) => (
-                <div key={item.label} className="bg-background border border-border rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.label}</p>
-                  <p className="text-sm text-foreground font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
+          </div>
+
+          <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-5">
+            <section className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Skin concerns</h3>
+                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Current concerns compared with your previous saved analysis.</p>
                 </div>
-              ))}
-            </div>
+                <button onClick={() => setTab("routine")} className="text-xs text-accent hover:text-accent/70 font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  View routine
+                </button>
+              </div>
+              {concernRows.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left min-w-[520px]">
+                    <thead>
+                      <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
+                        <th className="py-2 pr-3 font-medium">Concern</th>
+                        <th className="py-2 pr-3 font-medium">Previous</th>
+                        <th className="py-2 pr-3 font-medium">Current</th>
+                        <th className="py-2 font-medium">Trend</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {concernRows.map((row) => (
+                        <tr key={row.name}>
+                          <td className="py-3 pr-3 text-sm text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{row.name}</td>
+                          <td className="py-3 pr-3 text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{row.previous}</td>
+                          <td className="py-3 pr-3 text-xs text-foreground font-medium" style={{ fontFamily: "'DM Mono', monospace" }}>{row.current}</td>
+                          <td className="py-3">
+                            <span className="text-[10px] px-2 py-1 rounded-full bg-accent/10 text-accent" style={{ fontFamily: "'DM Mono', monospace" }}>{row.trend}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="border border-dashed border-border rounded-xl p-6 text-center">
+                  <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No concern trend yet</p>
+                  <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run an analysis with saved severity data to track concern changes.</p>
+                </div>
+              )}
+            </section>
+
+            <section className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Skin journey</h3>
+                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Recent saved analyses.</p>
+                </div>
+                <button onClick={() => setTab("history")} className="text-xs text-accent hover:text-accent/70 font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  View all
+                </button>
+              </div>
+              {analysesList.length > 0 ? (
+                <div className="space-y-3">
+                  {analysesList.slice(0, 3).map((item, index) => (
+                    <div key={item.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <span className="w-7 h-7 rounded-full bg-accent/10 border border-accent/20 text-accent flex items-center justify-center text-xs font-bold" style={{ fontFamily: "'DM Mono', monospace" }}>{index + 1}</span>
+                        {index < Math.min(analysesList.length, 3) - 1 && <span className="w-px flex-1 bg-border my-1" />}
+                      </div>
+                      <div className="pb-4 min-w-0">
+                        <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.date}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.concerns?.join(", ") || "Saved skin analysis"}</p>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>Score {typeof item.score === "number" ? `${item.score}/100` : "not scored"}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="border border-dashed border-border rounded-xl p-6 text-center">
+                  <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No journey yet</p>
+                  <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your skin journey begins after your first saved analysis.</p>
+                </div>
+              )}
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="bg-muted/40 rounded-xl p-3">
+                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Tracked concern</p>
+                  <p className="text-sm text-foreground font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{latestAnalysis?.concerns?.join(", ") || "No concern yet"}</p>
+                </div>
+                <div className="bg-muted/40 rounded-xl p-3">
+                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Latest area</p>
+                  <p className="text-sm text-foreground font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{latestAnalysis?.area || "No area saved yet"}</p>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       )}
@@ -1167,44 +1294,137 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       {/* ── ROUTINE ── */}
       {tab === "routine" && (
         <div className="space-y-5">
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Personalised skincare routine</h2>
-              <PlanBadge required="premium" current={accessPlan} />
+          <section className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm overflow-hidden relative">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#008236] via-[#C86B3A] to-[#0f766e]" />
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-2xl sm:text-3xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>My Skincare Routine</h2>
+                  <PlanBadge required="premium" current={accessPlan} />
+                </div>
+                <p className="text-sm text-muted-foreground max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {latestAnalysis ? `Built from your latest ${latestAnalysis.concerns.join(", ")} analysis and matched product data.` : "Run a skin test to generate a personalised morning and evening routine."}
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                <button
+                  onClick={() => setTab("progress")}
+                  className="inline-flex items-center justify-center gap-2 border border-border bg-background hover:border-accent/30 text-foreground px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  <BarChart2 className="w-4 h-4" />
+                  Track progress
+                </button>
+                <button
+                  onClick={() => openCustomerSkinTest()}
+                  className="inline-flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  <Scan className="w-4 h-4" />
+                  Re-analyse
+                </button>
+              </div>
             </div>
-              <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {latestAnalysis ? `Built from your latest ${latestAnalysis.concerns.join(", ")} analysis.` : "Run a skin test to generate a routine."}
-              </p>
-          </div>
+          </section>
+
           <div className="relative">
             {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
             {routineSteps.length > 0 ? (
-            <div className="grid sm:grid-cols-2 gap-4">
-              {[
-                { label: "Morning Routine", steps: routineSteps.filter((s) => s.step.startsWith("AM")), color: "text-amber-600", bg: "bg-amber-50" },
-                { label: "Evening Routine", steps: routineSteps.filter((s) => s.step.startsWith("PM")), color: "text-indigo-600", bg: "bg-indigo-50" },
-              ].map((group) => (
-                <div key={group.label} className="bg-card border border-border rounded-xl overflow-hidden">
-                  <div className={`px-4 py-3 ${group.bg} border-b border-border`}>
-                    <p className={`text-sm font-medium ${group.color}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{group.label}</p>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {group.steps.map((s) => (
-                      <div key={s.step} className="px-4 py-3">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-xs font-mono text-muted-foreground w-8">{s.step}</span>
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>{s.label}</p>
-                        </div>
-                        <p className="text-sm text-foreground ml-10" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.product}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 ml-10 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.tip}</p>
+            <div className="grid xl:grid-cols-[1fr_320px] gap-5">
+              <div className="space-y-4">
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {[
+                    { label: "Routine steps", value: String(routineSteps.length), detail: "Generated from latest analysis" },
+                    { label: "Current focus", value: latestAnalysis?.concerns?.[0] || "Not set", detail: latestAnalysis ? "Primary concern" : "Run an analysis first" },
+                    { label: "Next check-in", value: nextCheckIn ? nextCheckIn.toLocaleDateString("en-GB", { month: "short", day: "numeric" }) : "After first scan", detail: "Suggested re-analysis date" },
+                  ].map((item) => (
+                    <div key={item.label} className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+                      <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.label}</p>
+                      <p className="text-lg font-light text-foreground line-clamp-2" style={{ fontFamily: "'Fraunces', serif" }}>{item.value}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>{item.detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid lg:grid-cols-2 gap-4">
+                  {routineGroups.map((group) => (
+                    <div key={group.label} className={cn("bg-card border rounded-2xl overflow-hidden shadow-sm", group.border)}>
+                      <div className={cn("px-4 py-3 border-b", group.bg, group.border)}>
+                        <p className={cn("text-sm font-semibold", group.color)} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{group.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{group.steps.length} steps</p>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {group.steps.length > 0 ? group.steps.map((s, index) => (
+                          <div key={`${group.label}-${s.step}-${index}`} className="px-4 py-4">
+                            <div className="flex gap-3">
+                              <span className="w-7 h-7 rounded-full bg-accent/10 border border-accent/20 text-accent flex items-center justify-center text-xs font-bold shrink-0" style={{ fontFamily: "'DM Mono', monospace" }}>
+                                {index + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>{s.label}</p>
+                                <p className="text-sm text-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.product}</p>
+                                {s.tip && (
+                                  <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.tip}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="px-4 py-6 text-center">
+                            <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No {group.label.toLowerCase()} steps were returned for this routine.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <aside className="space-y-4">
+                <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+                  <h3 className="text-base font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Why this routine</h3>
+                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    This routine is generated from your latest analysis, concern severity, and matched product data. Use it consistently, then re-analyse to measure change.
+                  </p>
+                  <div className="mt-4 space-y-2">
+                    {(latestAnalysis?.concerns || []).slice(0, 4).map((concern) => (
+                      <div key={concern} className="flex items-center gap-2 text-xs text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <CheckCircle className="w-3.5 h-3.5 text-accent" />
+                        <span>{concern}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-              ))}
+
+                <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <h3 className="text-base font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Matched products</h3>
+                    <button onClick={() => setTab("recommendations")} className="text-xs text-accent hover:text-accent/70 font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      View all
+                    </button>
+                  </div>
+                  {matchedProducts.length > 0 ? (
+                    <div className="space-y-3">
+                      {matchedProducts.slice(0, 4).map((product) => (
+                        <div key={product.name} className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
+                            <ShoppingBag className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{product.name}</p>
+                            <p className="text-xs text-muted-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{product.brand} · {product.match} match</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Matched products will appear after a scan returns approved catalogue recommendations.</p>
+                  )}
+                </div>
+              </aside>
             </div>
             ) : (
-              <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center">
+              <div className="bg-card border border-dashed border-border rounded-2xl p-8 text-center">
                 <p className="text-sm font-medium text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No routine yet</p>
                 <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run an analysis first. The routine page will use your latest concern and product matches to build AM and PM steps.</p>
                 <button onClick={() => openCustomerSkinTest()} className="px-4 py-2 rounded-lg bg-accent text-white text-xs font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run analysis</button>
