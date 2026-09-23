@@ -981,6 +981,33 @@ export function EmailVerificationPendingView({ setView }: { setView: (v: View) =
   const email = sessionStorage.getItem("pending_verification_email") || "your email address";
   const kind = sessionStorage.getItem("pending_verification_kind") || "customer";
   const loginView: View = kind === "brand" ? "brandlogin" : kind === "vendor" ? "vendorlogin" : "customerlogin";
+  const [resending, setResending] = useState(false);
+  const [resendWait, setResendWait] = useState(0);
+
+  useEffect(() => {
+    if (!resendWait) return;
+    const timer = window.setInterval(() => setResendWait((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendWait]);
+
+  const resendVerification = async () => {
+    if (email === "your email address" || resending || resendWait) return;
+    setResending(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: `${ANOVRA_AUTH_REDIRECT_ORIGIN}/auth/callback` },
+      });
+      if (error) throw error;
+      setResendWait(60);
+      toast.success("A new verification link is on its way. Check your inbox and spam folder.");
+    } catch (error: any) {
+      toast.error(error?.message || "Could not send a new verification link. Please try again shortly.");
+    } finally {
+      setResending(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#FAF7F2]/40 flex items-center justify-center p-4 sm:p-8">
@@ -1008,6 +1035,15 @@ export function EmailVerificationPendingView({ setView }: { setView: (v: View) =
           >
             Go to sign in
           </button>
+          {email !== "your email address" && (
+            <button
+              onClick={resendVerification}
+              disabled={resending || resendWait > 0}
+              className="w-full py-3 rounded-xl border border-[#008236]/30 text-[#008236] font-semibold text-sm hover:bg-[#008236]/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {resending ? "Sending…" : resendWait > 0 ? `Resend available in ${resendWait}s` : "Resend verification email"}
+            </button>
+          )}
           <button
             onClick={() => setView("landing")}
             className="w-full py-3 rounded-xl border border-border text-foreground font-bold text-sm hover:bg-secondary transition-colors cursor-pointer"

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f6f2eb;color:#253026;font-family:Arial,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f2eb;padding:24px 12px;">
+      <tr><td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #e5e2d8;border-radius:12px;">
+          <tr><td style="padding:28px 28px 20px;border-bottom:1px solid #e8ece6;">
+            <img src="https://anovra-api.vercel.app/logo.png" alt="Anovra" width="148" style="display:block;width:148px;max-width:100%;height:auto;" />
+          </td></tr>
+          <tr><td style="padding:30px 28px;">
+            <p style="margin:0 0 10px;color:#008236;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Account verification</p>
+            <h1 style="margin:0 0 16px;color:#1f2a24;font-family:Georgia,serif;font-size:27px;font-weight:400;line-height:1.2;">Confirm your email address</h1>
+            <p style="margin:0 0 22px;font-size:14px;line-height:1.65;">Thanks for joining Anovra. Confirm your email to finish setting up your account.</p>
+            <table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="background:#008236;border-radius:7px;">
+              <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 21px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;">Confirm email address</a>
+            </td></tr></table>
+            <p style="margin:26px 0 6px;color:#667085;font-size:12px;line-height:1.5;">Button not opening? Copy this link into your browser:</p>
+            <p style="margin:0;padding:12px;background:#f4f8f5;border:1px solid #dde9df;border-radius:6px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#006d30;text-decoration:underline;">{{ .ConfirmationURL }}</a></p>
+            <p style="margin:24px 0 0;color:#667085;font-size:12px;line-height:1.5;">If you did not create an Anovra account, you can ignore this email.</p>
+          </td></tr>
+          <tr><td style="padding:18px 28px;background:#fbfaf7;border-top:1px solid #e8ece6;color:#667085;font-size:11px;line-height:1.5;">Need help? Contact hello@anovra.africa.</td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>

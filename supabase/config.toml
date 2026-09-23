@@ -1,0 +1,27 @@
+project_id = "anovra"
+
+[auth]
+site_url = "https://anovra-api.vercel.app"
+additional_redirect_urls = [
+  "http://localhost:5173/",
+  "https://anovra-api.vercel.app/*",
+  "https://anovra-api.vercel.app/auth/callback",
+  "https://anovra-api.vercel.app/#resetpassword",
+]
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m"
+otp_length = 8
+
+[auth.email.template.confirmation]
+subject = "Confirm your Anovra email address"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Anovra password"
+content_path = "./supabase/templates/recovery.html"
