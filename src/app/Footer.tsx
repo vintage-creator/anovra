@@ -17,7 +17,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
               <img
                 src="/logo.png"
                 alt="Anovra"
-                className="h-12 sm:h-14 w-auto object-contain brightness-0 invert"
+                className="h-10 sm:h-12 w-auto object-contain brightness-0 invert"
               />
             </button>
           </div>

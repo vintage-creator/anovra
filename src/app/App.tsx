@@ -32,6 +32,7 @@ import { UserDashboardView } from "./UserDashboardView";
 import { BrandDashboardView } from "./BrandDashboardView";
 import { BrandPublicView } from "./BrandPublicView";
 import { Footer } from "./Footer";
+import { clearCustomerScan, consumeCustomerScan, rememberCustomerScan } from "./utils/customerScanReturn";
 import {
   Sheet,
   SheetContent,
@@ -75,7 +76,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
           <img
             src="/logo.png"
             alt="Anovra Logo"
-            className="h-14 sm:h-15 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
+            className="h-10 sm:h-12 w-auto object-contain transition-transform group-hover:scale-105"
           />
         </button>
 
@@ -378,12 +379,14 @@ export default function App() {
   };
 
   const [view, setViewState] = useState<View>(getViewFromHash);
-  const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard", "branddashboard"];
+  const protectedViews: View[] = ["dashboard", "catalog", "skintest", "userdashboard", "admin", "teamdashboard", "branddashboard"];
   const [isValidatingRoute, setIsValidatingRoute] = useState(() => protectedViews.includes(getViewFromHash()));
 
   const setView = (v: View) => {
+    if (protectedViews.includes(v)) setIsValidatingRoute(true);
     setViewState(v);
     if (v === "landing") {
+      clearCustomerScan();
       if (window.location.hash) {
         window.history.pushState(null, "", window.location.pathname);
       }
@@ -394,7 +397,8 @@ export default function App() {
       const slug = sessionStorage.getItem("active_brand_slug");
       window.location.hash = slug ? `#/brand/${slug}` : "#/brand";
     } else if (v === "skintest") {
-      const slug = sessionStorage.getItem("active_scan_slug");
+      const slug = view === "shop" || view === "brand" ? sessionStorage.getItem("active_scan_slug") : null;
+      if (!slug) sessionStorage.removeItem("active_scan_slug");
       window.location.hash = slug ? `#/scan/${slug}` : "#/skintest";
     } else {
       window.location.hash = `#/${v}`;
@@ -403,7 +407,9 @@ export default function App() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      setViewState(getViewFromHash());
+      const nextView = getViewFromHash();
+      if (protectedViews.includes(nextView)) setIsValidatingRoute(true);
+      setViewState(nextView);
     };
     window.addEventListener("hashchange", handleHashChange);
 
@@ -445,6 +451,7 @@ export default function App() {
       const fragment = new URLSearchParams(callbackUrl.hash.replace(/^#/, ""));
       const isSignup = callbackUrl.searchParams.get("type") === "signup" || fragment.get("type") === "signup";
       const routeAfterAuth = (target: View) => {
+        if (protectedViews.includes(target)) setIsValidatingRoute(true);
         setViewState(target);
         window.history.replaceState(null, "", `${window.location.origin}/#/${target}`);
       };
@@ -513,7 +520,7 @@ export default function App() {
           } else if (teamMemberRole === "Representative") {
             routeAfterAuth("teamdashboard");
           } else {
-            routeAfterAuth("userdashboard");
+            routeAfterAuth(consumeCustomerScan() ? "skintest" : "userdashboard");
           }
         } else {
           toast.error("We could not verify this link. Please request a new confirmation email or sign in if you have already verified.");
@@ -571,14 +578,19 @@ export default function App() {
 
       setIsValidatingRoute(true);
       try {
-        const isPublicVendorScan = view === "skintest" && window.location.hash.startsWith("#/scan/");
+        const isPublicVendorScan = view === "skintest" && /^#\/scan\/[^/?#]+/.test(window.location.hash);
         if (isPublicVendorScan) return;
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
-          if (view === "skintest" || view === "userdashboard") {
-            toast.error("Please sign up as a customer.");
-            setViewState("customersignup");
-            window.location.hash = "#/customersignup";
+          if (view === "skintest") {
+            rememberCustomerScan();
+            toast.error("Sign in or create a customer account to start your skin test.");
+            setViewState("customerlogin");
+            window.location.hash = "#/customerlogin";
+          } else if (view === "userdashboard") {
+            toast.error("Sign in to open your customer dashboard.");
+            setViewState("customerlogin");
+            window.location.hash = "#/customerlogin";
           } else if (view === "teamdashboard") {
             toast.error("Staff login required.");
             setViewState("teamlogin");
@@ -588,6 +600,16 @@ export default function App() {
             setViewState("signup");
             window.location.hash = "#/signup";
           }
+          return;
+        }
+
+        if (view === "skintest" && !user.email_confirmed_at) {
+          rememberCustomerScan();
+          sessionStorage.setItem("pending_verification_email", user.email || "");
+          sessionStorage.setItem("pending_verification_kind", "customer");
+          toast.error("Verify your email before starting your skin test.");
+          setViewState("verifyemail");
+          window.location.hash = "#/verifyemail";
           return;
         }
 
@@ -757,6 +779,16 @@ export default function App() {
         }
       } catch (err) {
         console.error("Route access check failed:", err);
+        if (view === "skintest" && !/^#\/scan\/[^/?#]+/.test(window.location.hash)) {
+          rememberCustomerScan();
+          toast.error("We could not verify your session. Please sign in to start your skin test.");
+          setViewState("customerlogin");
+          window.location.hash = "#/customerlogin";
+        } else if (view === "userdashboard") {
+          toast.error("We could not verify your session. Please sign in again.");
+          setViewState("customerlogin");
+          window.location.hash = "#/customerlogin";
+        }
       } finally {
         setIsValidatingRoute(false);
       }

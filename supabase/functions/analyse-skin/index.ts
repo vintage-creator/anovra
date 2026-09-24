@@ -60,6 +60,19 @@ serve(async (request) => {
     if (vendorId && !/^[0-9a-f-]{36}$/i.test(vendorId)) return reply({ error: "Invalid storefront." }, 400);
 
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    if (!vendorId) {
+      const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
+      if (!token) return reply({ error: "Sign in to start your skin test." }, 401);
+      const { data: auth, error: authError } = await db.auth.getUser(token);
+      if (authError || !auth.user) return reply({ error: "Your session has expired. Please sign in again." }, 401);
+      if (auth.user.is_anonymous || !auth.user.email_confirmed_at)
+        return reply({ error: "Verify your email before starting your skin test." }, 403);
+      const { data: account, error: accountError } = await db.from("profiles")
+        .select("verification_status").eq("id", auth.user.id).maybeSingle();
+      if (accountError) throw accountError;
+      if (["suspended", "banned"].includes(account?.verification_status || ""))
+        return reply({ error: "This account cannot start a skin test. Contact Anovra support." }, 403);
+    }
     const clientAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       request.headers.get("cf-connecting-ip") || "unknown";
     const hashBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${key}:${clientAddress}`));

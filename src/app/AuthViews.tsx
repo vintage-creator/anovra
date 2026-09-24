@@ -4,6 +4,7 @@ import type { View } from "./types";
 import { toast } from "sonner";
 import { supabase } from "./utils/supabase";
 import { sendEmailNotification } from "./utils/notifications";
+import { consumeCustomerScan } from "./utils/customerScanReturn";
 
 const ANOVRA_AUTH_REDIRECT_ORIGIN = "https://anovra-api.vercel.app";
 const TRIAL_DAYS = 7;
@@ -1071,6 +1072,10 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
   const [otpCode, setOtpCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
 
+  const finishCustomerSignIn = () => {
+    setView(consumeCustomerScan() ? "skintest" : "userdashboard");
+  };
+
   const handleSendOtp = async () => {
     if (!email) { setError("Please enter your email address."); return; }
     setError("");
@@ -1178,7 +1183,7 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
       } else if (userRole === "vendor") {
         setView("dashboard");
       } else if (userRole === "customer") {
-        setView("userdashboard");
+        finishCustomerSignIn();
       } else {
         const { data: profile } = await supabase
           .from("profiles")
@@ -1191,7 +1196,7 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
         } else if (profile?.business_name) {
           setView("dashboard");
         } else {
-          setView("userdashboard");
+          finishCustomerSignIn();
         }
       }
       toast.success("Signed in successfully via OTP!");
@@ -1292,7 +1297,7 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
       } else if (userRole === "vendor") {
         setView("dashboard");
       } else if (userRole === "customer") {
-        setView("userdashboard");
+        finishCustomerSignIn();
       } else {
         const { data: profile } = await supabase
           .from("profiles")
@@ -1305,7 +1310,7 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
         } else if (profile?.business_name) {
           setView("dashboard");
         } else {
-          setView("userdashboard");
+          finishCustomerSignIn();
         }
       }
       toast.success("Signed in successfully!");

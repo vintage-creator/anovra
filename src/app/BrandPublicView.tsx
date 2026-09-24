@@ -136,7 +136,7 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
       <header className="sticky top-0 z-40 bg-[#FAF7F2]/92 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
           <button onClick={() => setView("landing")} className="flex items-center">
-            <img src="/logo.png" alt="Anovra" className="h-12 sm:h-14 w-auto object-contain" />
+            <img src="/logo.png" alt="Anovra" className="h-10 sm:h-12 w-auto object-contain" />
           </button>
           <button onClick={() => setView("shop")} className="inline-flex items-center gap-2 text-sm font-semibold text-foreground hover:text-accent">
             <Store className="w-4 h-4" />

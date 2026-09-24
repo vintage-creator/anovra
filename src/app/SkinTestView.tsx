@@ -80,7 +80,7 @@ const getScanSlugFromUrl = () => {
   const hashSlug = hash.includes("/scan/")
     ? hash.split("/scan/")[1]?.split("?")[0]
     : "";
-  return queryMatch?.[1] || hashSlug || sessionStorage.getItem("active_scan_slug") || "";
+  return queryMatch?.[1] || hashSlug || "";
 };
 
 type MatchedProduct = {
@@ -887,6 +887,11 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 ? `${vendorDisplayName} uses Anovra's dermatological vision AI to evaluate visible skin concerns and rank safe, approved products.`
                 : "Anovra's clinical AI evaluates any visible skin area. Select the area you wish to assess."}
             </p>
+            {hasVendorBrand && currentUserRole === "guest" && (
+              <p className="mt-2 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                You can scan as a guest. Your report will appear here, but it will not be saved to an account.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
