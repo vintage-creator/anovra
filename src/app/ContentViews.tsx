@@ -528,22 +528,22 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
     );
 
     return (
-      <div className="min-h-screen bg-background px-5 py-12 sm:py-16" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div className="min-h-screen border-t-[3px] border-t-[#C86B3A] bg-background px-5 py-12 sm:py-16" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         <div className="mx-auto max-w-6xl">
           <div className="mb-10 max-w-2xl">
-            <p className="mb-3 text-xs font-bold uppercase text-[#008236]">FAQs</p>
-            <h1 className="mb-3 text-3xl font-semibold text-foreground sm:text-4xl" style={{ fontFamily: "'Fraunces', serif" }}>How can we help?</h1>
+            <p className="mb-3 text-xs font-bold uppercase text-[#A64D27]">FAQs</p>
+            <h1 className="mb-3 text-3xl font-semibold text-foreground sm:text-4xl" style={{ fontFamily: "'Fraunces', serif" }}>How can we <span className="text-[#A64D27]">help?</span></h1>
             <p className="text-sm leading-relaxed text-muted-foreground">Browse answers by topic or search for what you need.</p>
           </div>
           <label className="relative mb-8 block max-w-2xl">
-            <Search aria-hidden="true" className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+            <Search aria-hidden="true" className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#A64D27]" />
             <span className="sr-only">Search frequently asked questions</span>
             <input
               type="search"
               value={faqQuery}
               onChange={(event) => { setFaqQuery(event.target.value); setOpenQuestion(null); }}
               placeholder="Search questions and answers"
-              className="w-full rounded-md border border-border bg-white py-3 pl-12 pr-4 text-sm outline-none focus:border-[#008236] focus:ring-2 focus:ring-[#008236]/15"
+              className="w-full rounded-md border border-border bg-white py-3 pl-12 pr-4 text-sm outline-none focus:border-[#A64D27] focus:ring-2 focus:ring-[#C86B3A]/15"
             />
           </label>
           <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-12">
@@ -568,7 +568,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
                   className={`flex shrink-0 items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${!query && activeCategory === category.id ? "bg-[#008236] font-semibold text-white" : "text-foreground hover:bg-secondary"}`}
                 >
                   <span>{category.label}</span>
-                  <span className={`text-xs ${!query && activeCategory === category.id ? "text-white/80" : "text-muted-foreground"}`}>{faqs.filter((faq) => faq.cat === category.id).length}</span>
+                  <span className={`text-xs ${!query && activeCategory === category.id ? "text-white/80" : "text-[#A64D27]"}`}>{faqs.filter((faq) => faq.cat === category.id).length}</span>
                 </button>
               ))}
             </nav>
@@ -614,10 +614,10 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
   return (
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Hero */}
-      <section className="border-b border-border bg-[#f5f8f5] px-6 py-14 sm:py-20">
+      <section className="border-b border-b-border border-t-[3px] border-t-[#C86B3A] bg-[#f5f8f5] px-6 py-14 sm:py-20">
         <div className="mx-auto max-w-6xl">
-          <p className="mb-3 text-xs font-bold uppercase text-[#008236]">Contact Anovra</p>
-          <h1 className="mb-4 max-w-2xl text-3xl font-semibold leading-tight text-foreground sm:text-5xl" style={{ fontFamily: "'Fraunces', serif" }}>Let’s talk about what you need.</h1>
+          <p className="mb-3 text-xs font-bold uppercase text-[#A64D27]">Contact Anovra</p>
+          <h1 className="mb-4 max-w-2xl text-3xl font-semibold leading-tight text-foreground sm:text-5xl" style={{ fontFamily: "'Fraunces', serif" }}>Let’s talk about <span className="text-[#A64D27]">what you need.</span></h1>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">Questions about your account, a product, or working with Anovra? Choose a direct channel or prepare a message below.</p>
         </div>
       </section>

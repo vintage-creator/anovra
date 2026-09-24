@@ -12,6 +12,7 @@ import {
   Info,
   Mail,
   CircleHelp,
+  X,
   ArrowRight,
   ArrowUp,
   Scan,
@@ -172,17 +173,22 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                   <Menu className="w-5 h-5" />
                 </button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[85vw] sm:max-w-md p-0 flex flex-col">
+              <SheetContent side="right" showCloseButton={false} className="w-[85vw] sm:max-w-md p-0 flex flex-col gap-0">
               {/* Drawer Header */}
               <SheetHeader className="p-4 border-b border-border/80 bg-secondary/30">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-3">
                   <img
                     src="/logo.png"
                     alt="Anovra Logo"
                     className="h-11 w-auto object-contain"
                   />
-                  <SheetTitle className="sr-only">Menu</SheetTitle>
+                  <SheetClose asChild>
+                    <button type="button" aria-label="Close menu" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border/70 text-foreground transition-colors hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#008236]">
+                      <X className="h-5 w-5" />
+                    </button>
+                  </SheetClose>
                 </div>
+                <SheetTitle className="sr-only">Menu</SheetTitle>
               </SheetHeader>
 
               {/* Drawer Scrollable Links Content */}
