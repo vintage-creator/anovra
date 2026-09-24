@@ -169,7 +169,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         setUserProfile(profileObj);
         setProfileForm({
           name: profileObj.name,
-          email: profile?.email || user.email || "",
+          email: user.email || profile?.email || "",
           phone: profile?.phone || user.user_metadata?.phone || "",
           location: profile?.location || "",
         });
@@ -208,7 +208,43 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           setAnalysesList(formatted);
 
           const savedMatches = Array.isArray(scans[0].matched_products) ? scans[0].matched_products : [];
-          setMatchedProducts(savedMatches.map((match: any, index: number) => ({
+          const matchIds = [...new Set(savedMatches.map((match: any) => match?.id).filter(Boolean))];
+          let eligibleMatches: any[] = [];
+          if (matchIds.length) {
+            const { data: catalogueRows, error: catalogueError } = await supabase.from("products")
+              .select("id, vendor_id, name, brand, price, image_url, nafdac_status")
+              .in("id", matchIds).eq("nafdac_status", "approved");
+            if (catalogueError) throw catalogueError;
+            const vendorIds = [...new Set((catalogueRows || []).map((product) => product.vendor_id).filter(Boolean))];
+            const { data: sellers, error: sellerError } = vendorIds.length
+              ? await supabase.from("profiles")
+                .select("id, slug, is_verified, verification_status, account_type, branch_status, parent_brand_id, plan, created_at")
+                .in("id", vendorIds)
+              : { data: [], error: null };
+            if (sellerError) throw sellerError;
+            const parentIds = [...new Set((sellers || []).map((seller) => seller.parent_brand_id).filter(Boolean))];
+            const { data: parents, error: parentError } = parentIds.length
+              ? await supabase.from("profiles").select("id, is_verified, verification_status, plan, created_at").in("id", parentIds)
+              : { data: [], error: null };
+            if (parentError) throw parentError;
+            const parentById = new Map((parents || []).map((parent) => [parent.id, parent]));
+            const sellerById = new Map((sellers || []).map((seller) => [seller.id, seller]));
+            const productById = new Map((catalogueRows || []).map((product) => [product.id, product]));
+            eligibleMatches = savedMatches.flatMap((match: any) => {
+              const product = productById.get(match.id);
+              const seller = product ? sellerById.get(product.vendor_id) : null;
+              const owner = seller?.parent_brand_id ? parentById.get(seller.parent_brand_id) : seller;
+              const trialEnd = new Date(owner?.created_at || 0).getTime() + 7 * 24 * 60 * 60 * 1000;
+              if (!seller?.is_verified || seller.verification_status !== "approved"
+                || (seller.account_type === "branch" && seller.branch_status !== "active")
+                || !owner?.is_verified || owner.verification_status !== "approved"
+                || ((owner.plan || "free") === "free" && Date.now() > trialEnd)) return [];
+              return [{ ...match, name: product.name, brand: product.brand || match.brand,
+                price: product.price, image_url: product.image_url || match.image_url,
+                vendor_slug: seller.slug || match.vendor_slug }];
+            });
+          }
+          setMatchedProducts(eligibleMatches.map((match: any, index: number) => ({
             id: match.id,
             name: match.name,
             brand: match.brand || "Partner product",
@@ -220,7 +256,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             vendorSlug: match.vendor_slug || "",
             purchaseUrl: match.purchase_url || "",
           })));
-          const ingredientNames = [...new Set(savedMatches.flatMap((match: any) =>
+          const ingredientNames = [...new Set(eligibleMatches.flatMap((match: any) =>
             Array.isArray(match.ingredients) ? match.ingredients.filter((name: unknown) => typeof name === "string") : []))] as string[];
           const fallbacks = Array.isArray(scans[0].ingredient_fallback) ? scans[0].ingredient_fallback : [];
           for (const name of fallbacks) {
@@ -362,11 +398,12 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Please sign in first.");
+      const emailChanged = Boolean(nextProfile.email && nextProfile.email !== user.email);
       const { error } = await supabase
         .from("profiles")
         .update({
           name: nextProfile.name,
-          email: nextProfile.email || user.email,
+          email: user.email,
           phone: nextProfile.phone || null,
           location: nextProfile.location || null,
         })
@@ -379,13 +416,14 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           location: nextProfile.location,
         },
       };
-      if (nextProfile.email && nextProfile.email !== user.email) {
+      if (emailChanged) {
         authUpdates.email = nextProfile.email;
       }
-      await supabase.auth.updateUser(authUpdates);
+      const { error: authError } = await supabase.auth.updateUser(authUpdates);
+      if (authError) throw authError;
       setProfileForm(nextProfile);
       setUserProfile((prev) => prev ? { ...prev, name: nextProfile.name } : prev);
-      toast.success("Profile updated.");
+      toast.success(emailChanged ? "Profile updated. Confirm your new email address to use it for sign-in." : "Profile updated.");
     } catch (err: any) {
       toast.error(err.message || "Could not update profile.");
     } finally {
