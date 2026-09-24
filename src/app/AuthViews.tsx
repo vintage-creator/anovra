@@ -1083,8 +1083,9 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
         }
       });
       if (otpErr) throw otpErr;
+      setOtpCode("");
       setOtpSent(true);
-      toast.success("Verification code dispatched to your inbox!");
+      toast.success("Sign-in code sent. Check your email.");
     } catch (err: any) {
       let friendlyMsg = err.message || "Failed to send verification code.";
       if (friendlyMsg.toLowerCase().includes("signups not allowed for otp")) {
@@ -1098,7 +1099,7 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
   };
 
   const handleVerifyOtp = async () => {
-    if (!otpCode) { setError("Please enter the 6-digit verification code."); return; }
+    if (!/^\d{8}$/.test(otpCode)) { setError("Enter the 8-digit sign-in code from your email."); return; }
     setError("");
     setLoading(true);
     try {
@@ -1424,21 +1425,27 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
               otpSent && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-[#008236] uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Verification Code</label>
+                    <label htmlFor="sign-in-code" className="text-xs font-bold text-[#008236] uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign-in code</label>
                     <button
                       type="button"
-                      onClick={() => setOtpSent(false)}
+                      onClick={() => { setOtpCode(""); setOtpSent(false); }}
                       className="text-xs text-[#008236] font-semibold hover:text-[#006c2c] underline underline-offset-2 cursor-pointer"
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
                       Change email
                     </button>
                   </div>
+                  <p className="mb-3 text-xs text-muted-foreground break-all" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Enter the 8-digit code sent to {email.trim().toLowerCase()}.
+                  </p>
                   <input
+                    id="sign-in-code"
                     className="w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all text-center tracking-[0.4em] font-mono"
                     type="text"
-                    maxLength={6}
-                    placeholder="000000"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={8}
+                    placeholder="Enter code"
                     value={otpCode}
                     onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, "")); setError(""); }}
                     onKeyDown={(e) => e.key === "Enter" && handleSignIn()}

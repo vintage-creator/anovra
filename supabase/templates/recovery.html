@@ -1,24 +1,26 @@
 <!doctype html>
 <html lang="en">
-  <body style="margin:0;padding:0;background:#f6f2eb;color:#253026;font-family:Arial,sans-serif;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f2eb;padding:24px 12px;">
-      <tr><td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #e5e2d8;border-radius:12px;">
-          <tr><td style="padding:28px 28px 20px;border-bottom:1px solid #e8ece6;">
-            <img src="https://anovra-api.vercel.app/logo.png" alt="Anovra" width="148" style="display:block;width:148px;max-width:100%;height:auto;" />
+  <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  <body style="margin:0;padding:0;background:#f5f7f3;color:#223027;font-family:Arial,Helvetica,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Use this secure link to reset your Anovra password.</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f5f7f3;">
+      <tr><td align="center" style="padding:28px 12px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;max-width:560px;background:#ffffff;border:1px solid #e0e8df;">
+          <tr><td style="padding:24px 28px;border-bottom:1px solid #e0e8df;">
+            <img src="https://anovra-api.vercel.app/logo.png" alt="Anovra" width="148" height="48" style="display:block;width:148px;height:48px;max-width:100%;border:0;" />
           </td></tr>
-          <tr><td style="padding:30px 28px;">
-            <p style="margin:0 0 10px;color:#008236;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Account security</p>
-            <h1 style="margin:0 0 16px;color:#1f2a24;font-family:Georgia,serif;font-size:27px;font-weight:400;line-height:1.2;">Reset your password</h1>
-            <p style="margin:0 0 22px;font-size:14px;line-height:1.65;">We received a request to reset your Anovra password. Use the button below to choose a new one.</p>
-            <table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="background:#008236;border-radius:7px;">
-              <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 21px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;">Reset password</a>
+          <tr><td style="padding:30px 28px 32px;">
+            <p style="margin:0 0 10px;color:#087443;font-size:12px;font-weight:700;line-height:1.4;">ACCOUNT SECURITY</p>
+            <h1 style="margin:0 0 16px;color:#1c3125;font-family:Georgia,'Times New Roman',serif;font-size:26px;font-weight:400;line-height:1.25;">Reset your password</h1>
+            <p style="margin:0 0 24px;color:#344238;font-size:15px;line-height:1.6;">We received a request to reset your Anovra password. Use this link to choose a new one.</p>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;"><tr><td style="background:#087443;border-radius:6px;">
+              <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 20px;color:#ffffff;font-size:14px;font-weight:700;line-height:1.3;text-decoration:none;">Reset password</a>
             </td></tr></table>
-            <p style="margin:26px 0 6px;color:#667085;font-size:12px;line-height:1.5;">Button not opening? Copy this link into your browser:</p>
-            <p style="margin:0;padding:12px;background:#f4f8f5;border:1px solid #dde9df;border-radius:6px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#006d30;text-decoration:underline;">{{ .ConfirmationURL }}</a></p>
-            <p style="margin:24px 0 0;color:#667085;font-size:12px;line-height:1.5;">If you did not request a password reset, no action is needed. Your existing password remains unchanged.</p>
+            <p style="margin:28px 0 6px;color:#59675e;font-size:12px;line-height:1.5;">Button not working? Open this link in your browser:</p>
+            <p style="margin:0;color:#087443;font-size:12px;line-height:1.5;overflow-wrap:anywhere;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#087443;text-decoration:underline;">{{ .ConfirmationURL }}</a></p>
+            <p style="margin:24px 0 0;color:#59675e;font-size:12px;line-height:1.5;">If you did not request a password reset, you can ignore this email. Your password has not changed.</p>
           </td></tr>
-          <tr><td style="padding:18px 28px;background:#fbfaf7;border-top:1px solid #e8ece6;color:#667085;font-size:11px;line-height:1.5;">Need help? Contact hello@anovra.africa.</td></tr>
+          <tr><td style="padding:17px 28px;background:#f7faf7;border-top:1px solid #e0e8df;color:#59675e;font-size:12px;line-height:1.5;">Need help? <a href="mailto:hello@anovra.africa" style="color:#087443;text-decoration:underline;">hello@anovra.africa</a></td></tr>
         </table>
       </td></tr>
     </table>
