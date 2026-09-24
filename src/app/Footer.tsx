@@ -2,7 +2,7 @@ import type { View } from "./types";
 import { Mail, Phone, MapPin, ArrowUpRight } from "lucide-react";
 import { SocialLinks } from "./SocialLinks";
 
-export function Footer({ setView }: { setView: (v: View) => void }) {
+export function Footer({ setView, view }: { setView: (v: View) => void; view: View }) {
   return (
     <footer className="bg-[#008236] text-white mt-auto border-t border-emerald-700/40">
       {/* Main grid */}
@@ -141,14 +141,15 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
             </li>
           </ul>
 
-          {/* Differentiated Non-Clickable HQ Address & Operations */}
-          <div className="mt-5 pt-3.5 border-t border-white/10 flex items-start gap-2 text-xs text-emerald-100/60">
-            <MapPin className="w-3.5 h-3.5 text-emerald-300/80 shrink-0 mt-0.5" />
-            <div>
-              <span className="block font-medium text-emerald-100/85">Headquarters</span>
-              <span>Abuja, Nigeria</span>
+          {view !== "contact" && (
+            <div className="mt-5 pt-3.5 border-t border-white/10 flex items-start gap-2 text-xs text-emerald-100/60">
+              <MapPin className="w-3.5 h-3.5 text-emerald-300/80 shrink-0 mt-0.5" />
+              <div>
+                <span className="block font-medium text-emerald-100/85">Headquarters</span>
+                <span>Abuja, Nigeria</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

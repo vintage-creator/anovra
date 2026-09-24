@@ -879,7 +879,7 @@ export default function App() {
         {view === "userdashboard" && <UserDashboardView setView={setView} />}
       </div>
       <ScrollToTopButton hidden={view === "admin"} />
-      {!hideNav && <Footer setView={setView} />}
+      {!hideNav && <Footer setView={setView} view={view} />}
     </div>
   );
 }
