@@ -57,7 +57,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
   const primaryNavLinks: { id: View; label: string; icon: React.ElementType }[] = [
     { id: "landing", label: "Home", icon: Home },
     { id: "about", label: "About", icon: Info },
-    { id: "faq", label: "Help", icon: CircleHelp },
+    { id: "faq", label: "FAQs", icon: CircleHelp },
     { id: "contact", label: "Contact", icon: Mail },
   ];
 

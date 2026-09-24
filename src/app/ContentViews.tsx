@@ -297,12 +297,14 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
   const [composeOpened, setComposeOpened] = useState(false);
   const [activeCategory, setActiveCategory] = useState("general");
   const [faqQuery, setFaqQuery] = useState("");
+  const [openQuestion, setOpenQuestion] = useState<string | null>(null);
 
   const categories = [
     { id: "general", label: "General" },
     { id: "skin", label: "Skin Analysis" },
     { id: "products", label: "Recommendations" },
     { id: "vendors", label: "For Vendors" },
+    { id: "brands", label: "For Brands" },
     { id: "privacy", label: "Privacy & Security" },
     { id: "support", label: "Account & Support" },
   ];
@@ -432,6 +434,32 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
       q: "What is an Anovra Mini Shop?",
       a: "Your Mini Shop is your personalised digital storefront inside Anovra, where you can showcase your products, manage inventory, update pricing, and receive customer orders."
     },
+    // Brand HQ
+    {
+      cat: "brands",
+      q: "Who should register a Brand HQ account?",
+      a: "Brand HQ is designed for established skincare brands and distributors managing multiple branches, outlets, or regional teams. An independent shop can start with a vendor account."
+    },
+    {
+      cat: "brands",
+      q: "Can I create and manage branch accounts?",
+      a: "Yes. Brand HQ can create branch vendor accounts, update their details, and activate, deactivate, or suspend branch access from one workspace."
+    },
+    {
+      cat: "brands",
+      q: "Does each branch get its own storefront and skin test link?",
+      a: "Yes. Each branch has its own vendor sign-in, storefront, skin test link, and product catalogue under your brand network."
+    },
+    {
+      cat: "brands",
+      q: "Can Brand HQ add products for a branch?",
+      a: "Yes. Choose an active branch when adding a product from Brand HQ, or let the branch add products from its vendor workspace. New products go through Anovra safety review before appearing publicly."
+    },
+    {
+      cat: "brands",
+      q: "How do I compare branch performance?",
+      a: "Brand HQ brings branch products, scans, sales records, and activity into one view. Open a branch to inspect its own catalogue and performance in more detail."
+    },
     // Privacy & Security
     {
       cat: "privacy",
@@ -503,7 +531,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
       <div className="min-h-screen bg-background px-5 py-12 sm:py-16" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         <div className="mx-auto max-w-6xl">
           <div className="mb-10 max-w-2xl">
-            <p className="mb-3 text-xs font-bold uppercase text-[#008236]">Help centre</p>
+            <p className="mb-3 text-xs font-bold uppercase text-[#008236]">FAQs</p>
             <h1 className="mb-3 text-3xl font-semibold text-foreground sm:text-4xl" style={{ fontFamily: "'Fraunces', serif" }}>How can we help?</h1>
             <p className="text-sm leading-relaxed text-muted-foreground">Browse answers by topic or search for what you need.</p>
           </div>
@@ -513,7 +541,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
             <input
               type="search"
               value={faqQuery}
-              onChange={(event) => setFaqQuery(event.target.value)}
+              onChange={(event) => { setFaqQuery(event.target.value); setOpenQuestion(null); }}
               placeholder="Search questions and answers"
               className="w-full rounded-md border border-border bg-white py-3 pl-12 pr-4 text-sm outline-none focus:border-[#008236] focus:ring-2 focus:ring-[#008236]/15"
             />
@@ -524,7 +552,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
               <select
                 id="faq-topic"
                 value={activeCategory}
-                onChange={(event) => { setActiveCategory(event.target.value); setFaqQuery(""); }}
+                onChange={(event) => { setActiveCategory(event.target.value); setFaqQuery(""); setOpenQuestion(null); }}
                 className="w-full rounded-md border border-border bg-white px-3 py-3 text-sm text-foreground outline-none focus:border-[#008236]"
               >
                 {categories.map((category) => <option key={category.id} value={category.id}>{category.label} ({faqs.filter((faq) => faq.cat === category.id).length})</option>)}
@@ -535,7 +563,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
                 <button
                   key={category.id}
                   type="button"
-                  onClick={() => { setActiveCategory(category.id); setFaqQuery(""); }}
+                  onClick={() => { setActiveCategory(category.id); setFaqQuery(""); setOpenQuestion(null); }}
                   aria-current={!query && activeCategory === category.id ? "page" : undefined}
                   className={`flex shrink-0 items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${!query && activeCategory === category.id ? "bg-[#008236] font-semibold text-white" : "text-foreground hover:bg-secondary"}`}
                 >
@@ -553,10 +581,24 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
               </div>
               {visibleFaqs.length ? (
                 <div className="divide-y divide-border rounded-md border border-border bg-white">
-                  {visibleFaqs.map((faq) => <FAQItem key={faq.q} question={faq.q} answer={faq.a} />)}
+                  {visibleFaqs.map((faq) => (
+                    <FAQItem
+                      key={faq.q}
+                      question={faq.q}
+                      answer={faq.a}
+                      open={openQuestion === faq.q}
+                      onToggle={() => setOpenQuestion(openQuestion === faq.q ? null : faq.q)}
+                    />
+                  ))}
                 </div>
               ) : (
                 <div className="rounded-md border border-border bg-white p-8 text-center text-sm text-muted-foreground">No matching questions. Try another search or contact us directly.</div>
+              )}
+              {!query && activeCategory === "brands" && (
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-md border border-[#008236]/20 bg-[#f5f8f5] p-5">
+                  <p className="text-sm text-foreground">Ready to set up your brand network?</p>
+                  <button onClick={() => setView("brandsignup")} className="inline-flex items-center gap-2 text-sm font-semibold text-[#008236] hover:underline">Register Brand HQ <ArrowRight className="h-4 w-4" /></button>
+                </div>
               )}
               <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
                 <p className="text-sm text-muted-foreground">Still need help? Our team can assist.</p>
@@ -704,9 +746,9 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
 
         <section className="grid gap-6 border-t border-border pt-10 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase text-[#008236]">Help centre</p>
+            <p className="mb-2 text-xs font-bold uppercase text-[#008236]">FAQs</p>
             <h2 className="mb-2 text-2xl font-semibold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Find an answer, faster.</h2>
-            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">Explore questions about skin analysis, product matching, accounts, privacy, and vendor tools by topic.</p>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">Explore questions about skin analysis, product matching, accounts, privacy, vendor tools, and Brand HQ by topic.</p>
           </div>
           <button onClick={() => setView("faq")} className="inline-flex items-center justify-center gap-2 rounded-md border border-[#008236] px-5 py-3 text-sm font-semibold text-[#008236] transition-colors hover:bg-[#008236]/5">
             Browse FAQs <ArrowRight className="h-4 w-4" />
@@ -742,12 +784,11 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
   );
 }
 
-export function FAQItem({ question, answer }: { question: string; answer: string }) {
-  const [open, setOpen] = useState(false);
+export function FAQItem({ question, answer, open, onToggle }: { question: string; answer: string; open: boolean; onToggle: () => void }) {
   return (
     <div className="bg-card">
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={onToggle}
         aria-expanded={open}
         className="w-full flex items-center justify-between px-6 py-4 text-left gap-4"
       >

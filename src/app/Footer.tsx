@@ -158,18 +158,12 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
       </div>
 
       {/* Bottom bar */}
-      <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-6 py-6">
         <p
           className="text-xs text-emerald-100/60 text-center sm:text-left"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
           © {new Date().getFullYear()} Anovra Africa Ltd. All rights reserved.
-        </p>
-        <p
-          className="text-xs text-emerald-200/70 font-medium"
-          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-        >
-          Abuja, Nigeria
         </p>
       </div>
     </footer>
