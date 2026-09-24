@@ -1,5 +1,6 @@
 import type { View } from "./types";
 import { Mail, Phone, MapPin, ArrowUpRight } from "lucide-react";
+import { SocialLinks } from "./SocialLinks";
 
 export function Footer({ setView }: { setView: (v: View) => void }) {
   return (
@@ -27,6 +28,9 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
           >
             AI-powered skincare intelligence built specifically for African skin tones and concerns. Connecting consumers to formulations that truly work, and empowering vendors with intelligent commerce.
           </p>
+          <div className="pt-2 text-emerald-50">
+            <SocialLinks compact />
+          </div>
         </div>
 
         {/* Platform */}
@@ -41,9 +45,9 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
             {[
               { label: "Home", view: "landing" as View },
               { label: "Skin Test", view: "skintest" as View },
-              { label: "My Skin Dashboard", view: "userdashboard" as View },
               { label: "Product Shop", view: "shop" as View },
               { label: "About Anovra", view: "about" as View },
+              { label: "FAQs", view: "faq" as View },
             ].map((l) => (
               <li key={l.label}>
                 <button
@@ -70,7 +74,6 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
             {[
               { label: "Join as a Vendor", view: "signup" as View },
               { label: "Vendor Sign In", view: "vendorlogin" as View },
-              { label: "Vendor Dashboard", view: "dashboard" as View },
               { label: "Browse Partner Shops", view: "shop" as View },
               { label: "Admin Portal", view: "adminlogin" as View },
             ].map((l) => (
@@ -143,7 +146,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
             <MapPin className="w-3.5 h-3.5 text-emerald-300/80 shrink-0 mt-0.5" />
             <div>
               <span className="block font-medium text-emerald-100/85">Headquarters</span>
-              <span>Lagos · Abuja, Nigeria</span>
+              <span>Abuja, Nigeria</span>
             </div>
           </div>
         </div>
@@ -166,7 +169,7 @@ export function Footer({ setView }: { setView: (v: View) => void }) {
           className="text-xs text-emerald-200/70 font-medium"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
-          Lagos, Nigeria 🇳🇬
+          Abuja, Nigeria
         </p>
       </div>
     </footer>

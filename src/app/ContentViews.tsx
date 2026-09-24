@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { User, Store, Users, ShieldCheck, Mail, MessageSquare, CheckCircle, ChevronDown, ChevronUp, MapPin, AlertCircle, ExternalLink } from "lucide-react";
+import { User, Store, Users, ShieldCheck, Mail, MessageSquare, ChevronDown, ChevronUp, MapPin, AlertCircle, ExternalLink, ArrowRight, Search } from "lucide-react";
 import type { View } from "./types";
+import { SocialLinks } from "./SocialLinks";
 
 // ---- ABOUT ----
 export function AboutView({ setView }: { setView: (v: View) => void }) {
@@ -291,14 +292,13 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
 }
 
 // ---- CONTACT ----
-export function ContactView({ setView }: { setView: (v: View) => void }) {
+export function ContactView({ setView, faqOnly = false }: { setView: (v: View) => void; faqOnly?: boolean }) {
   const [form, setForm] = useState({ name: "", email: "", role: "", subject: "", message: "" });
-  const [sent, setSent] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("all");
+  const [composeOpened, setComposeOpened] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("general");
+  const [faqQuery, setFaqQuery] = useState("");
 
   const categories = [
-    { id: "all", label: "All Questions" },
     { id: "general", label: "General" },
     { id: "skin", label: "Skin Analysis" },
     { id: "products", label: "Recommendations" },
@@ -309,8 +309,11 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSending(true);
-    setTimeout(() => { setSending(false); setSent(true); }, 1200);
+    const recipient = form.role === "vendor" ? "vendors@anovra.africa" : "hello@anovra.africa";
+    const subject = encodeURIComponent(form.subject.trim().slice(0, 120));
+    const body = encodeURIComponent(`${form.message.trim()}\n\nFrom: ${form.name.trim()}\nEmail: ${form.email.trim()}\nEnquiry type: ${form.role || "General"}`);
+    setComposeOpened(true);
+    window.location.href = `mailto:${recipient}?subject=${subject}&body=${body}`;
   }
 
   const channels = [
@@ -318,40 +321,29 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
       icon: Mail,
       label: "General enquiries",
       value: "hello@anovra.africa",
-      sub: "We reply within 24 hours",
+      href: "mailto:hello@anovra.africa",
+      sub: "Questions and partnerships",
     },
     {
       icon: Store,
       label: "Vendor support",
       value: "vendors@anovra.africa",
+      href: "mailto:vendors@anovra.africa",
       sub: "Onboarding, catalogue & billing help",
     },
     {
       icon: ShieldCheck,
       label: "Admin & compliance",
       value: "admin@anovra.africa",
+      href: "mailto:admin@anovra.africa",
       sub: "Platform issues and safety reports",
     },
     {
       icon: MessageSquare,
       label: "WhatsApp business",
       value: "+2349167664619",
+      href: "https://wa.me/2349167664619",
       sub: "Mon – Fri, 9am – 6pm WAT",
-    },
-  ];
-
-  const offices = [
-    {
-      city: "Aba",
-      address: "No 2 Ajiwe street, off brass road, Aba, Nigeria",
-      tag: "Branch Office",
-      photo: "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=600&h=340&fit=crop&auto=format",
-    },
-    {
-      city: "Abuja",
-      address: "Former pack well, Lubge, FCT, Abuja, Nigeria.",
-      tag: "Satellite Office",
-      photo: "https://images.unsplash.com/photo-1568515387631-8b650bbcdb90?w=600&h=340&fit=crop&auto=format",
     },
   ];
 
@@ -423,7 +415,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "vendors",
       q: "How does Anovra help my business?",
-      a: "Anovra helps vendors: Reduce consultation time, Personalize recommendations, Build customer trust, Increase conversions, Manage products digitally, Reach more customers, and Gain business insights through analytics."
+      a: "Anovra helps vendors reduce consultation time, personalise recommendations, manage their catalogue, and understand customer activity through analytics."
     },
     {
       cat: "vendors",
@@ -470,7 +462,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     {
       cat: "support",
       q: "Is Anovra free to use?",
-      a: "No. Anovra is a subscription-based platform designed to provide ongoing personalised skincare insights and recommendations. We offer flexible plans for both skincare consumers and skincare vendors, so you can choose the option that best suits your needs."
+      a: "New accounts can try premium features for seven days. A free tier remains available afterwards, while paid plans unlock additional customer and business tools."
     },
     {
       cat: "support",
@@ -499,69 +491,121 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
     }
   ];
 
+  if (faqOnly) {
+    const query = faqQuery.trim().toLowerCase();
+    const visibleFaqs = faqs.filter((faq) =>
+      query
+        ? `${faq.q} ${faq.a}`.toLowerCase().includes(query)
+        : faq.cat === activeCategory
+    );
+
+    return (
+      <div className="min-h-screen bg-background px-5 py-12 sm:py-16" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-10 max-w-2xl">
+            <p className="mb-3 text-xs font-bold uppercase text-[#008236]">Help centre</p>
+            <h1 className="mb-3 text-3xl font-semibold text-foreground sm:text-4xl" style={{ fontFamily: "'Fraunces', serif" }}>How can we help?</h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">Browse answers by topic or search for what you need.</p>
+          </div>
+          <label className="relative mb-8 block max-w-2xl">
+            <Search aria-hidden="true" className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+            <span className="sr-only">Search frequently asked questions</span>
+            <input
+              type="search"
+              value={faqQuery}
+              onChange={(event) => setFaqQuery(event.target.value)}
+              placeholder="Search questions and answers"
+              className="w-full rounded-md border border-border bg-white py-3 pl-12 pr-4 text-sm outline-none focus:border-[#008236] focus:ring-2 focus:ring-[#008236]/15"
+            />
+          </label>
+          <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-12">
+            <div className="lg:hidden">
+              <label htmlFor="faq-topic" className="mb-2 block text-xs font-semibold text-muted-foreground">Topic</label>
+              <select
+                id="faq-topic"
+                value={activeCategory}
+                onChange={(event) => { setActiveCategory(event.target.value); setFaqQuery(""); }}
+                className="w-full rounded-md border border-border bg-white px-3 py-3 text-sm text-foreground outline-none focus:border-[#008236]"
+              >
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.label} ({faqs.filter((faq) => faq.cat === category.id).length})</option>)}
+              </select>
+            </div>
+            <nav aria-label="FAQ topics" className="hidden gap-2 lg:flex lg:flex-col">
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => { setActiveCategory(category.id); setFaqQuery(""); }}
+                  aria-current={!query && activeCategory === category.id ? "page" : undefined}
+                  className={`flex shrink-0 items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${!query && activeCategory === category.id ? "bg-[#008236] font-semibold text-white" : "text-foreground hover:bg-secondary"}`}
+                >
+                  <span>{category.label}</span>
+                  <span className={`text-xs ${!query && activeCategory === category.id ? "text-white/80" : "text-muted-foreground"}`}>{faqs.filter((faq) => faq.cat === category.id).length}</span>
+                </button>
+              ))}
+            </nav>
+            <main className="min-w-0">
+              <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-xl font-semibold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                  {query ? "Search results" : categories.find((category) => category.id === activeCategory)?.label}
+                </h2>
+                <span className="text-xs text-muted-foreground">{visibleFaqs.length} {visibleFaqs.length === 1 ? "question" : "questions"}</span>
+              </div>
+              {visibleFaqs.length ? (
+                <div className="divide-y divide-border rounded-md border border-border bg-white">
+                  {visibleFaqs.map((faq) => <FAQItem key={faq.q} question={faq.q} answer={faq.a} />)}
+                </div>
+              ) : (
+                <div className="rounded-md border border-border bg-white p-8 text-center text-sm text-muted-foreground">No matching questions. Try another search or contact us directly.</div>
+              )}
+              <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
+                <p className="text-sm text-muted-foreground">Still need help? Our team can assist.</p>
+                <button onClick={() => setView("contact")} className="inline-flex items-center gap-2 text-sm font-semibold text-[#008236] hover:underline">Contact Anovra <ArrowRight className="h-4 w-4" /></button>
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Hero */}
-      <section className="bg-foreground pt-20 pb-16 px-6 text-center relative overflow-hidden">
-        <div
-          className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: "radial-gradient(circle at 70% 40%, #C86B3A 0%, transparent 55%)" }}
-        />
-        <div className="max-w-2xl mx-auto relative z-10">
-          <span className="inline-block text-xs text-accent uppercase tracking-widest mb-4 border border-accent/30 px-3 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>
-            Contact us
-          </span>
-          <h1 className="text-4xl sm:text-5xl font-light text-primary-foreground mb-4" style={{ fontFamily: "'Fraunces', serif" }}>
-            We'd love to hear<br />from you
-          </h1>
-          <p className="text-white/50 text-sm leading-relaxed">
-            Whether you're a vendor with a question, a customer needing help, or a partner looking to collaborate — our team is here.
-          </p>
+      <section className="border-b border-border bg-[#f5f8f5] px-6 py-14 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <p className="mb-3 text-xs font-bold uppercase text-[#008236]">Contact Anovra</p>
+          <h1 className="mb-4 max-w-2xl text-3xl font-semibold leading-tight text-foreground sm:text-5xl" style={{ fontFamily: "'Fraunces', serif" }}>Let’s talk about what you need.</h1>
+          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">Questions about your account, a product, or working with Anovra? Choose a direct channel or prepare a message below.</p>
         </div>
       </section>
 
-      <div className="max-w-6xl mx-auto px-6 py-16 space-y-20">
+      <div className="max-w-6xl mx-auto px-6 py-12 sm:py-16 space-y-16">
 
         {/* Contact channels */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {channels.map((c) => {
             const Icon = c.icon;
             return (
-              <div key={c.label} className="bg-card border border-border rounded-2xl p-5 hover:border-accent/40 transition-colors">
+              <a key={c.label} href={c.href} className="group block min-w-0 rounded-md border border-border bg-card p-5 transition-colors hover:border-[#008236]/50 hover:bg-[#f5f8f5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#008236]">
                 <Icon className="w-5 h-5 text-[#008236] mb-3" />
                 <p className="text-xs text-muted-foreground mb-1">{c.label}</p>
-                <p className="text-sm font-medium text-foreground mb-1">{c.value}</p>
+                <p className="break-words text-sm font-semibold text-foreground mb-1 group-hover:text-[#008236]">{c.value}</p>
                 <p className="text-xs text-muted-foreground">{c.sub}</p>
-              </div>
+              </a>
             );
           })}
         </div>
 
-        {/* Form + offices */}
+        {/* Message form and headquarters */}
         <div className="grid lg:grid-cols-5 gap-12">
           {/* Form */}
           <div className="lg:col-span-3">
             <h2 className="text-2xl font-light text-foreground mb-1" style={{ fontFamily: "'Fraunces', serif" }}>
               Send us a message
             </h2>
-            <p className="text-sm text-muted-foreground mb-8">Fill in the form and we'll get back to you within one business day.</p>
-
-            {sent ? (
-              <div className="bg-green-50 border border-green-200 rounded-2xl p-10 text-center">
-                <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="w-7 h-7 text-green-600" />
-                </div>
-                <h3 className="text-xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>Message sent!</h3>
-                <p className="text-sm text-muted-foreground mb-6">We've received your message and will reply to <strong>{form.email}</strong> within 24 hours.</p>
-                <button
-                  onClick={() => { setSent(false); setForm({ name: "", email: "", role: "", subject: "", message: "" }); }}
-                  className="px-5 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent/90 transition-colors"
-                >
-                  Send another message
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
+            <p className="text-sm text-muted-foreground mb-8">We’ll prepare your message in your email app. Review it there, then press Send.</p>
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate={false}>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Full name *</label>
@@ -571,6 +615,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
                       placeholder="Team member"
                       required
+                      maxLength={100}
                       className="w-full bg-card border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-accent transition-colors"
                     />
                   </div>
@@ -582,6 +627,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                       placeholder="you@example.com"
                       required
+                      maxLength={254}
                       className="w-full bg-card border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-accent transition-colors"
                     />
                   </div>
@@ -611,6 +657,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
                     onChange={(e) => setForm({ ...form, subject: e.target.value })}
                     placeholder="e.g. Vendor onboarding question"
                     required
+                    maxLength={120}
                     className="w-full bg-card border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-accent transition-colors"
                   />
                 </div>
@@ -622,6 +669,7 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
                     onChange={(e) => setForm({ ...form, message: e.target.value })}
                     placeholder="Tell us what's on your mind…"
                     required
+                    maxLength={4000}
                     rows={5}
                     className="w-full bg-card border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-accent transition-colors resize-none"
                   />
@@ -629,97 +677,41 @@ export function ContactView({ setView }: { setView: (v: View) => void }) {
 
                 <button
                   type="submit"
-                  disabled={sending}
-                  className="w-full bg-accent text-white py-3 rounded-xl text-sm font-medium hover:bg-accent/90 transition-colors disabled:opacity-60"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#008236] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#006c2c]"
                 >
-                  {sending ? "Sending…" : "Send message"}
+                  Open email app <ArrowRight className="h-4 w-4" />
                 </button>
+                {composeOpened && <p role="status" className="text-sm text-muted-foreground">Your email app should open with this message. It has not been sent until you press Send there.</p>}
               </form>
-            )}
           </div>
 
-          {/* Offices */}
+          {/* Headquarters and social channels */}
           <div className="lg:col-span-2 space-y-6">
-            <div>
-              <h2 className="text-2xl font-light text-foreground mb-1" style={{ fontFamily: "'Fraunces', serif" }}>Our offices</h2>
-              <p className="text-sm text-muted-foreground">Drop in if you're in the area — we love meeting vendors in person.</p>
+            <div className="rounded-md border border-border bg-[#f5f8f5] p-6">
+              <MapPin className="mb-4 h-5 w-5 text-[#008236]" />
+              <h2 className="mb-1 text-lg font-semibold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Headquarters</h2>
+              <p className="text-sm text-muted-foreground">Abuja, Nigeria</p>
+              <p className="mt-4 text-xs leading-relaxed text-muted-foreground">Please contact our team before arranging an in-person visit.</p>
             </div>
-            {offices.map((o) => (
-              <div key={o.city} className="bg-card border border-border rounded-2xl overflow-hidden">
-                <img src={o.photo} alt={o.city} className="w-full h-36 object-cover" />
-                <div className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-sm font-semibold text-foreground">{o.city}</h3>
-                    <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">{o.tag}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
-                    <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0 text-accent" />
-                    {o.address}
-                  </p>
-                </div>
-              </div>
-            ))}
 
             {/* Social links */}
-            <div className="bg-card border border-border rounded-2xl p-5">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>Follow us</p>
-              <div className="space-y-2">
-                {[
-                  { label: "Instagram", handle: "@anovra.africa" },
-                  { label: "Twitter / X", handle: "@anovraHQ" },
-                  { label: "LinkedIn", handle: "Anovra Africa" },
-                  { label: "TikTok", handle: "@anovra.africa" },
-                ].map((s) => (
-                  <div key={s.label} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{s.label}</span>
-                    <span className="text-accent font-medium">{s.handle}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="rounded-md border border-border bg-card p-6">
+              <p className="mb-4 text-sm font-semibold text-foreground">Follow Anovra</p>
+              <div className="text-[#008236]"><SocialLinks /></div>
             </div>
           </div>
         </div>
 
-        {/* FAQ */}
-        <div>
-          <div className="text-center mb-10">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>FAQ</p>
-            <h2 className="text-3xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>Frequently Asked Questions</h2>
-            <p className="text-sm text-muted-foreground max-w-lg mx-auto">Find answers to common questions about Anovra's skin analysis, recommendations, and vendor plans.</p>
+        <section className="grid gap-6 border-t border-border pt-10 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase text-[#008236]">Help centre</p>
+            <h2 className="mb-2 text-2xl font-semibold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Find an answer, faster.</h2>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">Explore questions about skin analysis, product matching, accounts, privacy, and vendor tools by topic.</p>
           </div>
-
-          {/* Category tabs */}
-          <div className="flex flex-wrap justify-center gap-2 mb-8 max-w-4xl mx-auto px-4">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
-                  activeCategory === cat.id
-                    ? "bg-[#008236] text-white border-[#008236] shadow-sm"
-                    : "bg-card text-muted-foreground border-border hover:bg-secondary hover:text-foreground"
-                }`}
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="max-w-3xl mx-auto divide-y divide-border border border-border rounded-2xl overflow-hidden shadow-xs">
-            {faqs
-              .filter((f) => activeCategory === "all" || f.cat === activeCategory)
-              .map((f, i) => (
-                <FAQItem key={i} question={f.q} answer={f.a} />
-              ))}
-          </div>
-          <p className="text-center text-sm text-muted-foreground mt-8">
-            Still have questions?{" "}
-            <a href="mailto:support@anovra.africa" className="text-accent font-semibold hover:underline">
-              support@anovra.africa
-            </a>
-          </p>
-        </div>
+          <button onClick={() => setView("faq")} className="inline-flex items-center justify-center gap-2 rounded-md border border-[#008236] px-5 py-3 text-sm font-semibold text-[#008236] transition-colors hover:bg-[#008236]/5">
+            Browse FAQs <ArrowRight className="h-4 w-4" />
+          </button>
+        </section>
 
         {/* Bottom CTA */}
         <div className="bg-foreground rounded-3xl p-12 text-center relative overflow-hidden">
@@ -756,6 +748,7 @@ export function FAQItem({ question, answer }: { question: string; answer: string
     <div className="bg-card">
       <button
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className="w-full flex items-center justify-between px-6 py-4 text-left gap-4"
       >
         <span className="text-sm font-medium text-foreground">{question}</span>
@@ -768,4 +761,8 @@ export function FAQItem({ question, answer }: { question: string; answer: string
       )}
     </div>
   );
+}
+
+export function FAQView({ setView }: { setView: (v: View) => void }) {
+  return <ContactView setView={setView} faqOnly />;
 }

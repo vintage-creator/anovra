@@ -11,6 +11,7 @@ import {
   Home,
   Info,
   Mail,
+  CircleHelp,
   ArrowRight,
   ArrowUp,
   Scan,
@@ -26,7 +27,7 @@ import { SkinTestView } from "./SkinTestView";
 import { SignUpView, CustomerSignUpView, SignInView, EmailVerificationPendingView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
 import { TeamLoginView, TeamDashboardView } from "./TeamViews";
 import { supabase } from "./utils/supabase";
-import { AboutView, ContactView } from "./ContentViews";
+import { AboutView, ContactView, FAQView } from "./ContentViews";
 import { AdminView } from "./AdminView";
 import { UserDashboardView } from "./UserDashboardView";
 import { BrandDashboardView } from "./BrandDashboardView";
@@ -56,6 +57,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
   const primaryNavLinks: { id: View; label: string; icon: React.ElementType }[] = [
     { id: "landing", label: "Home", icon: Home },
     { id: "about", label: "About", icon: Info },
+    { id: "faq", label: "Help", icon: CircleHelp },
     { id: "contact", label: "Contact", icon: Mail },
   ];
 
@@ -179,12 +181,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                     alt="Anovra Logo"
                     className="h-11 w-auto object-contain"
                   />
-                  <SheetTitle
-                    className="text-base font-bold tracking-tight text-foreground text-left"
-                    style={{ fontFamily: "'Fraunces', serif" }}
-                  >
-                    Navigation
-                  </SheetTitle>
+                  <SheetTitle className="sr-only">Menu</SheetTitle>
                 </div>
               </SheetHeader>
 
@@ -366,7 +363,7 @@ export default function App() {
     const validViews: View[] = [
       "landing", "dashboard", "catalog", "skintest", "admin",
       "adminlogin", "shop", "brand", "signin", "vendorlogin", "brandlogin", "customerlogin", "signup", "brandsignup", "customersignup", "verifyemail", "forgotpassword",
-      "resetpassword", "teamlogin", "teamdashboard", "branddashboard", "about", "contact",
+      "resetpassword", "teamlogin", "teamdashboard", "branddashboard", "about", "contact", "faq",
       "userdashboard"
     ];
     
@@ -379,11 +376,15 @@ export default function App() {
   };
 
   const [view, setViewState] = useState<View>(getViewFromHash);
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [view]);
   const protectedViews: View[] = ["dashboard", "catalog", "skintest", "userdashboard", "admin", "teamdashboard", "branddashboard"];
   const [isValidatingRoute, setIsValidatingRoute] = useState(() => protectedViews.includes(getViewFromHash()));
 
   const setView = (v: View) => {
     if (protectedViews.includes(v)) setIsValidatingRoute(true);
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     setViewState(v);
     if (v === "landing") {
       clearCustomerScan();
@@ -854,6 +855,7 @@ export default function App() {
         {view === "landing" && <LandingView setView={setView} />}
         {view === "about" && <AboutView setView={setView} />}
         {view === "contact" && <ContactView setView={setView} />}
+        {view === "faq" && <FAQView setView={setView} />}
         {view === "dashboard" && <DashboardView setView={setView} />}
         {view === "catalog" && <CatalogView setView={setView} />}
         {view === "skintest" && <SkinTestView setView={setView} />}
