@@ -75,7 +75,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
           <img
             src="/logo.png"
             alt="Anovra Logo"
-            className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
+            className="h-14 sm:h-15 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
           />
         </button>
 
@@ -176,7 +176,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                   <img
                     src="/logo.png"
                     alt="Anovra Logo"
-                    className="h-9 w-auto object-contain"
+                    className="h-11 w-auto object-contain"
                   />
                   <SheetTitle
                     className="text-base font-bold tracking-tight text-foreground text-left"
@@ -337,6 +337,9 @@ export default function App() {
       window.location.href = window.location.origin + `/#/brand/${slug}`;
       return "brand";
     }
+    if (path === "/auth/callback") {
+      return "verifyemail";
+    }
 
     const hash = window.location.hash.replace("#", "").replace(/^\//, "");
     if (hash.startsWith("shop/")) {
@@ -375,7 +378,7 @@ export default function App() {
   };
 
   const [view, setViewState] = useState<View>(getViewFromHash);
-  const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard", "branddashboard", "skintest"];
+  const protectedViews: View[] = ["dashboard", "catalog", "userdashboard", "admin", "teamdashboard", "branddashboard"];
   const [isValidatingRoute, setIsValidatingRoute] = useState(() => protectedViews.includes(getViewFromHash()));
 
   const setView = (v: View) => {
@@ -441,6 +444,10 @@ export default function App() {
       const code = callbackUrl.searchParams.get("code");
       const fragment = new URLSearchParams(callbackUrl.hash.replace(/^#/, ""));
       const isSignup = callbackUrl.searchParams.get("type") === "signup" || fragment.get("type") === "signup";
+      const routeAfterAuth = (target: View) => {
+        setViewState(target);
+        window.history.replaceState(null, "", `${window.location.origin}/#/${target}`);
+      };
       if (isSignup || code || callbackUrl.pathname === "/auth/callback") {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -448,9 +455,19 @@ export default function App() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
               toast.error("This verification link has expired or has already been used. Please sign in or request a new link.");
-              setView("verifyemail");
+              routeAfterAuth("verifyemail");
               return;
             }
+          }
+        } else if (fragment.get("access_token") && fragment.get("refresh_token")) {
+          const { error } = await supabase.auth.setSession({
+            access_token: fragment.get("access_token") || "",
+            refresh_token: fragment.get("refresh_token") || "",
+          });
+          if (error) {
+            toast.error("This verification link could not be completed. Please sign in or request a new link.");
+            routeAfterAuth("verifyemail");
+            return;
           }
         }
         if (!code) await new Promise((resolve) => setTimeout(resolve, 600));
@@ -488,21 +505,19 @@ export default function App() {
           }
 
           if (resolvedRole === "brand") {
-            setView("branddashboard");
+            routeAfterAuth("branddashboard");
           } else if (resolvedRole === "vendor") {
-            setView("dashboard");
+            routeAfterAuth("dashboard");
           } else if (teamMemberRole === "Manager" || teamMemberRole === "Viewer") {
-            setView("dashboard");
+            routeAfterAuth("dashboard");
           } else if (teamMemberRole === "Representative") {
-            setView("teamdashboard");
+            routeAfterAuth("teamdashboard");
           } else {
-            setView("userdashboard");
+            routeAfterAuth("userdashboard");
           }
-          // Clean the URL by stripping signup query parameters
-          window.history.replaceState(null, "", window.location.pathname + window.location.hash);
         } else {
           toast.error("We could not verify this link. Please request a new confirmation email or sign in if you have already verified.");
-          setView("verifyemail");
+          routeAfterAuth("verifyemail");
         }
       }
     };
@@ -680,10 +695,10 @@ export default function App() {
           }
         };
 
-        // 1. Customer views (skintest, userdashboard) -> Only customer accounts
-        if (view === "skintest" || view === "userdashboard") {
+        // 1. Customer views (userdashboard) -> Only customer accounts
+        if (view === "userdashboard") {
           if (userRole !== "customer" || isAdmin || isStaff) {
-            toast.error("Customer profile required for skin diagnostics. Redirecting to your account dashboard.");
+            toast.error("Customer profile required for customer dashboard. Redirecting to your account dashboard.");
             redirectLoggedInUserToDashboard();
             return;
           }

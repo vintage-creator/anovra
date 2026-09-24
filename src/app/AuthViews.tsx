@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Eye, Check, CheckCircle, AlertCircle, Globe, Upload, ChevronDown, Scan, User, Store, ShieldCheck } from "lucide-react";
+import { Eye, Check, CheckCircle, AlertCircle, Globe, Upload, ChevronDown, ChevronLeft, ChevronRight, Scan, User, Store, ShieldCheck } from "lucide-react";
 import type { View } from "./types";
 import { toast } from "sonner";
 import { supabase } from "./utils/supabase";
@@ -656,15 +656,16 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                 )}
 
                 {/* Wizard Controls */}
-                <div className="flex gap-3 pt-4 border-t border-border">
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-3 pt-4 border-t border-border">
                   {currentStep > 1 && (
                     <button
                       type="button"
                       onClick={() => setCurrentStep((c) => c - 1)}
-                      className="flex-1 py-3 border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/5 rounded-xl font-bold text-sm transition-colors cursor-pointer text-center"
+                      className="w-full sm:w-auto sm:min-w-[120px] py-3 px-5 border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/10 active:scale-[0.98] rounded-xl font-bold text-sm transition-all cursor-pointer text-center flex items-center justify-center gap-2 min-h-[48px] shrink-0"
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
-                      Back
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Back</span>
                     </button>
                   )}
                   
@@ -673,20 +674,21 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                       type="button"
                       onClick={() => setCurrentStep((c) => c + 1)}
                       disabled={currentStep === 1 ? !step1Valid : !step2Valid}
-                      className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all cursor-pointer text-center ${
+                      className={`w-full sm:flex-1 py-3 px-5 rounded-xl font-bold text-sm sm:text-base transition-all cursor-pointer text-center flex items-center justify-center gap-2 min-h-[48px] active:scale-[0.98] ${
                         (currentStep === 1 ? step1Valid : step2Valid)
                           ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-sm hover:shadow"
                           : "bg-muted text-muted-foreground cursor-not-allowed"
                       }`}
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
-                      Continue
+                      <span>Continue</span>
+                      <ChevronRight className="w-4 h-4" />
                     </button>
                   ) : (
                     <button
                       onClick={handleFormSubmit}
                       disabled={!canSubmitVendor || loading}
-                      className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                      className={`w-full sm:flex-1 py-3 px-5 rounded-xl font-bold text-sm sm:text-base transition-all cursor-pointer text-center flex items-center justify-center gap-2 min-h-[48px] active:scale-[0.98] leading-tight ${
                         canSubmitVendor && !loading
                           ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg"
                           : "bg-muted text-muted-foreground cursor-not-allowed"
@@ -695,15 +697,15 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                     >
                       {loading ? (
                         <>
-                          <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                          <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
                           <span>Submitting…</span>
                         </>
                       ) : (
-                        accountKind === "brand" ? "Submit Brand Application" : "Submit Vendor Application"
+                        <span>{accountKind === "brand" ? "Submit Brand Application" : "Submit Vendor Application"}</span>
                       )}
                     </button>
                   )}
-              </div>
+                </div>
             </div>
 
             <p className="text-[11px] text-center text-muted-foreground leading-relaxed mt-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>

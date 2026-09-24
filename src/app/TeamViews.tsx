@@ -464,7 +464,6 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
         currentView="teamdashboard"
         setView={setView}
         title="Team workspace"
-        subtitle="Referral performance, resources and account settings"
         badgeText={member.role || "TEAM"}
         role="admin"
         showShopLink={false}

@@ -120,6 +120,8 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             && p.is_verified === true
             && (p.verification_status || "pending") === "approved"
             && (p.account_type !== "branch" || p.branch_status === "active")
+            && (!p.parent_brand_id || (profiles || []).some((parent) =>
+              parent.id === p.parent_brand_id && parent.is_verified && parent.verification_status === "approved"))
           )
           .map((p) => ({ id: p.id, name: p.business_name, slug: p.slug || slugify(p.business_name), verified: p.is_verified }));
         setVendorOptions(marketplaceProfiles);
@@ -297,7 +299,8 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         const { data, error } = await query;
 
         if (data && data.length > 0) {
-          const formatted = data.map((p) => {
+          const publicVendorIds = new Set(marketplaceProfiles.map((profile) => profile.id));
+          const formatted = data.filter((product) => !isMarketplace || publicVendorIds.has(product.vendor_id)).map((p) => {
             const descriptionText = p.description || "";
             const imagesMatch = descriptionText.match(/<!--IMAGES:([\s\S]*?)-->/);
             const benefitsMatch = descriptionText.match(/<!--BENEFITS:([\s\S]*?)-->/);
@@ -375,6 +378,10 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             };
           });
           setProductsList(formatted);
+          const requestedProduct = new URLSearchParams(window.location.hash.split("?")[1] || "").get("product");
+          if (requestedProduct) {
+            setSelectedProduct(formatted.find((product) => product.id === requestedProduct) || null);
+          }
           sessionStorage.setItem(cacheKey, JSON.stringify(formatted));
         } else {
           setProductsList([]);

@@ -71,7 +71,7 @@ serve(async (request) => {
     let catalog: Record<string, unknown>[] = [];
     if (vendorId) {
       const { data: vendor, error: vendorError } = await db.from("profiles")
-        .select("id, account_type, branch_status, is_verified, verification_status, parent_brand_id, plan, created_at")
+        .select("id, slug, phone, account_type, branch_status, is_verified, verification_status, parent_brand_id, plan, created_at")
         .eq("id", vendorId).maybeSingle();
       if (vendorError || !vendor || !vendor.is_verified || vendor.verification_status !== "approved" ||
           (vendor.account_type === "branch" && vendor.branch_status !== "active"))
@@ -91,9 +91,39 @@ serve(async (request) => {
       const { data: products, error: productError } = await db.from("products").select("*")
         .eq("vendor_id", vendorId).eq("nafdac_status", "approved").limit(50);
       if (productError) throw productError;
-      sourceProducts = products || [];
-      catalog = sourceProducts.map((product) => {
+      sourceProducts = (products || []).map((product) => ({ ...product, vendor }));
+    } else {
+      const { data: products, error: productError } = await db.from("products").select("*")
+        .eq("nafdac_status", "approved").limit(300);
+      if (productError) throw productError;
+      const vendorIds = [...new Set((products || []).map((product) => String(product.vendor_id || "")).filter(Boolean))];
+      if (vendorIds.length) {
+        const { data: vendors, error: vendorError } = await db.from("profiles")
+          .select("id, slug, phone, account_type, branch_status, is_verified, verification_status, parent_brand_id, plan, created_at")
+          .in("id", vendorIds);
+        if (vendorError) throw vendorError;
+        const parentIds = [...new Set((vendors || []).map((vendor) => vendor.parent_brand_id).filter(Boolean))];
+        const { data: parents, error: parentError } = parentIds.length
+          ? await db.from("profiles").select("id, is_verified, verification_status, plan, created_at").in("id", parentIds)
+          : { data: [], error: null };
+        if (parentError) throw parentError;
+        const parentById = new Map((parents || []).map((parent) => [parent.id, parent]));
+        const allowedVendors = new Map((vendors || []).filter((vendor) => {
+          const owner = vendor.parent_brand_id ? parentById.get(vendor.parent_brand_id) : vendor;
+          const trialEnd = new Date(owner?.created_at || 0).getTime() + 7 * 24 * 60 * 60 * 1000;
+          return vendor.is_verified && vendor.verification_status === "approved"
+            && (vendor.account_type !== "branch" || vendor.branch_status === "active")
+            && owner?.is_verified && owner.verification_status === "approved"
+            && ((owner.plan || "free") !== "free" || Date.now() <= trialEnd);
+        }).map((vendor) => [vendor.id, vendor]));
+        sourceProducts = (products || []).filter((product) => allowedVendors.has(product.vendor_id)).slice(0, 50)
+          .map((product) => ({ ...product, vendor: allowedVendors.get(product.vendor_id) }));
+      }
+    }
+    catalog = sourceProducts.map((product) => {
         const description = String(product.description || "");
+        const seller = product.vendor as { slug?: string; phone?: string } | undefined;
+        const phone = String(seller?.phone || "").replace(/\D/g, "");
         return {
           id: String(product.id), name: String(product.name), brand: String(product.brand || ""),
           price: Number(product.price || 0), currency: "NGN", category: String(product.category || "Skincare"),
@@ -103,9 +133,9 @@ serve(async (request) => {
           concerns: [], usage: meta<string>(description, "USAGE", ""),
           imageUrl: String(product.image_url || meta<string[]>(description, "IMAGES", [])[0] || ""),
           nafdacStatus: "approved",
+          ...(phone ? { purchaseUrl: `https://wa.me/${phone}?text=${encodeURIComponent(`Hello, I would like to order ${product.name}`)}` } : {}),
         };
       });
-    }
 
     const media = { type: "image", base64: imageBase64.split(",")[1],
       mimeType: imageBase64.slice(5, imageBase64.indexOf(";")) };
@@ -114,8 +144,11 @@ serve(async (request) => {
     const verdict = capture.data as { accepted: boolean; capture?: { reject_reasons?: unknown[] }; capture_token?: string };
     if (!verdict.accepted) return reply({ accepted: false, rejectReasons: verdict.capture?.reject_reasons || [] });
 
+    const questionnaire = body.questionnaire && typeof body.questionnaire === "object" ? body.questionnaire : undefined;
+
     const analysis = await callApi("/v1/analyse", {
       media, skinArea, captureToken: verdict.capture_token, catalog,
+      questionnaire,
       options: { locale: "en-NG", includeLegacy: true },
     }, key);
     if ("error" in analysis) return reply(analysis, analysis.status, analysis.retryAfter);
@@ -127,7 +160,20 @@ serve(async (request) => {
     };
     if (!result.accepted) return reply({ accepted: false, rejectReasons: result.capture?.reject_reasons || [] });
     if (!result.legacy) return reply({ error: "The scanner returned an incomplete report. Please try again." }, 502);
-    const products = (result.products || []).filter((item) => sourceProducts.some((source) => source.id === item.id));
+    const sourceById = new Map(sourceProducts.map((source) => [String(source.id), source]));
+    const products = (result.products || []).flatMap((item) => {
+      const source = sourceById.get(String(item.id));
+      if (!source) return [];
+      const seller = source.vendor as { slug?: string; phone?: string } | undefined;
+      return [{ ...item,
+        image_url: item.image_url || source.image_url || meta<string[]>(String(source.description || ""), "IMAGES", [])[0] || "",
+        vendor_slug: seller?.slug || "",
+        ingredients: catalog.find((candidate) => candidate.id === String(item.id))?.ingredients || [],
+        purchase_url: item.purchase_url || (seller?.phone
+          ? `https://wa.me/${String(seller.phone).replace(/\D/g, "")}?text=${encodeURIComponent(`Hello, I would like to order ${source.name}`)}`
+          : ""),
+      }];
+    });
     return reply({ accepted: true, ...result.legacy, products,
       ingredientFallback: result.ingredient_fallback || [],
       treatmentPlan: result.treatment || [],

@@ -1,5 +1,5 @@
 export const APP_BASE_URL = Deno.env.get("ANOVRA_APP_URL") || "https://anovra-api.vercel.app";
-export const LOGO_URL = "https://res.cloudinary.com/dcoxo8snb/image/upload/v1784749813/IMG_6932_umtukr.png";
+export const LOGO_URL = `${APP_BASE_URL.replace(/\/$/, "")}/logo.png`;
 
 export function appLink(path = "") {
   if (!path) return APP_BASE_URL;

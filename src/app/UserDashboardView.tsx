@@ -111,6 +111,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [matchedProducts, setMatchedProducts] = useState<any[]>([]);
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [routineList, setRoutineList] = useState<any[]>([]);
+  const [visibleIngredients, setVisibleIngredients] = useState<any[]>([]);
   const [selectedIngredient, setSelectedIngredient] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [trialExpired, setTrialExpired] = useState(false);
@@ -201,20 +202,42 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               benefits: Array.isArray(s.benefits) ? s.benefits : [],
               area: s.skin_area || "Skin",
               createdAt: s.created_at,
-              link: `https://anovra-api.vercel.app/#/userdashboard`,
+              link: `${window.location.origin}/#/userdashboard`,
             };
           });
           setAnalysesList(formatted);
 
           const savedMatches = Array.isArray(scans[0].matched_products) ? scans[0].matched_products : [];
           setMatchedProducts(savedMatches.map((match: any, index: number) => ({
+            id: match.id,
             name: match.name,
             brand: match.brand || "Partner product",
             concern: Array.isArray(match.matched_conditions) ? match.matched_conditions.join(", ") : scans[0].concern,
             match: `${Math.round(Number(match.score || 0))}%`,
             price: `₦${Number(match.price || 0).toLocaleString()}`,
             badge: index === 0 ? "Top match" : "",
+            image: match.image_url || "",
+            vendorSlug: match.vendor_slug || "",
+            purchaseUrl: match.purchase_url || "",
           })));
+          const ingredientNames = [...new Set(savedMatches.flatMap((match: any) =>
+            Array.isArray(match.ingredients) ? match.ingredients.filter((name: unknown) => typeof name === "string") : []))] as string[];
+          const fallbacks = Array.isArray(scans[0].ingredient_fallback) ? scans[0].ingredient_fallback : [];
+          for (const name of fallbacks) {
+            if (typeof name === "string" && !ingredientNames.some((known) => known.toLowerCase() === name.toLowerCase())) ingredientNames.push(name);
+          }
+          if (ingredientNames.length) {
+            const { data: safetyRows, error: safetyError } = await supabase.from("safety_ingredients")
+              .select("name, function, status, scope, max_conc, notes");
+            if (safetyError) throw safetyError;
+            const safetyByName = new Map((safetyRows || []).map((row) => [row.name.trim().toLowerCase(), row]));
+            setVisibleIngredients(ingredientNames.map((name) => {
+              const row = safetyByName.get(name.trim().toLowerCase());
+              return { name, status: row?.status || "unassessed", safe: row?.status === "safe",
+                benefit: row?.notes || row?.function || "No safety note is available for this ingredient yet.",
+                scope: row?.scope || "Not assessed", maxConc: row?.max_conc || "Not specified" };
+            }));
+          }
           const savedTreatments = Array.isArray(scans[0].treatment_plan) ? scans[0].treatment_plan : [];
           setRoutineList(savedTreatments.flatMap((item: any) => {
             const frequency = String(item.frequency || "").toLowerCase();
@@ -275,6 +298,10 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const saveFamilyMember = async () => {
     if (!familyForm.name.trim()) {
       toast.error("Enter a family member name.");
+      return;
+    }
+    if (familyMembers.length >= 5) {
+      toast.error("You can add up to five family profiles.");
       return;
     }
     setSavingFamily(true);
@@ -392,57 +419,64 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const payWithPaystack = async (planKey: "basic" | "premium") => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      if (!user?.email) {
         toast.error("You must be logged in to upgrade your plan.");
         return;
       }
-
-      const email = user.email;
-      const prices = {
-        basic: 3500,
-        premium: 7000,
-      };
-      
-      const amount = prices[planKey] * 100; // in kobo
-
       const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
       if (!paystackPublicKey) {
-        toast.error("Paystack public key is not configured.");
+        toast.error("Customer checkout is temporarily unavailable.");
         return;
       }
-
-      // Initialize Paystack Inline popup
+      const { data: checkout, error: readinessError } = await supabase.functions.invoke("verify-customer-payment", { method: "GET" });
+      if (readinessError || !checkout?.ready) {
+        toast.error("Customer checkout is temporarily unavailable. Please try again later.");
+        return;
+      }
+      if (!(window as any).PaystackPop) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://js.paystack.co/v1/inline.js";
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("Could not load Paystack checkout."));
+          document.body.appendChild(script);
+        });
+      }
+      let paymentCompleted = false;
       const handler = (window as any).PaystackPop.setup({
         key: paystackPublicKey,
-        email: email,
-        amount: amount,
+        email: user.email,
+        amount: (planKey === "basic" ? 3500 : 7000) * 100,
         currency: "NGN",
-        callback: (response: any) => {
-          supabase
-            .from("profiles")
-            .update({ plan: planKey })
-            .eq("id", user.id)
-            .then(({ error }) => {
-              if (error) {
-                toast.error(`Update failed: ${error.message}`);
-              } else {
-                setUserProfile(prev => prev ? {
-                  ...prev,
-                  plan: planKey === "premium" ? "premium" : "glowplus"
-                } : null);
-                toast.success(`Welcome to ${planKey === "premium" ? "Premium Glow" : "Glow Pass+"}! Plan activated successfully!`);
-              }
-            });
+        callback: async (response: { reference?: string; trxref?: string }) => {
+          paymentCompleted = true;
+          const reference = response.reference || response.trxref;
+          if (!reference) {
+            toast.error("Paystack did not return a reference. Please contact support.");
+            return;
+          }
+          const { data, error } = await supabase.functions.invoke("verify-customer-payment", {
+            body: { plan: planKey, reference },
+          });
+          if (error || !data?.success) {
+            toast.error(data?.error || "Payment received, but plan activation needs review. Contact support with your Paystack reference.");
+            return;
+          }
+          setUserProfile((current) => current ? {
+            ...current, plan: planKey === "premium" ? "premium" : "glowplus",
+          } : current);
+          setTrialExpired(false);
+          toast.success(`${planKey === "premium" ? "Premium Glow" : "Glow Pass+"} is active.`);
         },
         onClose: () => {
-          toast.error("Upgrade checkout closed.");
-        }
+          if (!paymentCompleted) toast.info("Checkout closed.");
+        },
       });
-
       handler.openIframe();
     } catch (err: any) {
       console.error("Paystack launch error:", err);
-      toast.error("Failed to initialize payment gateway.");
+      toast.error("Could not open customer checkout. Please try again.");
     }
   };
 
@@ -522,7 +556,6 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const trialMinutes = Math.floor((trialMsRemaining / (1000 * 60)) % 60);
   const routineSteps = routineList;
   const familyProfiles = familyMembers;
-  const visibleIngredients: any[] = [];
 
   const tabs = [
     { id: "overview" as UserTab, label: "Overview", icon: <HeartPulse className="w-4 h-4" /> },
@@ -596,7 +629,6 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         currentView="userdashboard"
         setView={setView}
         title="My Skin Portal"
-        subtitle={latestAnalysis ? `Skin score: ${latestScoreText} · Personalised routine` : "Start a skin test to evaluate your skin"}
         role="consumer"
         showShopLink={false}
         onMenuClick={() => setSidebarOpen((open) => !open)}
@@ -1025,10 +1057,11 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           <div className="space-y-3">
             {matchedProducts.length > 0 ? (
               (accessPlan === "glow" ? matchedProducts.slice(0, 3) : matchedProducts).map((r, i) => (
-                <div key={r.name} className={cn("bg-card border border-border rounded-xl p-4 flex items-center gap-4", i === 0 && "border-accent/30 ring-1 ring-accent/10")}>
+                <div key={r.id || r.name} className={cn("bg-card border border-border rounded-xl p-4 flex flex-wrap sm:flex-nowrap items-center gap-4", i === 0 && "border-accent/30 ring-1 ring-accent/10")}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${i === 0 ? "bg-accent text-white" : "bg-muted text-muted-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
                     {i + 1}
                   </div>
+                  {r.image && <img src={r.image} alt="" className="w-12 h-12 object-cover rounded-md border border-border flex-shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="text-sm font-medium text-foreground truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{r.name}</p>
@@ -1040,6 +1073,14 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                     <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{r.price}</p>
                     <p className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{r.match} match</p>
                   </div>
+                  {r.id && (
+                    <a
+                      href={`/#/shop${r.vendorSlug ? `/${encodeURIComponent(r.vendorSlug)}` : ""}?product=${encodeURIComponent(r.id)}`}
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs font-semibold text-foreground hover:border-accent hover:text-accent w-full sm:w-auto"
+                    >
+                      View product <ChevronRight className="w-3.5 h-3.5" />
+                    </a>
+                  )}
                 </div>
               ))
             ) : (
@@ -1080,20 +1121,20 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 onClick={() => setSelectedIngredient(ing)}
                 className={cn("w-full text-left bg-card border rounded-xl p-4 flex items-start gap-4 transition-all hover:shadow-sm hover:border-accent/40", ing.safe ? "border-border" : "border-red-200 bg-red-50/30")}
               >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${ing.safe ? "bg-green-100" : "bg-red-100"}`}>
-                  {ing.safe ? <Check className="w-3.5 h-3.5 text-green-700" /> : <X className="w-3.5 h-3.5 text-red-600" />}
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${ing.safe ? "bg-green-100" : ing.status === "unassessed" ? "bg-muted" : "bg-red-100"}`}>
+                  {ing.safe ? <Check className="w-3.5 h-3.5 text-green-700" /> : ing.status === "unassessed" ? <FlaskConical className="w-3.5 h-3.5 text-muted-foreground" /> : <X className="w-3.5 h-3.5 text-red-600" />}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{ing.name}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${ing.safe ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${ing.safe ? "bg-green-50 text-green-700" : ing.status === "unassessed" ? "bg-muted text-muted-foreground" : "bg-red-50 text-red-700"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
                       {ing.status}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{ing.benefit}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className="text-[10px] bg-muted text-muted-foreground px-2 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>{ing.scope}</span>
-                    <span className="text-[10px] bg-muted text-muted-foreground px-2 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Max: {ing.maxConc}</span>
+                    {ing.maxConc !== "Not specified" && <span className="text-[10px] bg-muted text-muted-foreground px-2 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Max: {ing.maxConc}</span>}
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground mt-1" />
@@ -1443,9 +1484,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Family skin profiles</h2>
                 <PlanBadge required="premium" current={accessPlan} />
               </div>
-              <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Track up to 5 family members. Each profile gets its own skin analysis history.</p>
+              <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Keep skin notes for up to five family members.</p>
             </div>
-            <button onClick={() => setShowAddFamily((v) => !v)} className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <button onClick={() => setShowAddFamily((v) => !v)} disabled={familyProfiles.length >= 5} className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors font-medium disabled:opacity-50" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               <Plus className="w-3.5 h-3.5" /> Add member
             </button>
           </div>
@@ -1518,13 +1559,6 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.skinType} · {m.concern}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.relationship} · {m.ageBand}{m.notes ? ` · ${m.notes}` : ""}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Last scan</p>
-                  <p className="text-xs font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{m.lastScan}</p>
-                </div>
-                <button onClick={() => openCustomerSkinTest()} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  New scan <ChevronRight className="w-3 h-3" />
-                </button>
               </div>
             ))}
             {familyProfiles.length === 0 && (

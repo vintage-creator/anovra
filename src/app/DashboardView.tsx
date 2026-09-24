@@ -836,7 +836,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       {/* Mobile Header Bar */}
       <div className="md:hidden flex items-center justify-between p-4 bg-card border-b border-border sticky top-0 z-30 w-full shrink-0">
         <button onClick={() => setView("landing")} className="flex items-center cursor-pointer" title="Go to home">
-          <img src="/logo.png" alt="Anovra Logo" className="h-13 w-auto" />
+          <img src="/logo.png" alt="Anovra Logo" className="h-10 w-auto object-contain" />
         </button>
         <button onClick={() => setSidebarOpen(true)} className="p-2 text-foreground hover:bg-secondary rounded-lg cursor-pointer">
           <Menu className="w-5 h-5" />
@@ -853,9 +853,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         {/* Top Section */}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {/* Logo and close button */}
-          <div className="p-5 border-b border-border flex items-center justify-between">
+          <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between">
             <button onClick={() => setView("landing")} className="flex items-center cursor-pointer" title="Go to home">
-              <img src="/logo.png" alt="Anovra Logo" className="h-15 w-auto" />
+              <img src="/logo.png" alt="Anovra Logo" className="h-11 sm:h-12 w-auto object-contain" />
             </button>
             <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1.5 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer">
               <X className="w-4 h-4" />

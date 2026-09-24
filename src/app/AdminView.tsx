@@ -1117,10 +1117,11 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           currentView="admin"
           setView={setView}
           title="Control Center"
-          subtitle="Platform Operations, Merchant Verification & Product Safety Control"
           badgeText="PLATFORM ADMIN"
           role="admin"
           showShopLink={false}
+          onMenuClick={() => setIsMobileMenuOpen(true)}
+          menuLabel="Menu"
         />
       )}
 

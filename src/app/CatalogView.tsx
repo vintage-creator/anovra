@@ -1331,8 +1331,7 @@ export function CatalogView({ setView, role = "Vendor" }: { setView?: (v: View) 
           currentView="catalog"
           setView={setView}
           title="Product Catalogue"
-          subtitle={`${productsList.filter((p) => p.status === "active").length} active products · NAFDAC Safety Screened`}
-          badgeText="NAFDAC Moderate"
+          badgeText="INVENTORY"
           role="vendor"
           showShopLink={true}
         />

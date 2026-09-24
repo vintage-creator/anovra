@@ -91,147 +91,149 @@ export function UnifiedDashboardHeader({
     .join("") || "U";
 
   return (
-    <div className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border shadow-xs mb-6 transition-all">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-        {/* Top bar: Brand + Role-Specific Quick Nav + Actions */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border shadow-xs mb-6 transition-all">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        {/* Main single-row navbar: Always items-center justify-between */}
+        <div className="flex items-center justify-between h-16 sm:h-18 gap-3">
           
-          {/* Brand Logo & Title */}
-          <div className="flex items-center gap-3.5">
+          {/* Left: Brand Logo & Compact Context Pill */}
+          <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
             <button
               onClick={() => setView("landing")}
               className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236] rounded-xl transition-transform hover:scale-105 active:scale-95 shrink-0"
               aria-label="Anovra Home"
             >
-              <img src="/logo.png" alt="Anovra Logo" className="h-14 sm:h-16 md:h-18 w-auto object-contain transition-transform group-hover:scale-105" />
+              <img src="/logo.png" alt="Anovra Logo" className="h-10 sm:h-12 md:h-13 w-auto object-contain transition-transform group-hover:scale-105" />
             </button>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-                  {title}
-                </h1>
-                {badgeText && role !== "consumer" && (
-                  <span className="text-[10px] uppercase font-bold font-mono bg-accent/15 text-accent px-2 py-0.5 rounded-full">
-                    {badgeText}
-                  </span>
-                )}
-                {role === "vendor" && (onToggleVerify ? (
+
+            {/* Subtle Divider (Desktop/Tablet) */}
+            <div className="hidden sm:block h-5 w-px bg-border/80 shrink-0" />
+
+            {/* Workspace Context Badge (Clean & Compact) */}
+            <div className="hidden sm:flex items-center gap-2 min-w-0">
+              <span className="text-sm font-semibold text-foreground truncate max-w-[160px] md:max-w-[220px]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {title}
+              </span>
+              {badgeText && role !== "consumer" && (
+                <span className="text-[10px] uppercase font-bold font-mono bg-[#008236]/10 text-[#008236] border border-[#008236]/20 px-2 py-0.5 rounded-full shrink-0">
+                  {badgeText}
+                </span>
+              )}
+              {role === "vendor" && (
+                onToggleVerify ? (
                   <button
                     onClick={onToggleVerify}
                     title="Click to toggle verification status"
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border flex items-center gap-1 transition-all ${
+                    className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all shrink-0 ${
                       isVerified
-                        ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30"
-                        : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30"
+                        ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/25"
+                        : "bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-500/25"
                     }`}
                   >
                     {isVerified ? (
                       <>
-                        <CheckCircle className="w-3 h-3 text-emerald-500" /> VERIFIED VENDOR
+                        <CheckCircle className="w-3 h-3 text-emerald-500" /> Verified
                       </>
                     ) : (
                       <>
-                        <AlertTriangle className="w-3 h-3 text-amber-500" /> PENDING VERIFICATION
+                        <AlertTriangle className="w-3 h-3 text-amber-500" /> Pending
                       </>
                     )}
                   </button>
                 ) : (
                   <span
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                    className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-1 shrink-0 ${
                       isVerified
-                        ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30"
-                        : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30"
+                        ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/25"
+                        : "bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-500/25"
                     }`}
                   >
                     {isVerified ? (
                       <>
-                        <CheckCircle className="w-3 h-3 text-emerald-500" /> VERIFIED VENDOR
+                        <CheckCircle className="w-3 h-3 text-emerald-500" /> Verified
                       </>
                     ) : (
                       <>
-                        <AlertTriangle className="w-3 h-3 text-amber-500" /> PENDING VERIFICATION
+                        <AlertTriangle className="w-3 h-3 text-amber-500" /> Pending
                       </>
                     )}
                   </span>
-                ))}
-              </div>
-
-              {subtitle && (
-                <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {subtitle}
-                </p>
-              )}
-
-              {showShopLink && (
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-muted-foreground font-mono truncate max-w-[220px] sm:max-w-none">
-                    {shopLink}
-                  </span>
-                  <button
-                    onClick={copyLink}
-                    className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-emerald-600 transition-colors"
-                    title="Copy unique shop URL"
-                  >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
+                )
               )}
             </div>
           </div>
 
-          {/* Role-Specific Quick Nav Links */}
-          <div className="flex items-center gap-1.5">
-            {onMenuClick && (
-              <button
-                onClick={onMenuClick}
-                className="lg:hidden flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-background text-foreground"
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              >
-                <Menu className="w-3.5 h-3.5" />
-                <span>{menuLabel}</span>
-              </button>
+          {/* Right: Actions, Nav Links, Profile, and Mobile Hamburger */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {/* Storefront Link if showShopLink (Desktop only, subtle & clean) */}
+            {showShopLink && (
+              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-muted/60 border border-border/80 rounded-lg text-xs font-mono text-muted-foreground">
+                <span className="truncate max-w-[140px]">{shopLink.replace("https://", "")}</span>
+                <button onClick={copyLink} className="p-0.5 hover:text-foreground transition-colors cursor-pointer" title="Copy shop link">
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             )}
+
+            {/* Desktop Navigation Links */}
+            {links.length > 0 && (
+              <nav className="hidden lg:flex items-center gap-1.5">
+                {links.map((link) => {
+                  const Icon = link.icon;
+                  const isActive = currentView === link.id;
+                  return (
+                    <button
+                      key={link.id}
+                      onClick={() => {
+                        if (role === "consumer" && link.id === "shop") {
+                          sessionStorage.removeItem("active_shop_slug");
+                        }
+                        setView(link.id);
+                      }}
+                      className={`flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-xl transition-all whitespace-nowrap font-semibold cursor-pointer ${
+                        isActive
+                          ? "bg-[#008236] text-white shadow-xs"
+                          : "bg-secondary/70 text-foreground hover:bg-secondary hover:text-foreground"
+                      }`}
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{link.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
+
+            {/* Consumer Profile Avatar Button */}
             {role === "consumer" && onProfileClick && (
               <button
                 onClick={onProfileClick}
-                className="hidden lg:flex w-10 h-10 rounded-full border border-accent/25 bg-accent/10 text-accent hover:bg-accent hover:text-white transition-colors items-center justify-center text-xs font-bold shadow-sm"
-                aria-label="Edit user profile"
-                title="Edit user profile"
+                className="w-9 h-9 rounded-full border border-border bg-[#008236]/10 text-[#008236] hover:bg-[#008236] hover:text-white transition-colors flex items-center justify-center text-xs font-bold shadow-2xs cursor-pointer"
+                aria-label="User Profile"
+                title="User Profile"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 {avatarInitials}
               </button>
             )}
-          <div className="hidden lg:flex items-center gap-1.5 flex-wrap sm:flex-nowrap overflow-x-auto pb-1 sm:pb-0">
-            {links.map((link) => {
-              const Icon = link.icon;
-              const isActive = currentView === link.id;
-              return (
-                <button
-                  key={link.id}
-                  onClick={() => {
-                    if (role === "consumer" && link.id === "shop") {
-                      sessionStorage.removeItem("active_shop_slug");
-                    }
-                    setView(link.id);
-                  }}
-                  className={`flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg transition-all whitespace-nowrap font-medium ${
-                    isActive
-                      ? "bg-accent text-white font-semibold shadow-xs"
-                      : "bg-secondary/80 text-foreground hover:bg-muted"
-                  }`}
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{link.label}</span>
-                </button>
-              );
-            })}
-          </div>
+
+            {/* Mobile/Tablet Hamburger Menu Button - ALWAYS PINNED ON THE RIGHT */}
+            {onMenuClick && (
+              <button
+                onClick={onMenuClick}
+                className="lg:hidden flex items-center justify-center gap-1.5 h-9 sm:h-10 px-3 rounded-xl border border-border bg-card hover:bg-muted text-foreground transition-colors cursor-pointer shrink-0 shadow-2xs"
+                aria-label={menuLabel}
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                <Menu className="w-4 h-4 text-foreground" />
+                <span className="text-xs font-semibold">{menuLabel}</span>
+              </button>
+            )}
           </div>
 
         </div>
       </div>
-    </div>
+    </header>
   );
 }

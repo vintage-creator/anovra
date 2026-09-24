@@ -635,13 +635,11 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
       <UnifiedDashboardHeader
         currentView="branddashboard"
         setView={setView}
-        title={brandProfile?.business_name || brandProfile?.name || "Brand Dashboard"}
-        subtitle="Manage branches, sales, scans, and catalogue activity across your organisation"
-        badgeText="Brand Admin"
+        title="Brand HQ"
         role="admin"
         showShopLink={false}
         onMenuClick={() => setMobileMenuOpen(true)}
-        menuLabel="Brand menu"
+        menuLabel="Menu"
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
@@ -681,6 +679,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
               setTab={selectTab}
               signOut={signOut}
               onEditBrandIdentity={openEditBrandIdentity}
+              setView={setView}
             />
           </div>
         </div>
@@ -698,6 +697,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
               setTab={selectTab}
               signOut={signOut}
               onEditBrandIdentity={openEditBrandIdentity}
+              setView={setView}
             />
           </aside>
 
@@ -707,12 +707,19 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                 <section className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-xs">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                     <div>
-                      <p className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Organisation command centre</p>
+                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                        <span className="text-xs uppercase tracking-wider text-[#008236] font-mono font-bold">
+                          {brandProfile?.business_name || brandProfile?.name || "Brand Workspace"}
+                        </span>
+                        <span className="text-[10px] uppercase font-bold font-mono bg-[#008236]/10 text-[#008236] border border-[#008236]/20 px-2 py-0.5 rounded-full">
+                          Brand Admin
+                        </span>
+                      </div>
                       <h2 className="text-2xl sm:text-3xl font-light text-foreground mt-1" style={{ fontFamily: "'Fraunces', serif" }}>
                         Branch performance at a glance
                       </h2>
                       <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
-                        Add branches once, let each branch operate as a vendor, and monitor scans, products, and sales from one brand-level dashboard.
+                        Manage branches, sales, scans, and catalogue activity across your organisation. Add branches once, let each branch operate as a vendor, and monitor all branch activity in one place.
                       </p>
                     </div>
                     <div className="flex items-center gap-2.5 flex-wrap">
@@ -990,8 +997,8 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
 
       {/* Edit Brand Profile Modal */}
       {showEditBrandIdentity && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-3xl p-5 sm:p-8 max-w-xl w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[calc(100dvh-1.5rem)] overflow-y-auto">
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
                 <span className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-accent font-semibold mb-1">
@@ -1222,6 +1229,7 @@ function BrandSidebar({
   setTab,
   signOut,
   onEditBrandIdentity,
+  setView,
 }: {
   brandName?: string;
   brandLogo?: string | null;
@@ -1233,6 +1241,7 @@ function BrandSidebar({
   setTab: (tab: BrandTab) => void;
   signOut: () => void;
   onEditBrandIdentity?: () => void;
+  setView?: (v: View) => void;
 }) {
   return (
     <div className="h-full flex flex-col justify-between">
@@ -1290,13 +1299,31 @@ function BrandSidebar({
         </nav>
       </div>
 
-      <div className="pt-3 border-t border-border mt-auto">
+      <div className="pt-3 border-t border-border mt-auto space-y-1">
+        {setView && (
+          <>
+            <button
+              onClick={() => setView("skintest")}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-[#008236] hover:bg-[#008236]/10 transition-colors font-semibold cursor-pointer"
+            >
+              <Scan className="w-4 h-4 text-[#008236]" />
+              <span>Analyse Skin (Test)</span>
+            </button>
+            <button
+              onClick={() => setView("brand")}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium cursor-pointer"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Public Brand Page</span>
+            </button>
+          </>
+        )}
         <button
           onClick={signOut}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium cursor-pointer"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors font-medium cursor-pointer"
         >
           <LogOut className="w-4 h-4" />
-          Sign out
+          <span>Sign out</span>
         </button>
       </div>
     </div>
