@@ -323,7 +323,6 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
       }
 
       sessionStorage.setItem("pending_verification_email", form.email);
-      sessionStorage.setItem("pending_verification_kind", selectedRole);
       toast.success("Account created. Check your email to verify it.");
       setView("verifyemail");
     } catch (err: any) {
@@ -792,7 +791,6 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
         throw new Error("An account already uses this email address. Sign in or reset your password.");
       }
       sessionStorage.setItem("pending_verification_email", form.email);
-      sessionStorage.setItem("pending_verification_kind", "customer");
       toast.success("Account created. Check your email to verify it.");
       setView("verifyemail");
     } catch (err: any) {
@@ -982,8 +980,6 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
 
 export function EmailVerificationPendingView({ setView }: { setView: (v: View) => void }) {
   const email = sessionStorage.getItem("pending_verification_email") || "your email address";
-  const kind = sessionStorage.getItem("pending_verification_kind") || "customer";
-  const loginView: View = kind === "brand" ? "brandlogin" : kind === "vendor" ? "vendorlogin" : "customerlogin";
   const [resending, setResending] = useState(false);
   const [resendWait, setResendWait] = useState(0);
 
@@ -1028,11 +1024,11 @@ export function EmailVerificationPendingView({ setView }: { setView: (v: View) =
           Check your inbox
         </h1>
         <p className="text-sm text-muted-foreground leading-relaxed mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          We sent a verification link to <strong className="text-foreground">{email}</strong>. Open the email and click the confirmation button. After verification, you can sign in through the correct {kind === "brand" ? "Brand HQ" : kind === "vendor" ? "Vendor" : "Customer"} page.
+          We sent a verification link to <strong className="text-foreground">{email}</strong>. Open the email and confirm your address, then sign in to your account.
         </p>
         <div className="grid gap-3">
           <button
-            onClick={() => setView(loginView)}
+            onClick={() => setView("signin")}
             className="w-full py-3.5 rounded-xl bg-[#008236] text-white font-bold text-sm hover:bg-[#006c2c] transition-colors shadow-md cursor-pointer"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
@@ -1066,6 +1062,7 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showSignupChoices, setShowSignupChoices] = useState(false);
 
   // Email OTP states
   const [useOtp, setUseOtp] = useState(false);
@@ -1317,7 +1314,6 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
     } catch (err: any) {
       if (/email[_ ]not[_ ]confirmed/i.test(err?.message || "")) {
         sessionStorage.setItem("pending_verification_email", email.trim().toLowerCase());
-        sessionStorage.setItem("pending_verification_kind", accountKind === "any" ? "customer" : accountKind);
         toast.info("Confirm your email before signing in. You can request a fresh verification link.");
         setView("verifyemail");
         return;
@@ -1350,13 +1346,13 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
             </button>
 
             <p className="text-xs tracking-[0.2em] uppercase text-[#C86B3A] font-bold mb-1.5" style={{ fontFamily: "'DM Mono', monospace" }}>
-              {accountKind === "brand" ? "Brand HQ Login" : accountKind === "vendor" ? "Vendor Login" : accountKind === "customer" ? "Customer Login" : "Secure Gateway"}
+              {accountKind === "brand" ? "Brand HQ Login" : accountKind === "vendor" ? "Vendor Login" : accountKind === "customer" ? "Customer Login" : "Account sign in"}
             </p>
             <h1 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
               {accountKind === "brand" ? "Brand HQ sign in" : accountKind === "vendor" ? "Vendor sign in" : accountKind === "customer" ? "Customer sign in" : "Welcome back"}
             </h1>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {accountKind === "any" ? "Sign in to access your account" : "Use the dedicated login for this account type"}
+              {accountKind === "any" ? "One sign-in for customers, vendors, brands and Anovra staff." : "Sign in to your account"}
             </p>
           </div>
         </div>
@@ -1483,25 +1479,24 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
               )}
             </button>
 
-            <div className="text-center text-sm text-muted-foreground space-y-2 mt-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              <p>
-                Need a customer account?{" "}
-                <button onClick={() => setView("customersignup")} className="text-[#008236] underline underline-offset-2 hover:text-[#006c2c] font-bold cursor-pointer">
-                  Sign up
-                </button>
-              </p>
-              <p className="text-xs">
-                Skincare vendor?{" "}
-                <button onClick={() => setView("signup")} className="text-[#C86B3A] underline underline-offset-2 hover:text-[#b05a2e] font-bold cursor-pointer">
-                  Apply as Vendor
-                </button>
-              </p>
-              <p className="text-xs">
-                Established brand?{" "}
-                <button onClick={() => setView("brandsignup")} className="text-[#C86B3A] underline underline-offset-2 hover:text-[#b05a2e] font-bold cursor-pointer">
-                  Register Brand HQ
-                </button>
-              </p>
+            <div className="border-t border-border pt-5 text-center" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <button type="button" onClick={() => setShowSignupChoices((value) => !value)} aria-expanded={showSignupChoices} className="text-sm font-semibold text-[#008236] hover:underline">
+                {showSignupChoices ? "Hide account options" : "New to Anovra? Create an account"}
+              </button>
+              {showSignupChoices && (
+                <div className="mt-4 grid gap-2 text-left">
+                  {[
+                    { label: "Customer", description: "Get skin insights and product matches", view: "customersignup" as View },
+                    { label: "Vendor", description: "Create a skincare storefront", view: "signup" as View },
+                    { label: "Brand HQ", description: "Manage branches from one workspace", view: "brandsignup" as View },
+                  ].map((option) => (
+                    <button key={option.label} type="button" onClick={() => setView(option.view)} className="flex w-full items-center justify-between gap-3 rounded-md border border-border px-4 py-3 text-left transition-colors hover:border-[#008236]/50 hover:bg-[#f5f8f5]">
+                      <span className="min-w-0"><span className="block text-sm font-semibold text-foreground">{option.label}</span><span className="block text-xs text-muted-foreground">{option.description}</span></span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-[#008236]" />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1516,17 +1511,19 @@ export function ForgotPasswordView({ setView }: { setView: (v: View) => void }) 
   const [loading, setLoading] = useState(false);
 
   const handleForgot = async () => {
-    if (!email) { setError("Please enter your email address."); return; }
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) { setError("Enter a valid email address."); return; }
     setError("");
     setLoading(true);
 
     try {
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${ANOVRA_AUTH_REDIRECT_ORIGIN}/#resetpassword`,
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${ANOVRA_AUTH_REDIRECT_ORIGIN}/auth/callback`,
       });
       if (resetErr) throw resetErr;
+      sessionStorage.setItem("password_recovery_requested_at", String(Date.now()));
       setSuccess(true);
-      toast.success("Verification link dispatched to your inbox!");
+      toast.success("If this email has an account, a reset link is on its way.");
     } catch (err: any) {
       setError(err.message || "Failed to trigger recovery. Verify details.");
       toast.error(err.message || "Password recovery error.");
@@ -1562,7 +1559,7 @@ export function ForgotPasswordView({ setView }: { setView: (v: View) => void }) 
               Forgot password?
             </h1>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              No worries, enter your email and we will send a reset link
+              Enter your account email to request a password reset link.
             </p>
           </div>
         </div>
@@ -1575,26 +1572,20 @@ export function ForgotPasswordView({ setView }: { setView: (v: View) => void }) 
                   <Check className="w-6 h-6 text-[#008236]" />
                 </div>
                 <h3 className="text-xl font-bold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Reset link sent!
+                  Check your inbox
                 </h3>
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  We have sent a verification email to <span className="font-semibold text-foreground">{email}</span>. Click on the link to reset your password.
+                  If an account exists for <span className="font-semibold text-foreground">{email.trim().toLowerCase()}</span>, you will receive a reset link. Open it from your email to choose a new password.
                 </p>
                 <div className="pt-2 flex flex-col gap-2">
                   <button
-                    onClick={() => setView("resetpassword")}
-                    className="w-full py-3.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white font-bold text-sm shadow-md hover:shadow-lg transition-colors cursor-pointer"
-                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  >
-                    Go to Reset Password screen (Demo)
-                  </button>
-                  <button
                     onClick={() => setView("signin")}
-                    className="w-full py-3 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    className="w-full rounded-md border border-border py-3 text-sm font-semibold text-foreground hover:bg-secondary transition-colors cursor-pointer"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
-                    Back to Sign In
+                    Back to sign in
                   </button>
+                  <button onClick={() => { setSuccess(false); setEmail(""); }} className="text-sm font-medium text-[#008236] hover:underline">Use another email</button>
                 </div>
               </div>
             ) : (
@@ -1650,11 +1641,13 @@ export function ResetPasswordView({ setView }: { setView: (v: View) => void }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [linkVerified] = useState(() => Boolean(sessionStorage.getItem("password_recovery_verified")));
 
   const passwordsMatch = password === confirmPassword;
   const isStrengthValid = password.length >= 8;
 
   const handleReset = async () => {
+    if (!linkVerified) { setError("Open a fresh reset link from your email before changing your password."); return; }
     if (!password || !confirmPassword) { setError("Please fill in both fields."); return; }
     if (!isStrengthValid) { setError("Password must be at least 8 characters."); return; }
     if (!passwordsMatch) { setError("Passwords do not match."); return; }
@@ -1666,6 +1659,8 @@ export function ResetPasswordView({ setView }: { setView: (v: View) => void }) {
         password: password
       });
       if (resetErr) throw resetErr;
+      sessionStorage.removeItem("password_recovery_verified");
+      await supabase.auth.signOut();
       setSuccess(true);
       toast.success("Your password has been successfully updated!");
     } catch (err: any) {
@@ -1730,6 +1725,13 @@ export function ResetPasswordView({ setView }: { setView: (v: View) => void }) {
                     Go to Sign In
                   </button>
                 </div>
+              </div>
+            ) : !linkVerified ? (
+              <div className="space-y-4 py-3 text-center">
+                <AlertCircle className="mx-auto h-8 w-8 text-[#A64D27]" />
+                <h2 className="text-lg font-semibold text-foreground">Reset link required</h2>
+                <p className="text-sm leading-relaxed text-muted-foreground">This page needs a valid link from your password reset email. Request a fresh link to continue.</p>
+                <button onClick={() => setView("forgotpassword")} className="w-full rounded-md bg-[#008236] px-4 py-3 text-sm font-semibold text-white hover:bg-[#006c2c]">Request a new reset link</button>
               </div>
             ) : (
               <>

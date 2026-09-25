@@ -73,9 +73,8 @@ export function Footer({ setView, view }: { setView: (v: View) => void; view: Vi
           <ul className="space-y-2.5">
             {[
               { label: "Join as a Vendor", view: "signup" as View },
-              { label: "Vendor Sign In", view: "vendorlogin" as View },
+              { label: "Register Brand HQ", view: "brandsignup" as View },
               { label: "Browse Partner Shops", view: "shop" as View },
-              { label: "Admin Portal", view: "adminlogin" as View },
             ].map((l) => (
               <li key={l.label}>
                 <button

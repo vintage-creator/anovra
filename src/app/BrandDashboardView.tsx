@@ -11,6 +11,7 @@ import { cn } from "./types";
 import { supabase } from "./utils/supabase";
 import { toast } from "sonner";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
+import { AccountDeletionSection } from "./components/AccountDeletionSection";
 import { BrandTeamSection } from "./BrandTeamSection";
 import { NIGERIA_LOCATIONS } from "./AuthViews";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip";
@@ -22,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 
-type BrandTab = "overview" | "branches" | "products" | "team" | "activity";
+type BrandTab = "overview" | "branches" | "products" | "team" | "activity" | "account";
 type ProductFormState = {
   id: string;
   branchId: string;
@@ -134,6 +135,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
     { id: "products" as BrandTab, label: "Products", icon: Package },
     { id: "team" as BrandTab, label: "Team", icon: Users },
     { id: "activity" as BrandTab, label: "Activity", icon: Activity },
+    { id: "account" as BrandTab, label: "Account", icon: Settings },
   ];
 
   const selectTab = (nextTab: BrandTab) => {
@@ -968,6 +970,16 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
             )}
 
             {tab === "team" && <BrandTeamSection branches={enrichedBranches} />}
+
+            {tab === "account" && (
+              <div className="space-y-5">
+                <div>
+                  <h1 className="text-2xl font-semibold text-foreground">Brand account</h1>
+                  <p className="mt-1 text-sm text-muted-foreground">Manage your Brand HQ account and organisation access.</p>
+                </div>
+                <AccountDeletionSection kind="brand" setView={setView} />
+              </div>
+            )}
 
             {tab === "activity" && (
               <section className="bg-card border border-border rounded-2xl overflow-hidden">

@@ -13,6 +13,7 @@ import type { View } from "./types";
 import { cn } from "./types";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
 import { supabase } from "./utils/supabase";
+import { AccountDeletionSection } from "./components/AccountDeletionSection";
 import { toast } from "sonner";
 
 type UserTab = "overview" | "history" | "recommendations" | "ingredients" | "progress" | "routine" | "family" | "settings";
@@ -1849,6 +1850,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               </div>
             ))}
           </div>
+          <AccountDeletionSection kind="customer" setView={setView} />
         </div>
       )}
           </main>

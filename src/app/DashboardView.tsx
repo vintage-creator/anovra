@@ -13,6 +13,7 @@ import type { View } from "./types";
 import { cn } from "./types";
 import { CatalogView } from "./CatalogView";
 import { supabase } from "./utils/supabase";
+import { AccountDeletionSection } from "./components/AccountDeletionSection";
 import { sendEmailNotification } from "./utils/notifications";
 import { toast } from "sonner";
 
@@ -2259,6 +2260,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               })}
             </div>
           </div>
+          {!isBranchAccount && <AccountDeletionSection kind="vendor" setView={setView} />}
         </div>
       )}
 

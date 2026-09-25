@@ -1,11 +1,6 @@
 import { useState, useEffect } from "react";
 import {
   Menu,
-  ChevronDown,
-  User,
-  Store,
-  ShieldCheck,
-  Users,
   ShoppingBag,
   TestTube,
   Home,
@@ -27,7 +22,7 @@ import { CatalogView } from "./CatalogView";
 import { SkinTestView } from "./SkinTestView";
 import { SignUpView, CustomerSignUpView, SignInView, EmailVerificationPendingView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
 import { TeamLoginView, TeamDashboardView } from "./TeamViews";
-import { supabase } from "./utils/supabase";
+import { initialAuthRedirect, supabase } from "./utils/supabase";
 import { AboutView, ContactView, FAQView } from "./ContentViews";
 import { AdminView } from "./AdminView";
 import { UserDashboardView } from "./UserDashboardView";
@@ -43,14 +38,6 @@ import {
   SheetTrigger,
   SheetClose,
 } from "./components/ui/sheet";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./components/ui/dropdown-menu";
 
 function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -105,40 +92,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
         <div className="flex items-center justify-end gap-3">
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-3">
-            {/* Sign In Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger className="text-sm px-3.5 py-2 rounded-md font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center gap-1 focus:outline-none">
-                <span>Sign in</span>
-                <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52 p-2">
-                <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
-                  Account Sign In
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setView("customerlogin")}
-                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700 focus:bg-emerald-500/10 focus:text-emerald-700 data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-700 outline-none"
-                >
-                  <User className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-sm font-medium">Sign in as a User</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setView("vendorlogin")}
-                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700 focus:bg-emerald-500/10 focus:text-emerald-700 data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-700 outline-none"
-                >
-                  <Store className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-sm font-medium">Sign in as a Vendor</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setView("brandlogin")}
-                  className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-700 focus:bg-emerald-500/10 focus:text-emerald-700 data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-700 outline-none"
-                >
-                  <Users className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-sm font-medium">Sign in as a Brand HQ</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button onClick={() => setView("signin")} className="rounded-md px-3.5 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">Sign in</button>
 
             {/* Analyse Skin Button (Secondary Outline Button) */}
             <button
@@ -223,31 +177,13 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
                   })}
                 </div>
 
-                {/* Sign In Options */}
+                {/* Account access */}
                 <div className="space-y-2 pt-2 border-t border-border/60">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-2 pb-1">
-                    Account Sign In
-                  </p>
                   <button
-                    onClick={() => handleNavClick("customerlogin")}
+                    onClick={() => handleNavClick("signin")}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary text-left"
                   >
-                    <User className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Sign in as a User</span>
-                  </button>
-                  <button
-                    onClick={() => handleNavClick("vendorlogin")}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary text-left"
-                  >
-                    <Store className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Sign in as a Vendor</span>
-                  </button>
-                  <button
-                    onClick={() => handleNavClick("brandlogin")}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary text-left"
-                  >
-                    <Users className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Sign in as a Brand HQ</span>
+                    <span>Sign in</span>
                   </button>
                 </div>
 
@@ -366,6 +302,7 @@ export default function App() {
       sessionStorage.setItem("active_team_slug", slug);
       return "teamlogin";
     }
+    if (hash.startsWith("resetpassword#")) return "verifyemail";
     const validViews: View[] = [
       "landing", "dashboard", "catalog", "skintest", "admin",
       "adminlogin", "shop", "brand", "signin", "vendorlogin", "brandlogin", "customerlogin", "signup", "brandsignup", "customersignup", "verifyemail", "forgotpassword",
@@ -382,6 +319,7 @@ export default function App() {
   };
 
   const [view, setViewState] = useState<View>(getViewFromHash);
+  const [isProcessingAuthCallback, setIsProcessingAuthCallback] = useState(initialAuthRedirect.callback);
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [view]);
@@ -415,6 +353,11 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const nextView = getViewFromHash();
+      if (window.location.hash.startsWith("#resetpassword#")) {
+        setIsProcessingAuthCallback(true);
+        void handleEmailConfirmation().catch(handleAuthCallbackFailure);
+        return;
+      }
       if (protectedViews.includes(nextView)) setIsValidatingRoute(true);
       setViewState(nextView);
     };
@@ -455,38 +398,57 @@ export default function App() {
     const handleEmailConfirmation = async () => {
       const callbackUrl = new URL(window.location.href);
       const code = callbackUrl.searchParams.get("code");
-      const fragment = new URLSearchParams(callbackUrl.hash.replace(/^#/, ""));
-      const isSignup = callbackUrl.searchParams.get("type") === "signup" || fragment.get("type") === "signup";
+      const fragment = new URLSearchParams(callbackUrl.hash.slice(callbackUrl.hash.lastIndexOf("#") + 1));
+      const isSignup = initialAuthRedirect.signup || callbackUrl.searchParams.get("type") === "signup" || fragment.get("type") === "signup";
+      const requestedAt = Number(sessionStorage.getItem("password_recovery_requested_at"));
+      const isRecovery = initialAuthRedirect.recovery || fragment.get("type") === "recovery"
+        || callbackUrl.hash.startsWith("#resetpassword#")
+        || (callbackUrl.pathname === "/auth/callback" && requestedAt > 0 && Date.now() - requestedAt < 60 * 60 * 1000);
       const routeAfterAuth = (target: View) => {
         if (protectedViews.includes(target)) setIsValidatingRoute(true);
         setViewState(target);
         window.history.replaceState(null, "", `${window.location.origin}/#/${target}`);
+        setIsProcessingAuthCallback(false);
       };
-      if (isSignup || code || callbackUrl.pathname === "/auth/callback") {
+      if (isSignup || isRecovery || code || callbackUrl.pathname === "/auth/callback") {
+        if (callbackUrl.searchParams.get("error") || fragment.get("error")) {
+          toast.error(isRecovery ? "This reset link has expired. Request a new one." : "This verification link has expired. Request a new one.");
+          routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
+          return;
+        }
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-              toast.error("This verification link has expired or has already been used. Please sign in or request a new link.");
-              routeAfterAuth("verifyemail");
+            if (isRecovery || !session) {
+              toast.error(isRecovery ? "This reset link has expired. Request a new one." : "This verification link has expired or has already been used. Please sign in or request a new link.");
+              routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
               return;
             }
           }
         } else if (fragment.get("access_token") && fragment.get("refresh_token")) {
-          const { error } = await supabase.auth.setSession({
-            access_token: fragment.get("access_token") || "",
-            refresh_token: fragment.get("refresh_token") || "",
-          });
-          if (error) {
-            toast.error("This verification link could not be completed. Please sign in or request a new link.");
-            routeAfterAuth("verifyemail");
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          const sessionError = currentSession?.access_token === fragment.get("access_token")
+            ? null
+            : (await supabase.auth.setSession({
+                access_token: fragment.get("access_token") || "",
+                refresh_token: fragment.get("refresh_token") || "",
+              })).error;
+          if (sessionError) {
+            toast.error(isRecovery ? "This reset link could not be verified. Request a new one." : "This verification link could not be completed. Please sign in or request a new link.");
+            routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
             return;
           }
         }
         if (!code) await new Promise((resolve) => setTimeout(resolve, 600));
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
+          if (isRecovery) {
+            sessionStorage.removeItem("password_recovery_requested_at");
+            sessionStorage.setItem("password_recovery_verified", user.id);
+            routeAfterAuth("resetpassword");
+            return;
+          }
           sessionStorage.setItem("show_welcome", "true");
 
           let teamMemberRole: string | null = null;
@@ -530,12 +492,18 @@ export default function App() {
             routeAfterAuth(consumeCustomerScan() ? "skintest" : "userdashboard");
           }
         } else {
-          toast.error("We could not verify this link. Please request a new confirmation email or sign in if you have already verified.");
-          routeAfterAuth("verifyemail");
+          toast.error(isRecovery ? "We could not verify this reset link. Request a new one." : "We could not verify this link. Please request a new confirmation email or sign in if you have already verified.");
+          routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
         }
       }
     };
-    void handleEmailConfirmation();
+    const handleAuthCallbackFailure = () => {
+      toast.error("We could not complete this email link. Please request a new link.");
+      window.history.replaceState(null, "", `${window.location.origin}/#/forgotpassword`);
+      setViewState("forgotpassword");
+      setIsProcessingAuthCallback(false);
+    };
+    void handleEmailConfirmation().catch(handleAuthCallbackFailure);
 
     // Capture referral query parameter from URL
     const captureReferral = async () => {
@@ -839,7 +807,7 @@ export default function App() {
     "branddashboard",
   ].includes(view) || !isSystemDomain;
 
-  if (isValidatingRoute) {
+  if (isValidatingRoute || isProcessingAuthCallback) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 gap-3">
         <div className="w-8 h-8 border-3 border-[#008236] border-t-transparent rounded-full animate-spin" />
