@@ -7,9 +7,9 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishabl
 
 // Capture redirect intent before the auth client can consume URL tokens.
 export const initialAuthRedirect = typeof window === "undefined" ? { callback: false, recovery: false, signup: false } : {
-  callback: window.location.pathname === "/auth/callback" || window.location.hash.startsWith("#resetpassword#"),
-  recovery: window.location.hash.includes("type=recovery") || window.location.hash.startsWith("#resetpassword#"),
-  signup: window.location.hash.includes("type=signup"),
+  callback: ["/auth/callback", "/auth/confirm"].includes(window.location.pathname) || window.location.hash.startsWith("#resetpassword#"),
+  recovery: window.location.search.includes("type=recovery") || window.location.hash.includes("type=recovery") || window.location.hash.startsWith("#resetpassword#"),
+  signup: window.location.search.includes("type=signup") || window.location.hash.includes("type=signup"),
 };
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

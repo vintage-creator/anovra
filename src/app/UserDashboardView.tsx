@@ -109,6 +109,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
 
   const [userProfile, setUserProfile] = useState<{ name: string; plan: "glow" | "glowplus" | "premium" } | null>(null);
   const [analysesList, setAnalysesList] = useState<any[]>([]);
+  const [expandedAnalysisId, setExpandedAnalysisId] = useState<string | null>(null);
   const [matchedProducts, setMatchedProducts] = useState<any[]>([]);
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [routineList, setRoutineList] = useState<any[]>([]);
@@ -193,17 +194,18 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             const dateStr = dateObj.toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" });
             return {
               id: s.id.substring(0, 8).toUpperCase(),
+              fullId: s.id,
               date: dateStr,
               vendor: s.vendor_name || s.vendor_brand || "Recorded scan",
-              concerns: [s.concern],
-              skinType: s.result || "Normal",
+              concerns: typeof s.concern === "string" && s.concern ? [s.concern] : [],
+              skinType: typeof s.result === "string" ? s.result : "Not recorded",
               score: s.score !== null && s.score !== undefined && !Number.isNaN(Number(s.score)) ? Math.round(Number(s.score)) : null,
               products: Array.isArray(s.matched_products) ? s.matched_products.length : 0,
               severity: Array.isArray(s.severity) ? s.severity : [],
               benefits: Array.isArray(s.benefits) ? s.benefits : [],
+              treatmentPlan: Array.isArray(s.treatment_plan) ? s.treatment_plan : [],
               area: s.skin_area || "Skin",
               createdAt: s.created_at,
-              link: `${window.location.origin}/#/userdashboard`,
             };
           });
           setAnalysesList(formatted);
@@ -1030,13 +1032,12 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           <div>
             <div>
               <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Analysis history</h2>
-              <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>All your skin analyses are saved and tracked. <PlanBadge required="glowplus" current={accessPlan} /></p>
+              <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Review your latest saved report and product matches.</p>
             </div>
           </div>
           <div className="space-y-4 relative">
-            {accessPlan === "glow" && <LockedOverlay label="Glow Pass+" onUpgrade={() => payWithPaystack("basic")} />}
             {analysesList.length > 0 ? (
-              analysesList.map((a, i) => (
+              (accessPlan === "glow" ? analysesList.slice(0, 1) : analysesList).map((a, i) => (
                 <div key={a.id} className="bg-card border border-border rounded-xl overflow-hidden">
                   <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-3">
@@ -1065,12 +1066,26 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{i === 0 ? `${matchedProducts.length} live matches` : "View latest matches"}</span>
-                      <button onClick={() => copy(a.link, a.id)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {copied === a.id ? <><Check className="w-3 h-3" /> Copied</> : <><Share2 className="w-3 h-3" /> Share results</>}
+                      <button onClick={() => setExpandedAnalysisId(expandedAnalysisId === a.fullId ? null : a.fullId)} aria-expanded={expandedAnalysisId === a.fullId} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {expandedAnalysisId === a.fullId ? "Hide report" : "View report"} <ChevronDown className={cn("w-3 h-3 transition-transform", expandedAnalysisId === a.fullId && "rotate-180")} />
                       </button>
                     </div>
                   </div>
+                  {expandedAnalysisId === a.fullId && (
+                    <div className="border-t border-border px-5 py-5 space-y-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div><p className="text-xs text-muted-foreground">Skin area</p><p className="text-sm font-medium">{a.area}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Primary concern</p><p className="text-sm font-medium">{a.concerns[0] || "Not recorded"}</p></div>
+                      </div>
+                      {a.severity.length > 0 && (
+                        <div><p className="text-xs font-semibold mb-2">Concern levels</p><div className="flex flex-wrap gap-2">{a.severity.map((item: any, index: number) => <span key={index} className="text-xs rounded-md border border-border px-2.5 py-1">{typeof item === "string" ? item : `${item.concern || item.name || "Concern"}: ${item.level || item.severity || "Recorded"}`}</span>)}</div></div>
+                      )}
+                      {a.treatmentPlan.length > 0 && (
+                        <div><p className="text-xs font-semibold mb-2">Suggested care</p><ul className="space-y-1 text-sm text-muted-foreground">{a.treatmentPlan.map((step: any, index: number) => <li key={index}>{typeof step === "string" ? step : step.description || step.step || step.name || "Care step"}</li>)}</ul></div>
+                      )}
+                      {i === 0 && <button onClick={() => setTab("recommendations")} className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white">View matched products <ChevronRight className="w-3.5 h-3.5" /></button>}
+                    </div>
+                  )}
                 </div>
               ))
             ) : (
@@ -1081,6 +1096,12 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               </div>
             )}
           </div>
+          {accessPlan === "glow" && analysesList.length > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border border-border bg-card p-4">
+              <p className="text-sm text-muted-foreground">{analysesList.length - 1} earlier report{analysesList.length === 2 ? "" : "s"} available with Glow Pass+.</p>
+              <button onClick={() => payWithPaystack("basic")} className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white">View plans</button>
+            </div>
+          )}
         </div>
       )}
 

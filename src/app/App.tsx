@@ -277,7 +277,7 @@ export default function App() {
       window.location.href = window.location.origin + `/#/brand/${slug}`;
       return "brand";
     }
-    if (path === "/auth/callback") {
+    if (path === "/auth/callback" || path === "/auth/confirm") {
       return "verifyemail";
     }
 
@@ -398,6 +398,7 @@ export default function App() {
     const handleEmailConfirmation = async () => {
       const callbackUrl = new URL(window.location.href);
       const code = callbackUrl.searchParams.get("code");
+      const tokenHash = callbackUrl.searchParams.get("token_hash");
       const fragment = new URLSearchParams(callbackUrl.hash.slice(callbackUrl.hash.lastIndexOf("#") + 1));
       const isSignup = initialAuthRedirect.signup || callbackUrl.searchParams.get("type") === "signup" || fragment.get("type") === "signup";
       const requestedAt = Number(sessionStorage.getItem("password_recovery_requested_at"));
@@ -410,13 +411,26 @@ export default function App() {
         window.history.replaceState(null, "", `${window.location.origin}/#/${target}`);
         setIsProcessingAuthCallback(false);
       };
-      if (isSignup || isRecovery || code || callbackUrl.pathname === "/auth/callback") {
+      if (isSignup || isRecovery || code || tokenHash || ["/auth/callback", "/auth/confirm"].includes(callbackUrl.pathname)) {
         if (callbackUrl.searchParams.get("error") || fragment.get("error")) {
           toast.error(isRecovery ? "This reset link has expired. Request a new one." : "This verification link has expired. Request a new one.");
           routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
           return;
         }
-        if (code) {
+        if (tokenHash) {
+          const type = callbackUrl.searchParams.get("type");
+          if (type !== "recovery" && type !== "signup" && type !== "email_change") {
+            toast.error("This email link is invalid. Request a new one.");
+            routeAfterAuth("forgotpassword");
+            return;
+          }
+          const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+          if (error) {
+            toast.error(isRecovery ? "This reset link has expired. Request a new one." : "This confirmation link has expired. Request a new one.");
+            routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
+            return;
+          }
+        } else if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
             const { data: { session } } = await supabase.auth.getSession();
@@ -503,7 +517,17 @@ export default function App() {
       setViewState("forgotpassword");
       setIsProcessingAuthCallback(false);
     };
-    void handleEmailConfirmation().catch(handleAuthCallbackFailure);
+    if (initialAuthRedirect.callback) {
+      const callbackTimeout = window.setTimeout(() => {
+        toast.error("This email link is taking too long. Please request a new one.");
+        window.history.replaceState(null, "", `${window.location.origin}/#/forgotpassword`);
+        setViewState("forgotpassword");
+        setIsProcessingAuthCallback(false);
+      }, 15000);
+      void handleEmailConfirmation().catch(handleAuthCallbackFailure).finally(() => window.clearTimeout(callbackTimeout));
+    } else {
+      void handleEmailConfirmation().catch(handleAuthCallbackFailure);
+    }
 
     // Capture referral query parameter from URL
     const captureReferral = async () => {

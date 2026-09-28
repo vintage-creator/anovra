@@ -652,6 +652,9 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const brandCount = brandAccounts.length;
   const freeCount = vendorsList.filter(v => v.plan === "free" || !v.plan).length;
   const successfulPayments = paymentsList.filter((p) => p.status === "success");
+  const vendorIds = new Set(vendorAccounts.map((vendor) => vendor.id));
+  const vendorPaymentsThisMonth = successfulPayments.filter((payment) => vendorIds.has(payment.vendor_id) && new Date(payment.created_at || 0).getMonth() === new Date().getMonth() && new Date(payment.created_at || 0).getFullYear() === new Date().getFullYear());
+  const lifetimeRevenue = successfulPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const currentMonthPayments = successfulPayments.filter((p) => {
     const paidAt = new Date(p.created_at || Date.now());
     const now = new Date();
@@ -667,8 +670,10 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const dynamicStats = [
     { label: "Partner accounts", value: String(totalPartnerAccounts), delta: `${independentVendors.length} vendors · ${brandCount} brands · ${branchAccounts.length} branches`, icon: <Store className="w-4 h-4" />, warn: false },
     { label: "Scans platform-wide", value: String(scansPlatformWide), delta: `Across vendors and branches`, icon: <Scan className="w-4 h-4" />, warn: false },
+    { label: "Total products", value: String(productsList.length), delta: "Across all partner catalogues", icon: <Package className="w-4 h-4" />, warn: false },
     { label: "Products pending safety review", value: String(productsPending), delta: productsPending > 0 ? "Requires action" : "All cleared", icon: <AlertCircle className="w-4 h-4" />, warn: productsPending > 0 },
-    { label: "MRR (₦)", value: formattedMrr, delta: revenueDelta, icon: <CreditCard className="w-4 h-4" />, warn: false },
+    { label: "Payments this month", value: formattedMrr, delta: revenueDelta, icon: <CreditCard className="w-4 h-4" />, warn: false },
+    { label: "Total payments received", value: `₦${lifetimeRevenue.toLocaleString()}`, delta: `${successfulPayments.length} successful payment${successfulPayments.length === 1 ? "" : "s"} recorded`, icon: <CreditCard className="w-4 h-4" />, warn: false },
   ];
 
   // Dynamic mapped vendor representations
@@ -677,9 +682,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     const vendorScans = scansList.filter(s => s.vendor_id === v.id).length;
     const vendorPayments = successfulPayments.filter((p) => p.vendor_id === v.id);
     const latestPayment = vendorPayments[0];
-    const vendorMrr = latestPayment
-      ? `₦${Number(latestPayment.amount || 0).toLocaleString()}`
-      : v.plan === "brand" ? "₦45,000" : (v.plan === "premium" ? "₦25,000" : v.plan === "basic" ? "₦12,500" : "₦0");
+    const vendorMrr = `₦${vendorPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0).toLocaleString()}`;
     const joinedDate = new Date(v.created_at || Date.now()).toLocaleDateString("en-GB", {
       day: "numeric",
       month: "short",
@@ -1348,7 +1351,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     price: "₦12,500 / mo",
                     count: basicCount,
                     total: totalPartnerAccounts || 1,
-                    mrr: `₦${(basicCount * 12500).toLocaleString()}`,
+                    mrr: `₦${vendorPaymentsThisMonth.filter((payment) => payment.plan === "basic").reduce((sum, payment) => sum + Number(payment.amount || 0), 0).toLocaleString()}`,
                     color: "bg-accent",
                     textColor: "text-accent",
                     badgeColor: "bg-accent/10 text-accent",
@@ -1359,7 +1362,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     price: "₦25,000 / mo",
                     count: premiumCount,
                     total: totalPartnerAccounts || 1,
-                    mrr: `₦${(premiumCount * 25000).toLocaleString()}`,
+                    mrr: `₦${vendorPaymentsThisMonth.filter((payment) => payment.plan === "premium").reduce((sum, payment) => sum + Number(payment.amount || 0), 0).toLocaleString()}`,
                     color: "bg-emerald-600",
                     textColor: "text-emerald-600",
                     badgeColor: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25",
@@ -1370,7 +1373,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     price: "₦45,000 / mo",
                     count: brandCount,
                     total: totalPartnerAccounts || 1,
-                    mrr: `₦${(brandCount * 45000).toLocaleString()}`,
+                    mrr: `₦${vendorPaymentsThisMonth.filter((payment) => payment.plan === "brand").reduce((sum, payment) => sum + Number(payment.amount || 0), 0).toLocaleString()}`,
                     color: "bg-indigo-600",
                     textColor: "text-indigo-600",
                     badgeColor: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/25",
@@ -1407,7 +1410,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                             <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>vendors active</span>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Plan MRR contribution</p>
+                            <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Payments this month</p>
                             <p className="text-sm font-semibold text-foreground font-mono mt-0.5">{plan.mrr}</p>
                           </div>
                         </div>
@@ -2066,14 +2069,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   <span className="col-span-1">Tier</span>
                   <span className="col-span-1 text-right">Products</span>
                   <span className="col-span-1 text-right">Scans</span>
-                  <span className="col-span-1 text-right">MRR</span>
+                  <span className="col-span-1 text-right">Paid</span>
                   <span className="col-span-1">Joined</span>
                   <span className="col-span-2">Status / Action</span>
                 </div>
                 <div className="divide-y divide-border">
                   {filteredVendors.map((v) => {
                     const status = getVendorStatus(v);
-                    const isApproved = status !== "pending";
+                    const isApproved = status === "active";
                     const isDropOpen = openDropdown === v.id;
 
                     const statusBadge = () => {
@@ -2168,6 +2171,10 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               <Check className="w-3 h-3" />
                               Approve
                             </button>
+                          ) : status === "suspended" || status === "banned" ? (
+                            <button onClick={() => openModeration(v.id, v.name, status === "banned" ? "unban" : "reactivate")} className="inline-flex items-center gap-1 rounded-md border border-emerald-300 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                              <CheckCircle className="w-3.5 h-3.5" />{status === "banned" ? "Unban" : "Reactivate"}
+                            </button>
                           ) : (
                             <div className="relative">
                               <button
@@ -2205,7 +2212,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
               <div className="block md:hidden divide-y divide-border">
                 {filteredVendors.map((v) => {
                   const status = getVendorStatus(v);
-                  const isApproved = status !== "pending";
+                  const isApproved = status === "active";
                   const isDropOpen = openDropdown === v.id;
 
                   const statusBadge = () => {
@@ -2305,6 +2312,10 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                             >
                               <Check className="w-3 h-3" /> Approve Account
+                            </button>
+                          ) : status === "suspended" || status === "banned" ? (
+                            <button onClick={() => openModeration(v.id, v.name, status === "banned" ? "unban" : "reactivate")} className="inline-flex items-center gap-1 rounded-md border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                              <CheckCircle className="w-3.5 h-3.5" />{status === "banned" ? "Unban account" : "Reactivate account"}
                             </button>
                           ) : (
                             <div className="relative">

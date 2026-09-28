@@ -474,7 +474,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
     {
       cat: "privacy",
       q: "Can I delete my account?",
-      a: "Yes. You can request account deletion at any time, and your personal data will be handled according to our data retention and privacy policies."
+      a: "Yes. Customers, independent vendors and Brand HQ owners can permanently delete their account in account settings. Brand HQ deletion also removes its branches. A one-way email fingerprint and the original trial date are retained to prevent repeat free trials."
     },
     // Account & Support
     {

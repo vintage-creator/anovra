@@ -6,6 +6,7 @@ additional_redirect_urls = [
   "http://localhost:5173/",
   "https://anovra-api.vercel.app/*",
   "https://anovra-api.vercel.app/auth/callback",
+  "https://anovra-api.vercel.app/auth/confirm",
   "https://anovra-api.vercel.app/#resetpassword",
 ]
 

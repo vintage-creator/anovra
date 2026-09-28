@@ -440,10 +440,6 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     ctx.drawImage(video, 0, 0, width, height);
     const quality = await getImageQuality(canvas);
     setCaptureQuality(quality);
-    if (!quality.ready) {
-      toast.error(quality.guidance);
-      return;
-    }
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
     if (!blob) {
       toast.error("Could not capture the image. Please try again.");
@@ -621,7 +617,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           : { data: [] };
         const productById = new Map((approvedProducts || []).map((product) => [product.id, product]));
 
-        setMatchedProducts((resultData.products || []).map((match: any, index: number) => {
+        setMatchedProducts((Array.isArray(resultData.products) ? resultData.products : []).map((match: any, index: number) => {
           const product = productById.get(match.id);
           const description = String(product?.description || "");
           const images = parseJsonMeta<string[]>(description, "IMAGES", []);
@@ -637,9 +633,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             images,
             category: product?.category || "Skincare",
             description: cleanProductDescription(description),
-            benefits: match.benefits || [],
+            benefits: Array.isArray(match.benefits) ? match.benefits : [],
             usageInstructions: match.how_to_use || "",
-            precautions: (match.warnings || []).join(" "),
+            precautions: Array.isArray(match.warnings) ? match.warnings.join(" ") : String(match.warnings || ""),
             skinTypes: parseJsonMeta<string[]>(description, "SKINTYPES", []),
             ingredients: [
               ...parseJsonMeta<string[]>(description, "KEY_INGREDIENTS", []),
@@ -680,7 +676,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               score: resultData.score,
               severity: resultData.severity || [],
               benefits: resultData.benefits || [],
-              matched_products: resultData.products || [],
+              matched_products: Array.isArray(resultData.products) ? resultData.products : [],
               ingredient_fallback: resultData.ingredientFallback || [],
               treatment_plan: resultData.treatmentPlan || [],
               skin_area: selectedArea || "Face",
