@@ -470,8 +470,13 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         return;
       }
       const { data: checkout, error: readinessError } = await supabase.functions.invoke("verify-customer-payment", { method: "GET" });
-      if (readinessError || !checkout?.ready) {
-        toast.error("Customer checkout is temporarily unavailable. Please try again later.");
+      if (readinessError) {
+        const response = typeof readinessError.context?.json === "function" ? await readinessError.context.json().catch(() => null) : null;
+        toast.error(response?.error || "Could not contact checkout. Please try again or contact Anovra support.");
+        return;
+      }
+      if (!checkout?.ready) {
+        toast.error("Checkout is not configured yet. Please contact Anovra support.");
         return;
       }
       if (!(window as any).PaystackPop) {
@@ -483,6 +488,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           script.onerror = () => reject(new Error("Could not load Paystack checkout."));
           document.body.appendChild(script);
         });
+      }
+      if (typeof (window as any).PaystackPop?.setup !== "function") {
+        throw new Error("Paystack checkout did not initialise. Please refresh the page and try again.");
       }
       let paymentCompleted = false;
       const handler = (window as any).PaystackPop.setup({
@@ -517,7 +525,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       handler.openIframe();
     } catch (err: any) {
       console.error("Paystack launch error:", err);
-      toast.error("Could not open customer checkout. Please try again.");
+      toast.error(String(err?.message || "Could not open customer checkout. Please try again.").replace(/[<>]/g, "").slice(0, 180));
     }
   };
 
