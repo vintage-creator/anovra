@@ -1,3 +1,37 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+@keyframes trust-marquee-right {
+  from { transform: translateX(-25%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes landing-hero-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.trust-marquee { overflow: hidden; }
+.trust-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: trust-marquee-right 48s linear infinite;
+}
+.trust-marquee:hover .trust-marquee-track { animation-play-state: paused; }
+.trust-marquee-group {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1.5rem;
+  padding-inline: 0.75rem;
+}
+.landing-hero-intro { animation: landing-hero-enter 650ms ease-out both; }
+.landing-hero-visual { animation: landing-hero-enter 800ms 120ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .trust-marquee-track { width: 100%; animation: none; }
+  .trust-marquee-group { flex-wrap: wrap; justify-content: center; width: 100%; row-gap: 0.4rem; }
+  .trust-marquee-copy { display: none; }
+  .landing-hero-intro, .landing-hero-visual { animation: none; }
+}

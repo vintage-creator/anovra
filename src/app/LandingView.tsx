@@ -625,7 +625,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-20 md:pt-24 md:pb-28 grid md:grid-cols-2 gap-12 items-center">
-          <div>
+          <div className="landing-hero-intro">
             <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs font-semibold px-3 py-1 rounded-full mb-6 border border-emerald-500/20">
               <Leaf className="w-3.5 h-3.5" />
               Built for African skin. Regulated for African markets.
@@ -671,7 +671,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
           </div>
 
           {/* Hero visual */}
-          <div className="relative block">
+          <div className="relative block landing-hero-visual">
             <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-border/80 bg-card group">
               <img
                 src="/hero-image.jpg"
@@ -720,15 +720,19 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
       </section>
 
       {/* Safety trust bar - Rich Brown Background */}
-      <div className="bg-[#381B0E] text-amber-100 py-3.5 border-y border-amber-900/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-center gap-6 text-xs sm:text-sm font-medium">
-          <span className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5 text-emerald-400" /> NAFDAC ingredient compliance</span>
-          <span className="text-amber-200/30">·</span>
-          <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5 text-emerald-400" /> Facial data not stored beyond session</span>
-          <span className="text-amber-200/30">·</span>
-          <span className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Medical disclaimer on every result</span>
-          <span className="text-amber-200/30">·</span>
-          <span className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 text-emerald-400" /> Trained on Fitzpatrick IV–VI skin tones</span>
+      <div className="trust-marquee bg-[#381B0E] text-amber-100 py-3.5 border-y border-amber-900/30" aria-label="Anovra safety commitments">
+        <div className="trust-marquee-track text-xs sm:text-sm font-medium">
+          {[0, 1, 2, 3].map((copy) => (
+            <div key={copy} className={`trust-marquee-group${copy > 0 ? " trust-marquee-copy" : ""}`} aria-hidden={copy > 0}>
+              <span className="inline-flex items-center gap-2 whitespace-nowrap"><Shield className="w-3.5 h-3.5 shrink-0 text-emerald-400" /> NAFDAC ingredient compliance</span>
+              <span className="text-amber-200/40" aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-2 whitespace-nowrap"><Lock className="w-3.5 h-3.5 shrink-0 text-emerald-400" /> Facial data not stored beyond session</span>
+              <span className="text-amber-200/40" aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-2 whitespace-nowrap"><CheckCircle className="w-3.5 h-3.5 shrink-0 text-emerald-400" /> Medical disclaimer on every result</span>
+              <span className="text-amber-200/40" aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-2 whitespace-nowrap"><Activity className="w-3.5 h-3.5 shrink-0 text-emerald-400" /> Trained on Fitzpatrick IV–VI skin tones</span>
+            </div>
+          ))}
         </div>
       </div>
 
