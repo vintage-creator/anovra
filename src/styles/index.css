@@ -2,9 +2,9 @@
 @import './tailwind.css';
 @import './theme.css';
 
-@keyframes trust-marquee-right {
-  from { transform: translateX(-25%); }
-  to { transform: translateX(0); }
+@keyframes trust-marquee-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-25%); }
 }
 
 @keyframes landing-hero-enter {
@@ -16,7 +16,7 @@
 .trust-marquee-track {
   display: flex;
   width: max-content;
-  animation: trust-marquee-right 48s linear infinite;
+  animation: trust-marquee-left 48s linear infinite;
 }
 .trust-marquee:hover .trust-marquee-track { animation-play-state: paused; }
 .trust-marquee-group {
