@@ -1674,7 +1674,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                           <span className="text-xs font-bold font-mono">{Math.round(severity)}% · {level}</span>
                         </div>
                         <div className={cn("h-1.5 rounded-full", highFindingConfidence ? "bg-white/20" : "bg-[#ddded9]")}>
-                          <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${severity}%`, backgroundColor: level === "Low" ? "#86efac" : level === "Mild" ? "#fcd34d" : "#fdba74" }} />
+                          <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${severity}%`, backgroundColor: level === "Low" ? "#86efac" : level === "Mild" ? "#fcd34d" : level === "Moderate" ? "#fdba74" : "#fda4af" }} />
                         </div>
                       </div>
                     );
