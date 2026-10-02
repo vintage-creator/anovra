@@ -177,6 +177,8 @@ serve(async (request) => {
     };
     if (!result.accepted) return reply({ accepted: false, capture: result.capture, rejectReasons: result.capture?.reject_reasons || [] });
     if (!result.legacy) return reply({ error: "The scanner returned an incomplete report. Please try again." }, 502);
+    if (!result.no_issues_detected && (!Array.isArray(result.conditions) || result.conditions.length === 0))
+      return reply({ error: "The scanner did not return visible findings. Please retake the photo and try again." }, 502);
     const findings = (result.conditions || []).filter((item) => Number.isFinite(item.percentage) && item.percentage > 0);
     const findingConfidence = findings.length && findings.every((item) => Number.isFinite(item.confidence))
       ? Math.round(findings.reduce((sum, item) => sum + item.confidence, 0) / findings.length)

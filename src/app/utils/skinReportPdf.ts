@@ -17,6 +17,9 @@ export async function downloadSkinReportPdf(report: {
   ingredients: string[];
   products: Product[];
   productsWithheld: boolean;
+  noIssuesDetected: boolean;
+  providersResponding?: number;
+  maxConditionSpread?: number;
   disclaimer: string;
 }) {
   const { jsPDF } = await import("jspdf");
@@ -67,7 +70,7 @@ export async function downloadSkinReportPdf(report: {
   if (report.skinType) line(`Skin type: ${report.skinType}`, { bold: true });
   if (report.capture?.confidence != null) {
     const capture = report.capture;
-    line(`Photo quality: ${Math.round(capture.confidence)}%${capture.threshold != null ? ` (required ${Math.round(capture.threshold)}%)` : ""}`);
+    line(`Capture confidence: ${Math.round(capture.confidence)}%${capture.threshold != null ? ` (required ${Math.round(capture.threshold)}%)` : ""}`);
     const details = [
       capture.lighting?.brightness != null ? `Brightness ${Math.round(capture.lighting.brightness)}` : "",
       capture.lighting?.glare_pct != null ? `Glare ${Math.round(capture.lighting.glare_pct)}%` : "",
@@ -76,17 +79,21 @@ export async function downloadSkinReportPdf(report: {
     ].filter(Boolean);
     if (details.length) line(details.join("  |  "), { size: 9, colour: [92, 107, 96] });
   }
-  line(`Average finding confidence: ${report.confidence == null ? "unavailable" : `${Math.round(report.confidence)}%`}`, { size: 9, colour: [92, 107, 96] });
+  line(report.noIssuesDetected ? "Finding confidence: not applicable when no concerns are identified" : `Average finding confidence: ${report.confidence == null ? "not supplied" : `${Math.round(report.confidence)}%`}`, { size: 9, colour: [92, 107, 96] });
+  if (report.providersResponding) line(`${report.providersResponding} AI responses reviewed${report.findings.length && report.maxConditionSpread != null ? `; largest difference between assessments: ${Math.round(report.maxConditionSpread)} points` : ""}`, { size: 9, colour: [92, 107, 96] });
+
+  heading("Disclaimer");
+  line(report.disclaimer, { size: 9 });
 
   heading("Visible findings");
-  if (!report.findings.length) line("No visible concerns were returned by the analysis.");
+  if (!report.findings.length) line(report.noIssuesDetected ? "No notable visible concerns were identified in this photo. This does not rule out a skin condition." : "No visible findings were returned by the analysis.");
   for (const finding of report.findings) {
     line(`${finding.name}: ${Math.round(finding.percentage)}% severity (${finding.level}); finding confidence ${Math.round(finding.confidence)}%`, { size: 10 });
   }
   line("Severity percentages describe visible features, not a medical diagnosis.", { size: 9, colour: [92, 107, 96] });
 
   heading("Care guidance");
-  if (!report.treatment.length) line("No care plan was returned for this photo.");
+  if (!report.treatment.length) line(report.noIssuesDetected ? "No condition-specific care plan was generated because no notable concerns were identified. Retake the photo if this does not reflect what you see." : "The analysis returned no condition-specific care guidance for this photo.");
   for (const item of report.treatment) {
     nextPage(22);
     line(item.name, { bold: true, gap: 1 });
@@ -101,7 +108,9 @@ export async function downloadSkinReportPdf(report: {
   }
 
   heading("Product matches");
-  if (report.productsWithheld) {
+  if (report.noIssuesDetected) {
+    line("No targeted partner products were recommended because no notable concern was identified.");
+  } else if (report.productsWithheld) {
     line("Product matches were paused because finding confidence was below 65%, unavailable, or professional review was advised.");
   } else if (report.products.length) {
     for (const product of report.products) {
@@ -122,8 +131,6 @@ export async function downloadSkinReportPdf(report: {
     if (report.ingredients.length) line(`Ingredient targets from the analysis: ${report.ingredients.join(", ")}`);
   }
 
-  heading("Important information");
-  line(report.disclaimer, { size: 9 });
   const pages = pdf.getNumberOfPages();
   for (let page = 1; page <= pages; page += 1) {
     pdf.setPage(page);

@@ -66,7 +66,11 @@ type TreatmentAdvice = {
 type ApiCapture = {
   confidence?: number; threshold?: number; frames_used?: number; frames_received?: number;
   lighting?: { brightness?: number; glare_pct?: number; verdict?: string };
+  filter_suspected?: boolean;
+  authenticity?: { verdict?: "clean" | "suspect" | "generated"; filter_suspected?: boolean; edited_suspected?: boolean };
 };
+
+const SCAN_DISCLAIMER = "This is a cosmetic skin assessment, not a medical diagnosis. For persistent acne, unusual skin changes, or anything painful or distressing, see a registered dermatologist.";
 
 const captureGuidance = (reason: { message: string; guidance: string }, area: string) => {
   if (/does not look like the area|area you selected/i.test(reason.message)) {
@@ -262,8 +266,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     treatmentPlan?: TreatmentAdvice[];
     findingConfidence?: number | null;
     productsWithheld?: boolean;
+    noIssuesDetected?: boolean;
     clinicalReferralAdvised?: boolean;
     providersResponding?: number;
+    maxConditionSpread?: number;
     disclaimer?: string;
   } | null>(null);
   const [analyzingError, setAnalyzingError] = useState<string | null>(null);
@@ -611,7 +617,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
   const visibleSeverity = scanResult?.conditions || [];
   const findingConfidence = scanResult?.findingConfidence;
-  const productsWithheld = Boolean(scanResult?.productsWithheld || findingConfidence == null || findingConfidence < 65);
+  const noIssuesDetected = Boolean(scanResult?.noIssuesDetected);
+  const productsWithheld = Boolean(scanResult?.productsWithheld || noIssuesDetected || findingConfidence == null || findingConfidence < 65);
 
   // Step 4: Run AI analysis and manage realistic clinical milestone progress
   useEffect(() => {
@@ -839,7 +846,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
         ingredients: ingredientFallback,
         products: matchedProducts,
         productsWithheld,
-        disclaimer: scanResult.disclaimer || "This is a cosmetic skin assessment, not a medical diagnosis. For persistent acne, unusual skin changes, or anything painful or distressing, see a registered dermatologist.",
+        noIssuesDetected,
+        providersResponding: scanResult.providersResponding,
+        maxConditionSpread: scanResult.maxConditionSpread,
+        disclaimer: scanResult.disclaimer || SCAN_DISCLAIMER,
       });
     } catch (error) {
       console.error("Could not create skin report PDF:", error);
@@ -1583,8 +1593,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
         <div className="scan-report max-w-3xl mx-auto px-4 py-8">
           <style>{`@media print { body * { visibility: hidden !important; } body .scan-report, body .scan-report * { visibility: visible !important; } .scan-report { position: absolute; left: 0; top: 0; width: 100%; max-width: none; color: #1c3125; } .scan-report .print-hide { display: none !important; } .scan-report article, .scan-report section { break-inside: avoid; } }`}</style>
           <div className="bg-[#07532e] text-white rounded-lg p-6 sm:p-8 mb-5 border border-[#07532e]">
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+              <div className="min-w-0">
                 <p className="text-xs text-white/60 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
                   COSMETIC SKIN ASSESSMENT{scanId ? ` · ID ${scanId}` : ""}
                 </p>
@@ -1596,14 +1606,14 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 </p>
               </div>
 
-              {scanResult?.capture?.confidence != null && <div className="shrink-0 text-right"><strong className="text-2xl">{Math.round(scanResult.capture.confidence)}%</strong><p className="text-xs text-white/75">Photo quality</p></div>}
+              {scanResult?.capture?.confidence != null && <div className="shrink-0 sm:text-right"><strong className="text-2xl">{Math.round(scanResult.capture.confidence)}%</strong><p className="text-xs text-white/75">Capture confidence</p></div>}
             </div>
 
             {/* Badges: Skin Type & Primary Condition */}
             <div className="flex flex-wrap gap-3 mb-6">
               {[
-                { label: "Skin type", value: scanResult?.skinType || "Not determined" },
-                { label: "Main visible concern", value: scanResult?.concern || "No concern identified" },
+                { label: "Skin type", value: scanResult?.skinType ? scanResult.skinType.charAt(0).toUpperCase() + scanResult.skinType.slice(1) : "Not determined" },
+                { label: "Main visible concern", value: noIssuesDetected ? "No notable concerns identified" : scanResult?.concern || "Not determined" },
               ].map((item) => (
                 <div key={item.label} className="bg-white/10 border border-white/10 rounded-2xl px-4 py-3 flex-1 min-w-[200px]">
                   <p className="text-[10px] text-white/50 mb-0.5 font-mono">{item.label.toUpperCase()}</p>
@@ -1618,7 +1628,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 Visible findings
               </p>
               {visibleSeverity.length === 0 ? (
-                <p className="text-sm text-white/80">No visible concerns were returned by the analysis.</p>
+                <p className="text-sm text-white/80">{noIssuesDetected ? "The analysis did not identify a notable visible concern in this photo. This does not rule out a skin condition." : "No visible findings were returned. Retake the photo if this does not reflect what you see."}</p>
               ) : (
                 <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3.5">
                   {visibleSeverity.map((c) => {
@@ -1638,24 +1648,46 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   })}
                 </div>
               )}
-              <p className="mt-4 text-xs text-white/70">Percentages describe estimated visible severity, not a diagnosis. Finding confidence: {findingConfidence == null ? "unavailable" : `${Math.round(findingConfidence)}% average`} {scanResult?.providersResponding ? `· ${scanResult.providersResponding} AI responses` : ""}.</p>
+              <p className="mt-4 text-xs text-white/70">{visibleSeverity.length > 0 ? `Percentages describe estimated visible severity, not a diagnosis. Average finding confidence: ${findingConfidence == null ? "not supplied" : `${Math.round(findingConfidence)}%`}.` : "No finding confidence is calculated when there are no findings."} {scanResult?.providersResponding ? `${scanResult.providersResponding} AI responses reviewed.` : ""}</p>
             </div>
           </div>
 
+          <section className="mb-5 flex items-start gap-3 rounded-lg border border-[#d9e5dc] bg-[#f4f8f5] p-4" aria-label="Medical disclaimer">
+            <Info className="w-5 h-5 shrink-0 mt-0.5 text-[#07532e]" />
+            <div>
+              <h3 className="text-sm font-semibold text-[#07532e]">Disclaimer</h3>
+              <p className="text-sm text-[#3e5d49] mt-1 leading-relaxed">{scanResult?.disclaimer || SCAN_DISCLAIMER}</p>
+            </div>
+          </section>
+
           {scanResult?.capture && <section className="border border-border bg-white rounded-lg p-5 sm:p-6 mb-6" aria-label="Capture quality">
-            <div className="flex items-center gap-2 mb-3"><CheckCircle className="w-5 h-5 text-[#008236]" /><h3 className="font-semibold text-foreground">Photo accepted</h3></div>
+            <div className="flex items-center gap-2 mb-3"><CheckCircle className="w-5 h-5 text-[#008236]" /><h3 className="font-semibold text-foreground">Photo accepted for analysis</h3></div>
             <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
               {scanResult.capture.confidence != null && <span>Capture confidence <strong className="text-foreground">{Math.round(scanResult.capture.confidence)}%</strong>{scanResult.capture.threshold != null && ` · threshold ${Math.round(scanResult.capture.threshold)}%`}</span>}
               {scanResult.capture.lighting?.brightness != null && <span>Brightness {Math.round(scanResult.capture.lighting.brightness)}</span>}
               {scanResult.capture.lighting?.glare_pct != null && <span>Glare {Math.round(scanResult.capture.lighting.glare_pct)}%</span>}
               {scanResult.capture.lighting?.verdict && <span>Lighting {scanResult.capture.lighting.verdict}</span>}
               {scanResult.capture.frames_used != null && <span>{scanResult.capture.frames_used} of {scanResult.capture.frames_received ?? scanResult.capture.frames_used} frames used</span>}
+              {scanResult.capture.authenticity?.verdict === "clean" && !scanResult.capture.filter_suspected && <span>Filter check: none flagged</span>}
+              {(scanResult.capture.filter_suspected || scanResult.capture.authenticity?.verdict === "suspect") && <span>Filter check: possible editing flagged</span>}
             </div>
+            {(scanResult.providersResponding || (visibleSeverity.length > 0 && scanResult.maxConditionSpread != null)) && (
+              <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                {scanResult.providersResponding ? <span>{scanResult.providersResponding} AI responses reviewed</span> : null}
+                {visibleSeverity.length > 0 && scanResult.maxConditionSpread != null && <span>Largest difference between assessments: {Math.round(scanResult.maxConditionSpread)} points</span>}
+              </div>
+            )}
+            <p className="mt-3 text-xs text-muted-foreground">Capture confidence measures whether the photo could be assessed. It is not the confidence of the skin findings. Filter checks are automated and cannot prove a photo is unedited.</p>
           </section>}
 
           <section className="mb-8">
-            <div className="flex items-center gap-2 mb-4"><ClipboardList className="w-5 h-5 text-[#94613f]" /><h3 className="text-xl text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Care guidance for your findings</h3></div>
-            {scanResult?.treatmentPlan?.length ? <div className="grid gap-3">{scanResult.treatmentPlan.map((plan) => <article key={plan.name} className="border border-border bg-white rounded-lg p-5">
+            <div className="flex items-center gap-2 mb-4"><ClipboardList className="w-5 h-5 text-[#94613f]" /><h3 className="text-xl text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>{noIssuesDetected ? "What this result means" : "Care guidance for your findings"}</h3></div>
+            {noIssuesDetected ? (
+              <div className="rounded-lg border border-border bg-white p-5 text-sm text-muted-foreground space-y-2">
+                <p>No notable visible concerns were identified, so the analysis did not generate condition-specific treatment or ingredient targets.</p>
+                <p>If you can see a concern that is missing here, retake the photo with the area clearly visible. For persistent or worrying changes, speak to a registered dermatologist.</p>
+              </div>
+            ) : scanResult?.treatmentPlan?.length ? <div className="grid gap-3">{scanResult.treatmentPlan.map((plan) => <article key={plan.name} className="border border-border bg-white rounded-lg p-5">
               <h4 className="font-semibold text-foreground mb-2">{plan.name}</h4>
               <p className="text-sm text-foreground">{plan.what_to_do}</p>
               {plan.why && <p className="text-sm text-muted-foreground mt-2">{plan.why}</p>}
@@ -1663,15 +1695,22 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               {plan.ingredient_targets?.length > 0 && <div className="mt-3"><p className="text-xs font-semibold text-foreground mb-1">Ingredients to discuss or look for</p><div className="flex flex-wrap gap-2">{plan.ingredient_targets.map((target) => <span key={`${target.ingredient}-${target.concentration}`} title={target.note || undefined} className="px-2.5 py-1 text-xs rounded-md bg-[#edf7ef] text-[#07532e]">{target.ingredient}{target.concentration ? ` · ${target.concentration}` : ""}</span>)}</div></div>}
               {plan.avoid?.length > 0 && <p className="text-xs text-muted-foreground mt-3"><strong>Avoid:</strong> {plan.avoid.join("; ")}</p>}
               {plan.see_a_dermatologist_if && <p className="text-xs text-[#8a452b] mt-2"><strong>See a dermatologist if:</strong> {plan.see_a_dermatologist_if}</p>}
-            </article>)}</div> : <p className="text-sm text-muted-foreground">The analysis did not return a care plan for this photo.</p>}
+            </article>)}</div> : <p className="text-sm text-muted-foreground">The analysis returned visible findings but no care guidance. Retake the photo or consult a registered dermatologist before acting on this report.</p>}
           </section>
 
           {/* Matched Products from Connected Storefront */}
           <div className="mb-8">
-            {productsWithheld && <div className="border-l-4 border-[#ad623a] bg-[#fff8f2] p-5 mb-5 rounded-r-lg">
-              <h3 className="font-semibold text-foreground">Product matches are paused</h3>
-              <p className="text-sm text-muted-foreground mt-1">{scanResult?.clinicalReferralAdvised ? "This result needs professional review." : "The average confidence in the visible findings is below 65%, or was not supplied."} You can read the assessment, retake your photo, or consult a licensed dermatologist for a closer assessment. We have not recommended products from partner catalogues for this scan.</p>
+            {productsWithheld && <div className="border-l-4 border-[#ad623a] bg-[#fff8f2] p-5 rounded-r-lg">
+              <h3 className="font-semibold text-foreground">{noIssuesDetected ? "No targeted products recommended" : "Product matches are paused"}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{noIssuesDetected
+                ? "No notable concern was identified to match with partner products. This is different from a low-confidence result; no finding confidence is calculated when there are no findings."
+                : scanResult?.clinicalReferralAdvised
+                  ? "This result needs professional review before product matching. Please consult a registered dermatologist."
+                  : findingConfidence == null
+                    ? "The analysis did not supply confidence for its visible findings, so we cannot safely match products. You can retake the photo."
+                    : `Average finding confidence was ${Math.round(findingConfidence)}%, below the 65% needed for product matching. You can retake the photo or consult a registered dermatologist.`}</p>
             </div>}
+            {!productsWithheld && <>
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-1 font-mono">Storefront Matching</p>
@@ -1735,7 +1774,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
             {/* Products List or Fallback */}
             <div className="space-y-4">
-              {productsWithheld ? null : filteredMatchedProducts.length === 0 ? (
+              {filteredMatchedProducts.length === 0 ? (
                 <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 text-center">
                   <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-3">
                     <Droplets className="w-6 h-6 text-[#C86B3A]" />
@@ -1843,14 +1882,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 ))
               )}
             </div>
-          </div>
-
-          {/* Clinical Disclaimer */}
-          <div className="flex items-start gap-2.5 p-4 bg-secondary/40 border border-border rounded-2xl mb-8">
-            <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {scanResult?.disclaimer || "This is a cosmetic skin assessment, not a medical diagnosis. For persistent acne, unusual skin changes, or anything painful or distressing, see a registered dermatologist."}
-            </p>
+            </>}
           </div>
 
           <div className="print-hide border-t border-border pt-5">
