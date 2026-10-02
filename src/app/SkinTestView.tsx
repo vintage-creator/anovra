@@ -68,6 +68,22 @@ type ApiCapture = {
   lighting?: { brightness?: number; glare_pct?: number; verdict?: string };
 };
 
+const captureGuidance = (reason: { message: string; guidance: string }, area: string) => {
+  if (/does not look like the area|area you selected/i.test(reason.message)) {
+    return {
+      title: "The photo may not show the selected skin area",
+      detail: `Take a clear photo of your ${area.toLowerCase()}, or choose the area shown in your photo.`,
+    };
+  }
+  if (/edited|retouched|filter/i.test(reason.message)) {
+    return {
+      title: "Use an original, unfiltered photo",
+      detail: "Filters and retouching can hide skin details. Take a new photo here or upload the original.",
+    };
+  }
+  return { title: reason.message, detail: reason.guidance };
+};
+
 type SkinStep = 1 | 2 | 3 | 4 | 5;
 
 type CaptureQuality = {
@@ -1240,10 +1256,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             </>
           )}
 
-          <div className="flex items-start gap-2.5 p-3.5 bg-secondary/50 rounded-xl">
+          <div className="flex items-start gap-2.5 p-3.5 bg-secondary/50 rounded-lg">
             <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Your image is evaluated in memory for this consultation. Scan results are private to your customer account and connected brand partner.
+              We use your photo to check the image and analyse your skin. The photo is not saved to your customer profile. Your results are saved to your account and, if you use a shop's test link, can be viewed by that shop.
             </p>
           </div>
         </div>
@@ -1407,24 +1423,40 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
       {/* ---- STEP 4: AI Analysis & Staged Progress Tracker ---- */}
       {step === 4 && (
-        <div className="max-w-xl mx-auto px-4 py-16 text-center">
+        <div className="max-w-xl mx-auto px-4 py-8 sm:py-16 text-center">
           {/* Quality Rejection Screen */}
           {rejectionDetail ? (
-            <div className="bg-card border-2 border-amber-300/80 rounded-3xl p-6 sm:p-8 shadow-xl text-left animate-in fade-in zoom-in-95 duration-200">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
-                <AlertTriangle className="w-6 h-6 text-amber-600" />
+            <section className="bg-card border border-amber-200 rounded-lg p-4 sm:p-7 shadow-sm text-left" role="status" aria-labelledby="capture-rejected-title">
+              <div className="flex items-start gap-3 mb-5">
+                <div className="w-10 h-10 shrink-0 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-amber-700" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] uppercase text-amber-700 font-semibold mb-1">Photo check</p>
+                  <h3 id="capture-rejected-title" className="text-xl sm:text-2xl font-light text-foreground leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                    Please try another photo
+                  </h3>
+                </div>
               </div>
-              <p className="text-xs font-mono uppercase text-amber-700 font-semibold mb-1">Capture check</p>
-              <h3 className="text-xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-                This photo needs a retake
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">No analysis was run. Adjust the photo and try again.</p>
-              {rejectionDetail.capture?.confidence != null && <p className="text-sm font-semibold text-amber-900 mb-4">Capture confidence {Math.round(rejectionDetail.capture.confidence)}% · required {Math.round(rejectionDetail.capture.threshold ?? 0)}%</p>}
-              <div className="space-y-3 mb-6">
+              <p className="text-sm text-muted-foreground mb-5">Your skin analysis has not started. Fix the issues below, then take or upload a new photo.</p>
+              {rejectionDetail.capture?.confidence != null && (
+                <div className="mb-5 rounded-lg border border-border bg-muted/40 p-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+                    <span className="font-semibold text-foreground">Photo check confidence</span>
+                    <span className="font-medium text-amber-800">{Math.round(rejectionDetail.capture.confidence)}%{rejectionDetail.capture.threshold != null ? ` · ${Math.round(rejectionDetail.capture.threshold)}% needed` : ""}</span>
+                  </div>
+                  {rejectionDetail.capture.threshold != null && (
+                    <div className="h-1.5 mt-2 rounded-full bg-amber-100 overflow-hidden" aria-hidden="true">
+                      <div className="h-full bg-amber-600 rounded-full" style={{ width: `${Math.max(0, Math.min(100, rejectionDetail.capture.confidence))}%` }} />
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="space-y-2 mb-6">
                 {(rejectionDetail.reasons.length ? rejectionDetail.reasons : [{ message: "The skin area was not clear enough.", guidance: "Retake the photo in even light with the whole area visible." }]).map((reason, index) => (
-                  <div key={index} className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-sm font-semibold text-amber-950">{reason.message}</p>
-                    <p className="text-sm text-amber-900 mt-1">{reason.guidance}</p>
+                  <div key={index} className="p-3 sm:p-4 bg-amber-50/60 border border-amber-200 rounded-lg">
+                    <p className="text-sm font-semibold text-foreground">{captureGuidance(reason, selectedArea).title}</p>
+                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{captureGuidance(reason, selectedArea).detail}</p>
                   </div>
                 ))}
               </div>
@@ -1436,21 +1468,27 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                     setSelectedFile(null);
                     setStep(2);
                   }}
-                  className="w-full flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white py-3.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-sm"
+                  className="w-full flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white py-3.5 rounded-lg font-bold text-sm transition-colors cursor-pointer"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   <Camera className="w-4 h-4" />
                   Retake photo
                 </button>
                 <button
-                  onClick={resetFlow}
-                  className="w-full py-3.5 rounded-xl border border-border text-foreground hover:bg-secondary font-semibold text-xs transition-colors cursor-pointer"
+                  onClick={() => {
+                    setRejectionDetail(null);
+                    setImageBase64(null);
+                    setSelectedFile(null);
+                    setStep(1);
+                  }}
+                  className="w-full py-3.5 rounded-lg border border-border text-foreground hover:bg-secondary font-semibold text-sm transition-colors cursor-pointer"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
-                  Start over
+                  Change skin area
                 </button>
               </div>
-            </div>
+              <button onClick={resetFlow} className="mt-4 text-xs font-semibold text-muted-foreground hover:text-foreground underline underline-offset-4">Start over</button>
+            </section>
           ) : analyzingError ? (
             /* General Interrupted Error */
             <div className="bg-card border-2 border-red-200 rounded-3xl p-6 sm:p-8 shadow-xl text-left">
