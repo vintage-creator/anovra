@@ -688,48 +688,43 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 relative">
         {trialExpired && showTrialExpiredNotice && (
-          <div className="fixed inset-0 z-[80] bg-[#1f2a24]/45 backdrop-blur-sm p-4 sm:p-6 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="trial-ended-title">
-            <div className="w-full max-w-4xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
-              <div className="grid lg:grid-cols-[0.95fr_1.35fr]">
-                <div className="bg-[#fbfaf7] border-b lg:border-b-0 lg:border-r border-border p-6 sm:p-8">
-                  <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center mb-5">
+          <div className="fixed inset-0 z-[80] bg-[#1f2a24]/45 backdrop-blur-sm p-3 sm:p-6 flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain" role="dialog" aria-modal="true" aria-labelledby="trial-ended-title">
+            <div className="w-full max-w-4xl max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] bg-card border border-border rounded-lg shadow-2xl overflow-y-auto overscroll-contain">
+              <div className="grid lg:grid-cols-[0.9fr_1.1fr]">
+                <div className="bg-[#fbfaf7] border-b lg:border-b-0 lg:border-r border-border p-5 sm:p-8">
+                  <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center mb-3 sm:mb-5">
                     <Lock className="w-5 h-5" />
                   </div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700 mb-3" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  <p className="text-[11px] font-bold uppercase text-amber-700 mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>
                     Free trial ended
                   </p>
-                  <h2 id="trial-ended-title" className="text-2xl sm:text-3xl font-light text-foreground leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
+                  <h2 id="trial-ended-title" className="text-xl sm:text-3xl font-light text-foreground leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
                     Your dashboard has moved to the free plan
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-4 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <p className="text-sm text-muted-foreground mt-3 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     You can still use your basic skin portal. Premium tools such as unlimited analyses, full history, family profiles, Anovra Care Guide, and deeper progress tracking require an upgrade.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTrialExpiredNotice(false);
-                      setUserProfile((prev) => prev ? { ...prev, plan: "glow" } : prev);
-                      toast.success("Continuing on the free Glow Pass.");
-                    }}
-                    className="mt-6 w-full sm:w-auto px-4 py-2.5 bg-white border border-border text-foreground rounded-lg text-sm font-semibold hover:border-accent/40 transition-colors"
-                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  >
-                    Continue on Free
-                  </button>
+                  <div className="mt-5 rounded-lg border border-[#cce2d1] bg-white p-4">
+                    <div className="flex items-baseline justify-between gap-3"><p className="text-sm font-semibold text-foreground">Glow Pass</p><p className="text-sm font-bold text-[#07532e]">Free</p></div>
+                    <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Basic workspace access, scan links, top recommendations, and ingredient checks.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTrialExpiredNotice(false);
+                        setUserProfile((prev) => prev ? { ...prev, plan: "glow" } : prev);
+                        toast.success("Continuing on the free Glow Pass.");
+                      }}
+                      className="mt-4 w-full px-4 py-2.5 bg-[#008236] text-white rounded-lg text-sm font-semibold hover:bg-[#006c2c] transition-colors"
+                    >
+                      Continue on Free
+                    </button>
+                  </div>
                 </div>
 
                 <div className="p-5 sm:p-6">
-                  <div className="grid sm:grid-cols-3 gap-3">
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Explore paid plans</h3>
+                  <div className="grid sm:grid-cols-2 gap-3">
                     {[
-                      {
-                        key: "glow" as const,
-                        name: "Glow Pass",
-                        price: "Free",
-                        tag: "Current free plan",
-                        desc: "Basic workspace access, scan links, top recommendations, and ingredient checks.",
-                        cta: "Continue",
-                        featured: false,
-                      },
                       {
                         key: "basic" as const,
                         name: "Glow Pass+",
@@ -750,7 +745,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                       },
                     ].map((p) => (
                       <div key={p.key} className={cn(
-                        "border rounded-xl p-4 flex flex-col min-h-[220px]",
+                        "border rounded-lg p-4 flex flex-col",
                         p.featured ? "border-[#C86B3A] bg-[#C86B3A]/5" : "border-border bg-background"
                       )}>
                         <div className="flex items-center justify-between gap-2 mb-3">
@@ -761,15 +756,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                         <p className="text-xs text-muted-foreground mt-3 leading-relaxed flex-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (p.key === "glow") {
-                              setShowTrialExpiredNotice(false);
-                              setUserProfile((prev) => prev ? { ...prev, plan: "glow" } : prev);
-                              toast.success("Continuing on the free Glow Pass.");
-                            } else {
-                              payWithPaystack(p.key === "basic" ? "basic" : "premium");
-                            }
-                          }}
+                          onClick={() => payWithPaystack(p.key === "basic" ? "basic" : "premium")}
                           className={cn(
                             "w-full mt-4 py-2.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer text-center",
                             p.featured ? "bg-[#C86B3A] hover:bg-[#B85F33] text-white" : "bg-[#008236] hover:bg-[#006c2c] text-white"
