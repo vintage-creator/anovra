@@ -256,6 +256,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraStartingRef = useRef(false);
+  const autoCameraAttemptedRef = useRef(false);
   const qualityTimerRef = useRef<number | null>(null);
   const analysisStartedRef = useRef(false);
   const vendorDisplayName = vendorProfile?.business_name || vendorProfile?.name || titleFromSlug(activeScanSlug);
@@ -402,20 +404,28 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   };
 
   const startCamera = async () => {
+    if (cameraStartingRef.current || streamRef.current) return;
+    cameraStartingRef.current = true;
     setCameraError("");
     setCameraStarting(true);
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Camera is not available on this browser.");
+        throw new Error("Camera access is unavailable here. Try a secure connection or upload a photo.");
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: selectedArea === "Face" ? "user" : "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 1600 },
-        },
-        audio: false,
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: selectedArea === "Face" ? "user" : "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 1600 },
+          },
+          audio: false,
+        });
+      } catch (error) {
+        if (!(error instanceof DOMException) || !["NotFoundError", "OverconstrainedError"].includes(error.name)) throw error;
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       streamRef.current = stream;
       const video = videoRef.current;
       if (!video) throw new Error("Camera preview element not ready.");
@@ -436,10 +446,21 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
         const quality = await getImageQuality(c);
         setCaptureQuality(quality);
       }, 700);
-    } catch (err: any) {
-      setCameraError(err.message || "Camera permission was denied. You can upload a photo instead.");
-      toast.error(err.message || "Camera permission was denied. You can upload a photo instead.");
+    } catch (err: unknown) {
+      stopCamera();
+      const name = err instanceof DOMException ? err.name : "";
+      const message = name === "NotFoundError" || name === "OverconstrainedError"
+        ? "No camera was found on this device. Connect a camera or upload a photo instead."
+        : name === "NotAllowedError" || name === "SecurityError"
+          ? "Camera access was blocked. Allow access in your browser settings or upload a photo."
+          : name === "NotReadableError" || name === "AbortError"
+            ? "The camera is in use by another app. Close it there and try again, or upload a photo."
+            : err instanceof Error && err.message.startsWith("Camera access is unavailable")
+              ? err.message
+              : "Could not start the camera. Please try again or upload a photo.";
+      setCameraError(message);
     } finally {
+      cameraStartingRef.current = false;
       setCameraStarting(false);
     }
   };
@@ -473,11 +494,19 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   };
 
   useEffect(() => {
-    if (step !== 2) stopCamera();
+    if (step !== 2) {
+      autoCameraAttemptedRef.current = false;
+      stopCamera();
+    } else if (imageBase64) {
+      autoCameraAttemptedRef.current = false;
+    } else if (!autoCameraAttemptedRef.current) {
+      autoCameraAttemptedRef.current = true;
+      void startCamera();
+    }
     return () => {
       if (step !== 2) stopCamera();
     };
-  }, [step]);
+  }, [step, imageBase64]);
 
   useEffect(() => {
     const slug = activeScanSlug;
@@ -999,7 +1028,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
       {/* ---- STEP 2: Capture Photo & Attestation ---- */}
       {step === 2 && (
-        <div className="max-w-xl mx-auto px-4 py-8">
+        <div className="w-full max-w-2xl mx-auto px-3 sm:px-6 py-6 sm:py-8">
           <div className="mb-5">
             <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 2 of 5 · {selectedArea}</p>
             <h2 className="text-3xl font-light text-foreground mb-1.5" style={{ fontFamily: "'Fraunces', serif" }}>
@@ -1079,10 +1108,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               {/* Viewfinder: Video tag ALWAYS mounted in DOM */}
               <div
                 className={cn(
-                  "relative rounded-2xl overflow-hidden mb-4 border-2 shadow-lg transition-colors",
+                  "relative w-full aspect-[4/5] sm:aspect-[4/3] max-h-[68dvh] rounded-2xl overflow-hidden mb-4 border-2 shadow-lg transition-colors",
                   cameraActive ? "border-[#008236]/70 bg-black" : "border-border/80 bg-[#101614]"
                 )}
-                style={{ aspectRatio: "3/4", maxHeight: 380 }}
               >
                 <video
                   ref={videoRef}
@@ -1096,22 +1124,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 />
 
                 {!cameraActive && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+                  <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute inset-0 opacity-40" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)", backgroundSize: "26px 26px" }} />
                     <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[#008236]/20 to-transparent" />
                     <div className="absolute left-10 right-10 top-1/2 h-px bg-[#008236]/70 shadow-[0_0_18px_rgba(0,130,54,0.8)] animate-scan" />
-                    <div className="relative z-10 w-20 h-24 rounded-full border border-white/30 bg-white/5 flex items-center justify-center mb-4">
-                      <div className="absolute -inset-3 rounded-full border border-dashed border-[#008236]/50 animate-spin" style={{ animationDuration: "10s" }} />
-                      <Camera className="w-8 h-8 text-white/70" />
-                    </div>
-                    <p className="relative z-10 text-sm text-white/80 font-semibold mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Camera preview</p>
-                    <p className="relative z-10 text-[11px] text-white/45" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Tap "Open Camera" below or upload a file</p>
-                    {cameraError && (
-                      <div className="relative z-10 mt-4 flex items-start gap-2 bg-red-500/20 border border-red-300/25 rounded-xl px-3 py-2.5 max-w-xs text-left">
-                        <AlertTriangle className="w-4 h-4 text-red-300 shrink-0 mt-0.5" />
-                        <p className="text-xs text-red-200 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{cameraError}</p>
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -1145,6 +1161,13 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 )}
               </div>
 
+              {!cameraActive && (
+                <div className={cn("mb-4 flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm", cameraError ? "border border-red-200 bg-red-50 text-red-800" : "bg-muted/60 text-muted-foreground")} role="status">
+                  {cameraError ? <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> : <Camera className="w-4 h-4 shrink-0 mt-0.5" />}
+                  <p>{cameraError || (cameraStarting ? "Connecting to your camera…" : "Position the selected skin area inside the guide, or upload a photo below.")}</p>
+                </div>
+              )}
+
               <canvas ref={canvasRef} className="hidden" />
 
               {cameraActive && (
@@ -1175,7 +1198,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
               <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
 
-              <div className={cn("grid gap-3 mb-4", cameraActive ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2")}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 {cameraActive ? (
                   <button
                     onClick={captureFromCamera}
@@ -1186,7 +1209,6 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                     Capture photo
                   </button>
                 ) : (
-                  <>
                     <button
                       onClick={startCamera}
                       disabled={cameraStarting}
@@ -1201,20 +1223,19 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                       ) : (
                         <>
                           <Camera className="w-4 h-4" />
-                          Open camera
+                          Try camera again
                         </>
                       )}
                     </button>
-                    <button
-                      onClick={triggerFileSelect}
-                      className="flex items-center justify-center gap-2 bg-card border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/8 font-bold py-4 rounded-xl transition-colors text-sm cursor-pointer active:scale-[0.98]"
-                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                    >
-                      <Upload className="w-4 h-4" />
-                      Upload photo
-                    </button>
-                  </>
                 )}
+                <button
+                  onClick={triggerFileSelect}
+                  className="flex items-center justify-center gap-2 bg-card border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/8 font-bold py-4 rounded-xl transition-colors text-sm cursor-pointer active:scale-[0.98]"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload photo
+                </button>
               </div>
             </>
           )}

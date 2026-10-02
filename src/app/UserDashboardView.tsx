@@ -4,7 +4,7 @@ import {
 } from "recharts";
 import {
   Scan, Star, FlaskConical, Share2, Check, CheckCircle,
-  ChevronRight, MessageCircle, Users,
+  ChevronDown, ChevronRight, MessageCircle, Users,
   Calendar, BarChart2, ShoppingBag, BookOpen, Flame, Lock,
   Plus, X, LogOut, Settings, HeartPulse, User,
   Store,
@@ -1296,10 +1296,10 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
           </div>
 
-          <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-5">
-            <section className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <div>
+          <div className="grid min-w-0 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] gap-5">
+            <section className="min-w-0 bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
                   <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Skin concerns</h3>
                   <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Current concerns compared with your previous saved analysis.</p>
                 </div>
@@ -1308,8 +1308,24 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 </button>
               </div>
               {concernRows.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left min-w-[520px]">
+                <>
+                <div className="space-y-2 sm:hidden">
+                  {concernRows.map((row) => (
+                    <div key={row.name} className="rounded-lg border border-border p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="min-w-0 text-sm font-medium text-foreground break-words">{row.name}</p>
+                        <span className="shrink-0 text-[10px] px-2 py-1 rounded-full bg-accent/10 text-accent">{row.trend}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
+                        <span className="text-muted-foreground">Previous: {row.previous}</span>
+                        <span aria-hidden="true" className="text-muted-foreground">→</span>
+                        <span className="font-semibold text-foreground">Current: {row.current}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-left">
                     <thead>
                       <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
                         <th className="py-2 pr-3 font-medium">Concern</th>
@@ -1332,6 +1348,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                     </tbody>
                   </table>
                 </div>
+                </>
               ) : (
                 <div className="border border-dashed border-border rounded-xl p-6 text-center">
                   <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No concern trend yet</p>
@@ -1340,9 +1357,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               )}
             </section>
 
-            <section className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <div>
+            <section className="min-w-0 bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
                   <h3 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Skin journey</h3>
                   <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Recent saved analyses.</p>
                 </div>
@@ -1360,7 +1377,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                       </div>
                       <div className="pb-4 min-w-0">
                         <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.date}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.concerns?.join(", ") || "Saved skin analysis"}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 break-words" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.concerns?.join(", ") || "Saved skin analysis"}</p>
                         <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>Score {typeof item.score === "number" ? `${item.score}/100` : "not scored"}</p>
                       </div>
                     </div>
@@ -1372,12 +1389,12 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your skin journey begins after your first saved analysis.</p>
                 </div>
               )}
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="bg-muted/40 rounded-xl p-3">
+              <div className="mt-4 grid grid-cols-1 min-[400px]:grid-cols-2 gap-3">
+                <div className="min-w-0 bg-muted/40 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Tracked concern</p>
-                  <p className="text-sm text-foreground font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{latestAnalysis?.concerns?.join(", ") || "No concern yet"}</p>
+                  <p className="text-sm text-foreground font-medium break-words" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{latestAnalysis?.concerns?.join(", ") || "No concern yet"}</p>
                 </div>
-                <div className="bg-muted/40 rounded-xl p-3">
+                <div className="min-w-0 bg-muted/40 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Latest area</p>
                   <p className="text-sm text-foreground font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{latestAnalysis?.area || "No area saved yet"}</p>
                 </div>
