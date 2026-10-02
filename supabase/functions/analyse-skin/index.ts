@@ -84,7 +84,7 @@ serve(async (request) => {
     let catalog: Record<string, unknown>[] = [];
     if (vendorId) {
       const { data: vendor, error: vendorError } = await db.from("profiles")
-        .select("id, slug, phone, account_type, branch_status, is_verified, verification_status, parent_brand_id, plan, created_at")
+        .select("id, name, business_name, slug, phone, account_type, branch_status, is_verified, verification_status, parent_brand_id, plan, created_at")
         .eq("id", vendorId).maybeSingle();
       if (vendorError || !vendor || !vendor.is_verified || vendor.verification_status !== "approved" ||
           (vendor.account_type === "branch" && vendor.branch_status !== "active"))
@@ -112,7 +112,7 @@ serve(async (request) => {
       const vendorIds = [...new Set((products || []).map((product) => String(product.vendor_id || "")).filter(Boolean))];
       if (vendorIds.length) {
         const { data: vendors, error: vendorError } = await db.from("profiles")
-          .select("id, slug, phone, account_type, branch_status, is_verified, verification_status, parent_brand_id, plan, created_at")
+          .select("id, name, business_name, slug, phone, account_type, branch_status, is_verified, verification_status, parent_brand_id, plan, created_at")
           .in("id", vendorIds);
         if (vendorError) throw vendorError;
         const parentIds = [...new Set((vendors || []).map((vendor) => vendor.parent_brand_id).filter(Boolean))];
@@ -154,8 +154,8 @@ serve(async (request) => {
       mimeType: imageBase64.slice(5, imageBase64.indexOf(";")) };
     const capture = await callApi("/v1/capture", { media, skinArea, options: { locale: "en-NG" } }, key);
     if ("error" in capture) return reply(capture, capture.status, capture.retryAfter);
-    const verdict = capture.data as { accepted: boolean; capture?: { reject_reasons?: unknown[] }; capture_token?: string };
-    if (!verdict.accepted) return reply({ accepted: false, rejectReasons: verdict.capture?.reject_reasons || [] });
+    const verdict = capture.data as { accepted: boolean; capture?: { confidence?: number; threshold?: number; lighting?: unknown; frames_used?: number; frames_received?: number; reject_reasons?: unknown[] }; capture_token?: string };
+    if (!verdict.accepted) return reply({ accepted: false, capture: verdict.capture, rejectReasons: verdict.capture?.reject_reasons || [] });
 
     const questionnaire = body.questionnaire && typeof body.questionnaire === "object" ? body.questionnaire : undefined;
 
@@ -169,18 +169,28 @@ serve(async (request) => {
       accepted: boolean; capture?: { reject_reasons?: unknown[] };
       legacy?: { concern: string; result: string; score: number; severity: unknown[]; benefits: string[] };
       products?: Record<string, unknown>[]; ingredient_fallback?: unknown[]; treatment?: unknown[];
+      conditions?: { name: string; percentage: number; level: string; confidence: number }[];
+      providers?: { name: string; model: string; ok: boolean; ms: number }[];
+      disagreement?: { max_condition_spread: number; providers_responding: number };
+      skin_type?: string; clinical_referral_advised?: boolean;
       disclaimer?: string; no_issues_detected?: boolean;
     };
-    if (!result.accepted) return reply({ accepted: false, rejectReasons: result.capture?.reject_reasons || [] });
+    if (!result.accepted) return reply({ accepted: false, capture: result.capture, rejectReasons: result.capture?.reject_reasons || [] });
     if (!result.legacy) return reply({ error: "The scanner returned an incomplete report. Please try again." }, 502);
+    const findings = (result.conditions || []).filter((item) => Number.isFinite(item.percentage) && item.percentage > 0);
+    const findingConfidence = findings.length && findings.every((item) => Number.isFinite(item.confidence))
+      ? Math.round(findings.reduce((sum, item) => sum + item.confidence, 0) / findings.length)
+      : null;
+    const productsWithheld = findingConfidence === null || findingConfidence < 65 || Boolean(result.clinical_referral_advised);
     const sourceById = new Map(sourceProducts.map((source) => [String(source.id), source]));
-    const products = (result.products || []).flatMap((item) => {
+    const products = (productsWithheld ? [] : result.products || []).flatMap((item) => {
       const source = sourceById.get(String(item.id));
       if (!source) return [];
-      const seller = source.vendor as { slug?: string; phone?: string } | undefined;
+      const seller = source.vendor as { slug?: string; phone?: string; business_name?: string; name?: string } | undefined;
       return [{ ...item,
         image_url: item.image_url || source.image_url || meta<string[]>(String(source.description || ""), "IMAGES", [])[0] || "",
         vendor_slug: seller?.slug || "",
+        vendor_name: seller?.business_name || seller?.name || "",
         ingredients: catalog.find((candidate) => candidate.id === String(item.id))?.ingredients || [],
         purchase_url: item.purchase_url || (seller?.phone
           ? `https://wa.me/${String(seller.phone).replace(/\D/g, "")}?text=${encodeURIComponent(`Hello, I would like to order ${source.name}`)}`
@@ -188,6 +198,12 @@ serve(async (request) => {
       }];
     });
     return reply({ accepted: true, ...result.legacy, products,
+      capture: result.capture || verdict.capture,
+      conditions: result.conditions || [], skinType: result.skin_type,
+      providersResponding: result.disagreement?.providers_responding ?? result.providers?.filter((provider) => provider.ok).length ?? 0,
+      maxConditionSpread: result.disagreement?.max_condition_spread,
+      findingConfidence, productsWithheld,
+      clinicalReferralAdvised: Boolean(result.clinical_referral_advised),
       ingredientFallback: result.ingredient_fallback || [],
       treatmentPlan: result.treatment || [],
       disclaimer: result.disclaimer, noIssuesDetected: result.no_issues_detected });

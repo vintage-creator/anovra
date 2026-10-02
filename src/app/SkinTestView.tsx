@@ -3,8 +3,8 @@ import {
   Camera, Upload, Shield, ChevronDown, ChevronUp, ChevronRight,
   CheckCircle, ArrowRight, MessageCircle, Zap, Globe, Lock,
   Scan, Activity, X, Check, Info, Store, Search, Star, AlertTriangle,
-  ScanFace, Badge, Bone, Hand, Footprints, PersonStanding, ScanSearch, Sparkles, Smile,
-  Sun, Moon, Droplets, Heart, RefreshCw, Eye
+  ScanFace, Badge, Bone, Hand, Footprints, PersonStanding, ScanSearch, Smile,
+  Droplets, Heart, RefreshCw, Eye, Download, ClipboardList
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -57,6 +57,17 @@ type ScanSeverity = {
   score: number;
 };
 
+type ScanFinding = { name: string; percentage: number; level: SeverityLevel; confidence: number };
+type TreatmentAdvice = {
+  name: string; what_to_do: string; why: string; frequency: string; timeline: string;
+  avoid: string[]; see_a_dermatologist_if: string;
+  ingredient_targets: { ingredient: string; concentration: string; note: string }[];
+};
+type ApiCapture = {
+  confidence?: number; threshold?: number; frames_used?: number; frames_received?: number;
+  lighting?: { brightness?: number; glare_pct?: number; verdict?: string };
+};
+
 type SkinStep = 1 | 2 | 3 | 4 | 5;
 
 type CaptureQuality = {
@@ -90,7 +101,6 @@ type MatchedProduct = {
   name: string;
   brand: string;
   price: string;
-  priceVal: number;
   photo: string;
   images: string[];
   category: string;
@@ -102,6 +112,7 @@ type MatchedProduct = {
   ingredients: string[];
   matchReasons: string[];
   vendorName: string;
+  vendorSlug: string;
   whatsappUrl: string | null;
 };
 
@@ -145,6 +156,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const [matchedProducts, setMatchedProducts] = useState<MatchedProduct[]>([]);
   const [ingredientFallback, setIngredientFallback] = useState<string[]>([]);
   const [scanId, setScanId] = useState("");
+  const [downloadingReport, setDownloadingReport] = useState(false);
   const [trialExpired, setTrialExpired] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
@@ -153,9 +165,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
   // Questionnaire state
   const [questionnaire, setQuestionnaire] = useState({
-    skinFeel: "Oily T-zone, dry cheeks",
-    mainConcern: "Dark spots / hyperpigmentation",
-    ageRange: "20–29",
+    skinFeel: "",
+    mainConcern: "",
+    ageRange: "",
     sensitivities: "",
     pregnantOrBreastfeeding: false,
   });
@@ -163,7 +175,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   // Staged Analysis Progress
   const [analysisPhase, setAnalysisPhase] = useState(1);
   const [analysisElapsed, setAnalysisElapsed] = useState(0);
-  const [rejectionDetail, setRejectionDetail] = useState<{ message: string; guidance: string } | null>(null);
+  const [rejectionDetail, setRejectionDetail] = useState<{ reasons: { message: string; guidance: string }[]; capture?: ApiCapture } | null>(null);
 
   const [captureQuality, setCaptureQuality] = useState<CaptureQuality>({
     brightness: 0,
@@ -228,7 +240,15 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     score: number;
     severity?: ScanSeverity[];
     benefits: string[];
-    treatmentPlan?: any[];
+    conditions?: ScanFinding[];
+    capture?: ApiCapture;
+    skinType?: string;
+    treatmentPlan?: TreatmentAdvice[];
+    findingConfidence?: number | null;
+    productsWithheld?: boolean;
+    clinicalReferralAdvised?: boolean;
+    providersResponding?: number;
+    disclaimer?: string;
   } | null>(null);
   const [analyzingError, setAnalyzingError] = useState<string | null>(null);
 
@@ -544,8 +564,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     }
   }, [activeScanSlug]);
 
-  const healthScore = scanResult?.score ?? 0;
-  const visibleSeverity = scanResult?.severity || [];
+  const visibleSeverity = scanResult?.conditions || [];
+  const findingConfidence = scanResult?.findingConfidence;
+  const productsWithheld = Boolean(scanResult?.productsWithheld || findingConfidence == null || findingConfidence < 65);
 
   // Step 4: Run AI analysis and manage realistic clinical milestone progress
   useEffect(() => {
@@ -583,7 +604,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               mainConcern: questionnaire.mainConcern,
               ageRange: questionnaire.ageRange,
               sensitivities: questionnaire.sensitivities ? [questionnaire.sensitivities] : [],
-              pregnantOrBreastfeeding: questionnaire.pregnantOrBreastfeeding,
+              ...(questionnaire.pregnantOrBreastfeeding ? { pregnantOrBreastfeeding: true } : {}),
             }
           }
         });
@@ -596,11 +617,12 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
         // Quality check rejection
         if (resultData?.accepted === false) {
-          const reasons = (resultData.rejectReasons || []).map((item: { message?: string; guidance?: string }) =>
-            [item.message, item.guidance].filter(Boolean).join(" "));
           setRejectionDetail({
-            message: "Our dermatological quality check could not clearly assess your skin.",
-            guidance: reasons.join(" ") || "Please retake your photo in clear, even natural lighting and hold steady."
+            reasons: (resultData.rejectReasons || []).map((item: { message?: string; guidance?: string }) => ({
+              message: item.message || "The image could not be assessed.",
+              guidance: item.guidance || "Retake the photo in even light with the area fully visible.",
+            })),
+            capture: resultData.capture,
           });
           return;
         }
@@ -617,22 +639,24 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           : { data: [] };
         const productById = new Map((approvedProducts || []).map((product) => [product.id, product]));
 
-        setMatchedProducts((Array.isArray(resultData.products) ? resultData.products : []).map((match: any, index: number) => {
+        setMatchedProducts((!resultData.productsWithheld && Array.isArray(resultData.products) ? resultData.products : []).filter((match: any) =>
+          typeof match.score === "number" && Number.isFinite(match.score)
+        ).map((match: any, index: number) => {
           const product = productById.get(match.id);
           const description = String(product?.description || "");
           const images = parseJsonMeta<string[]>(description, "IMAGES", []);
           return {
             id: match.id,
             rank: Number(match.rank || index + 1),
-            score: Number(match.score || 0),
+            score: match.score,
             name: match.name,
             brand: match.brand || product?.brand || vendorDisplayName || "",
-            price: `₦${Number(match.price ?? product?.price ?? 0).toLocaleString()}`,
-            priceVal: Number(match.price ?? product?.price ?? 0),
+            price: Number.isFinite(Number(match.price ?? product?.price))
+              ? `₦${Number(match.price ?? product?.price).toLocaleString()}` : "Price on request",
             photo: match.image_url || product?.image_url || images[0] || "",
             images,
             category: product?.category || "Skincare",
-            description: cleanProductDescription(description),
+            description: cleanProductDescription(description) || String(match.why || ""),
             benefits: Array.isArray(match.benefits) ? match.benefits : [],
             usageInstructions: match.how_to_use || "",
             precautions: Array.isArray(match.warnings) ? match.warnings.join(" ") : String(match.warnings || ""),
@@ -642,7 +666,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               ...parseJsonMeta<string[]>(description, "ACTIVE_INGREDIENTS", []),
             ],
             matchReasons: match.why ? [match.why] : [],
-            vendorName: vendorDisplayName || "",
+            vendorName: match.vendor_name || vendorDisplayName || "Anovra partner",
+            vendorSlug: match.vendor_slug || activeScanSlug,
             whatsappUrl: match.purchase_url || buildWhatsappUrl(vendorProfile?.phone, match.name),
           };
         }));
@@ -676,7 +701,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               score: resultData.score,
               severity: resultData.severity || [],
               benefits: resultData.benefits || [],
-              matched_products: Array.isArray(resultData.products) ? resultData.products : [],
+              matched_products: !resultData.productsWithheld && Array.isArray(resultData.products) ? resultData.products : [],
               ingredient_fallback: resultData.ingredientFallback || [],
               treatment_plan: resultData.treatmentPlan || [],
               skin_area: selectedArea || "Face",
@@ -684,6 +709,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 brightness: captureQuality.brightness,
                 sharpness: captureQuality.sharpness,
                 guided_capture: Boolean(selectedFile?.name?.startsWith("skin-scan-")),
+                api_capture: resultData.capture || null,
+                finding_confidence: resultData.findingConfidence ?? null,
+                conditions: resultData.conditions || [],
+                products_withheld: Boolean(resultData.productsWithheld),
               }
             }]).select().maybeSingle();
             if (scanError) throw scanError;
@@ -699,7 +728,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               await sendEmailNotification("customer_scan_completed", {
                 name: user.user_metadata?.full_name || "there",
                 email: user.email,
-                link: "https://anovra-api.vercel.app/#/userdashboard",
+                link: `${window.location.origin}/#/userdashboard`,
               });
             }
           } catch (dbErr) {
@@ -707,7 +736,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           }
         }
 
-        // Transition to unified Dermatology & Product Report
+        // Show the cosmetic report and catalogue matches.
         setStep(5);
       } catch (err: any) {
         console.error("AI analysis failed:", err);
@@ -749,7 +778,33 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     setRejectionDetail(null);
   }
 
-  const STEP_LABELS = ["Skin area", "Capture", "Intake", "AI Analysis", "Dermatology report"];
+  async function downloadReport() {
+    if (!scanResult || downloadingReport) return;
+    setDownloadingReport(true);
+    try {
+      const { downloadSkinReportPdf } = await import("./utils/skinReportPdf");
+      await downloadSkinReportPdf({
+        area: selectedArea,
+        scanId,
+        skinType: scanResult.skinType,
+        confidence: scanResult.findingConfidence,
+        capture: scanResult.capture,
+        findings: scanResult.conditions || [],
+        treatment: scanResult.treatmentPlan || [],
+        ingredients: ingredientFallback,
+        products: matchedProducts,
+        productsWithheld,
+        disclaimer: scanResult.disclaimer || "This is a cosmetic skin assessment, not a medical diagnosis. For persistent acne, unusual skin changes, or anything painful or distressing, see a registered dermatologist.",
+      });
+    } catch (error) {
+      console.error("Could not create skin report PDF:", error);
+      toast.error("Could not download the report. Please try again.");
+    } finally {
+      setDownloadingReport(false);
+    }
+  }
+
+  const STEP_LABELS = ["Skin area", "Capture", "Intake", "AI analysis", "Skin report"];
 
   const activeFilters = Object.values(filters).filter(Boolean).length;
   const vendorOptions = Array.from(new Set(matchedProducts.map((product) => product.vendorName).filter(Boolean)));
@@ -813,7 +868,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                         : "Customer skin test"}
                 </span>
                 <span className="block text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {currentUserRole === "brand" ? "Simulating customer scan experience" : hasVendorBrand ? "Powered by Anovra" : "Clinical Vision AI"}
+                  {currentUserRole === "brand" ? "Customer scan preview" : hasVendorBrand ? "Powered by Anovra" : "Skin analysis"}
                 </span>
               </div>
               <span className="text-[10px] font-mono bg-[#008236]/15 text-[#008236] border border-[#008236]/30 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
@@ -880,8 +935,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             </h2>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {hasVendorBrand
-                ? `${vendorDisplayName} uses Anovra's dermatological vision AI to evaluate visible skin concerns and rank safe, approved products.`
-                : "Anovra's clinical AI evaluates any visible skin area. Select the area you wish to assess."}
+                ? `${vendorDisplayName} uses Anovra's AI to assess visible skin features and match approved catalogue products.`
+                : "Choose a visible skin area for a cosmetic assessment."}
             </p>
             {hasVendorBrand && currentUserRole === "guest" && (
               <p className="mt-2 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -968,6 +1023,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   <CheckCircle className="w-3.5 h-3.5 text-[#008236]" /> Photo captured
                 </div>
               </div>
+              <div className="flex items-start gap-3 rounded-lg border border-[#cfe7d6] bg-[#f1faf3] p-4" role="status">
+                <CheckCircle className="w-5 h-5 shrink-0 text-[#008236]" />
+                <div><p className="text-sm font-semibold text-[#07532e]">Photo captured</p><p className="text-xs text-[#3e5d49] mt-1">We will confirm image quality before analysing. If the photo is unsuitable, you will see what to adjust and can retake it.</p></div>
+              </div>
 
               {/* Natural photo attestation checkbox (Required by API docs) */}
               <label className="flex items-start gap-3 p-4 bg-[#FAF7F2] border border-border rounded-2xl cursor-pointer hover:bg-secondary/40 transition-colors">
@@ -982,7 +1041,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                     I confirm this photo has no beauty filter, makeup, or smoothing applied.
                   </span>
                   <span className="text-[11px] text-muted-foreground block mt-0.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Natural lighting and authentic skin texture ensure accurate clinical scoring and safe ingredient matching.
+                    Natural light and authentic skin texture help the analysis assess visible features more reliably.
                   </span>
                 </div>
               </label>
@@ -1175,10 +1234,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="mb-6">
             <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>Step 3 of 5 · Intake</p>
             <h2 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Clinical intake consultation
+              Skin and sensitivity details
             </h2>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              These clinical priors guide the AI engine to rule out contraindicated ingredients and tailor your treatment regimen.
+              Your answers help personalise the analysis and flag ingredient sensitivities.
             </p>
           </div>
 
@@ -1314,7 +1373,8 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 analysisStartedRef.current = false;
                 setStep(4);
               }}
-              className="flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white py-4 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-md hover:shadow-lg active:scale-[0.99]"
+              disabled={!questionnaire.skinFeel || !questionnaire.mainConcern || !questionnaire.ageRange}
+              className="flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white py-4 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-md hover:shadow-lg active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               <Zap className="w-4 h-4 text-white" />
@@ -1333,16 +1393,19 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
                 <AlertTriangle className="w-6 h-6 text-amber-600" />
               </div>
-              <p className="text-xs font-mono uppercase tracking-wider text-amber-600 font-semibold mb-1">Quality check feedback</p>
+              <p className="text-xs font-mono uppercase text-amber-700 font-semibold mb-1">Capture check</p>
               <h3 className="text-xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-                Photo quality adjustment required
+                This photo needs a retake
               </h3>
-              <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-                {rejectionDetail.message}
-              </p>
-              <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl mb-6">
-                <p className="text-xs font-semibold text-amber-900 mb-1">AI Recommendation:</p>
-                <p className="text-xs text-amber-800 leading-relaxed">{rejectionDetail.guidance}</p>
+              <p className="text-sm text-muted-foreground mb-4">No analysis was run. Adjust the photo and try again.</p>
+              {rejectionDetail.capture?.confidence != null && <p className="text-sm font-semibold text-amber-900 mb-4">Capture confidence {Math.round(rejectionDetail.capture.confidence)}% · required {Math.round(rejectionDetail.capture.threshold ?? 0)}%</p>}
+              <div className="space-y-3 mb-6">
+                {(rejectionDetail.reasons.length ? rejectionDetail.reasons : [{ message: "The skin area was not clear enough.", guidance: "Retake the photo in even light with the whole area visible." }]).map((reason, index) => (
+                  <div key={index} className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm font-semibold text-amber-950">{reason.message}</p>
+                    <p className="text-sm text-amber-900 mt-1">{reason.guidance}</p>
+                  </div>
+                ))}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
@@ -1356,17 +1419,14 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   <Camera className="w-4 h-4" />
-                  Retake in better light
+                  Retake photo
                 </button>
                 <button
-                  onClick={() => {
-                    setRejectionDetail(null);
-                    setStep(3);
-                  }}
+                  onClick={resetFlow}
                   className="w-full py-3.5 rounded-xl border border-border text-foreground hover:bg-secondary font-semibold text-xs transition-colors cursor-pointer"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
-                  Edit intake answers
+                  Start over
                 </button>
               </div>
             </div>
@@ -1411,23 +1471,23 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               </div>
 
               <p className="text-xs font-mono uppercase tracking-widest text-[#C86B3A] font-semibold mb-2">
-                Dermatological vision ensemble active
+                Skin analysis in progress
               </p>
               <h2 className="text-2xl sm:text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
                 Analysing your {selectedArea.toLowerCase()}…
               </h2>
 
               <p className="text-xs text-muted-foreground max-w-sm mx-auto mb-6 leading-relaxed">
-                Evaluating cellular tone, barrier hydration, and pigmentation markers across our multi-model AI ensemble.
+                Checking photo quality, reviewing visible skin features and preparing your cosmetic report.
               </p>
 
               {/* Progress Milestones */}
               <div className="space-y-3 max-w-md mx-auto text-left bg-[#FAF7F2] p-4.5 rounded-2xl border border-border mb-6">
                 {[
-                  { phase: 1, label: "Calibrating lighting & skin barrier clarity", done: analysisPhase > 1, active: analysisPhase === 1 },
-                  { phase: 2, label: "Evaluating dermal conditions (Claude Opus + Gemini)", done: analysisPhase > 2, active: analysisPhase === 2 },
-                  { phase: 3, label: "Screening against safety lists & contraindications", done: analysisPhase > 3, active: analysisPhase === 3 },
-                  { phase: 4, label: "Formulating regimen & ranking approved catalogue", done: false, active: analysisPhase === 4 },
+                  { phase: 1, label: "Checking the photo", done: analysisPhase > 1, active: analysisPhase === 1 },
+                  { phase: 2, label: "Reviewing visible skin features", done: analysisPhase > 2, active: analysisPhase === 2 },
+                  { phase: 3, label: "Preparing guidance", done: analysisPhase > 3, active: analysisPhase === 3 },
+                  { phase: 4, label: "Checking catalogue matches", done: false, active: analysisPhase === 4 },
                 ].map((item) => (
                   <div key={item.phase} className="flex items-center gap-3">
                     <div className={cn(
@@ -1452,54 +1512,39 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
               <div className="flex items-center justify-center gap-2 text-[11px] font-mono text-muted-foreground">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Elapsed time: {analysisElapsed}s · average completion ~45–60s</span>
+                <span>Elapsed time: {analysisElapsed}s · please keep this page open</span>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* ---- STEP 5: Comprehensive Dermatology & Product Report ---- */}
+      {/* ---- STEP 5: Skin report and product matches ---- */}
       {step === 5 && (
-        <div className="max-w-3xl mx-auto px-4 py-8">
-          {/* Top Banner Card with Health Score */}
-          <div className="bg-gradient-to-br from-[#008236] to-[#005a25] text-white rounded-3xl p-6 sm:p-8 mb-6 shadow-xl border border-[#008236]/20">
+        <div className="scan-report max-w-3xl mx-auto px-4 py-8">
+          <style>{`@media print { body * { visibility: hidden !important; } body .scan-report, body .scan-report * { visibility: visible !important; } .scan-report { position: absolute; left: 0; top: 0; width: 100%; max-width: none; color: #1c3125; } .scan-report .print-hide { display: none !important; } .scan-report article, .scan-report section { break-inside: avoid; } }`}</style>
+          <div className="bg-[#07532e] text-white rounded-lg p-6 sm:p-8 mb-5 border border-[#07532e]">
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
                 <p className="text-xs text-white/60 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
-                  DERMATOLOGY ASSESSMENT COMPLETE{scanId ? ` · ID ${scanId}` : ""}
+                  COSMETIC SKIN ASSESSMENT{scanId ? ` · ID ${scanId}` : ""}
                 </p>
                 <h2 className="text-3xl font-light mb-1" style={{ fontFamily: "'Fraunces', serif" }}>
-                  Your personalized skin report
+                  Your personalised skin report
                 </h2>
                 <p className="text-sm text-white/80" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Target area: <span className="text-white font-bold">{selectedArea}</span> · Evaluated against NAFDAC-approved standards
+                  Area assessed: <span className="text-white font-bold">{selectedArea}</span>
                 </p>
               </div>
 
-              {/* Health score circular gauge */}
-              <div className="flex-shrink-0 relative w-20 h-20">
-                <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
-                  <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="6" />
-                  <circle
-                    cx="40" cy="40" r="34" fill="none" stroke="#C86B3A" strokeWidth="6"
-                    strokeDasharray={`${2 * Math.PI * 34}`}
-                    strokeDashoffset={`${2 * Math.PI * 34 * (1 - healthScore / 100)}`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-xl font-bold text-white font-mono">{healthScore}</span>
-                  <span className="text-[9px] text-white/60 uppercase font-mono">score</span>
-                </div>
-              </div>
+              {scanResult?.capture?.confidence != null && <div className="shrink-0 text-right"><strong className="text-2xl">{Math.round(scanResult.capture.confidence)}%</strong><p className="text-xs text-white/75">Photo quality</p></div>}
             </div>
 
             {/* Badges: Skin Type & Primary Condition */}
             <div className="flex flex-wrap gap-3 mb-6">
               {[
-                { label: "Determined Skin Type", value: scanResult?.result || "Balanced" },
-                { label: "Primary Condition", value: scanResult?.concern || "Clear skin profile" },
+                { label: "Skin type", value: scanResult?.skinType || "Not determined" },
+                { label: "Main visible concern", value: scanResult?.concern || "No concern identified" },
               ].map((item) => (
                 <div key={item.label} className="bg-white/10 border border-white/10 rounded-2xl px-4 py-3 flex-1 min-w-[200px]">
                   <p className="text-[10px] text-white/50 mb-0.5 font-mono">{item.label.toUpperCase()}</p>
@@ -1511,94 +1556,68 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             {/* Severity Breakdown Meters */}
             <div>
               <p className="text-xs text-white/70 mb-3.5 uppercase tracking-wider font-semibold font-mono">
-                Detected conditions & severity breakdown
+                Visible findings
               </p>
               {visibleSeverity.length === 0 ? (
-                <p className="text-sm text-white/80">No visible dermal conditions cleared the threshold.</p>
+                <p className="text-sm text-white/80">No visible concerns were returned by the analysis.</p>
               ) : (
                 <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3.5">
                   {visibleSeverity.map((c) => {
                     const level = c.level;
-                    const severity = Math.max(0, Math.min(100, c.score));
+                    const severity = Math.max(0, Math.min(100, c.percentage));
                     return (
-                      <div key={c.label}>
+                      <div key={c.name}>
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs text-white/90" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{c.label}</span>
-                          <span className="text-xs font-bold font-mono" style={{ color: level === "Good" || level === "Normal" || level === "Low" ? "#A7F3D0" : level === "Mild" || level === "Moderate" ? "#FDBA74" : "#FCA5A5" }}>{level}</span>
+                          <span className="text-xs text-white/90" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{c.name}</span>
+                          <span className="text-xs font-bold font-mono text-white">{Math.round(severity)}% · {level}</span>
                         </div>
                         <div className="h-1.5 rounded-full bg-white/15">
-                          <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${severity}%`, backgroundColor: level === "Good" || level === "Normal" || level === "Low" ? "#10B981" : level === "Mild" || level === "Moderate" ? "#C86B3A" : "#EF4444" }} />
+                          <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${severity}%`, backgroundColor: level === "Low" ? "#86efac" : level === "Mild" ? "#fcd34d" : "#fdba74" }} />
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
+              <p className="mt-4 text-xs text-white/70">Percentages describe estimated visible severity, not a diagnosis. Finding confidence: {findingConfidence == null ? "unavailable" : `${Math.round(findingConfidence)}% average`} {scanResult?.providersResponding ? `· ${scanResult.providersResponding} AI responses` : ""}.</p>
             </div>
           </div>
 
-          {/* Routine Protocol: Morning & Evening */}
-          <div className="bg-card border border-border rounded-3xl p-6 sm:p-7 shadow-xs mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="w-5 h-5 text-[#C86B3A]" />
-              <h3 className="text-xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-                Targeted daily skincare routine
-              </h3>
+          {scanResult?.capture && <section className="border border-border bg-white rounded-lg p-5 sm:p-6 mb-6" aria-label="Capture quality">
+            <div className="flex items-center gap-2 mb-3"><CheckCircle className="w-5 h-5 text-[#008236]" /><h3 className="font-semibold text-foreground">Photo accepted</h3></div>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+              {scanResult.capture.confidence != null && <span>Capture confidence <strong className="text-foreground">{Math.round(scanResult.capture.confidence)}%</strong>{scanResult.capture.threshold != null && ` · threshold ${Math.round(scanResult.capture.threshold)}%`}</span>}
+              {scanResult.capture.lighting?.brightness != null && <span>Brightness {Math.round(scanResult.capture.lighting.brightness)}</span>}
+              {scanResult.capture.lighting?.glare_pct != null && <span>Glare {Math.round(scanResult.capture.lighting.glare_pct)}%</span>}
+              {scanResult.capture.lighting?.verdict && <span>Lighting {scanResult.capture.lighting.verdict}</span>}
+              {scanResult.capture.frames_used != null && <span>{scanResult.capture.frames_used} of {scanResult.capture.frames_received ?? scanResult.capture.frames_used} frames used</span>}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Morning */}
-              <div className="p-4 bg-[#FAF7F2] rounded-2xl border border-border/80">
-                <div className="flex items-center gap-2 mb-2.5">
-                  <Sun className="w-4 h-4 text-amber-500" />
-                  <span className="text-xs font-bold uppercase tracking-wider font-mono text-foreground">Morning Protocol</span>
-                </div>
-                <ul className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#008236] mt-1.5 shrink-0" />
-                    <span><strong>Cleanse:</strong> Gentle low-foaming cleanser to balance sebum.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#008236] mt-1.5 shrink-0" />
-                    <span><strong>Treat:</strong> Antioxidant active (Vitamin C / Niacinamide) to brighten dark spots.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#008236] mt-1.5 shrink-0" />
-                    <span><strong>Protect:</strong> Broad-spectrum SPF 50+ to prevent UV-induced pigmentation.</span>
-                  </li>
-                </ul>
-              </div>
+          </section>}
 
-              {/* Evening */}
-              <div className="p-4 bg-[#FAF7F2] rounded-2xl border border-border/80">
-                <div className="flex items-center gap-2 mb-2.5">
-                  <Moon className="w-4 h-4 text-indigo-500" />
-                  <span className="text-xs font-bold uppercase tracking-wider font-mono text-foreground">Evening Protocol</span>
-                </div>
-                <ul className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#C86B3A] mt-1.5 shrink-0" />
-                    <span><strong>Purify:</strong> Thorough double cleanse to remove pollutants and sunscreen.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#C86B3A] mt-1.5 shrink-0" />
-                    <span><strong>Repair:</strong> Targeted corrective serum matching your primary concern.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#C86B3A] mt-1.5 shrink-0" />
-                    <span><strong>Lock:</strong> Ceramide barrier cream to support overnight epidermal recovery.</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
+          <section className="mb-8">
+            <div className="flex items-center gap-2 mb-4"><ClipboardList className="w-5 h-5 text-[#94613f]" /><h3 className="text-xl text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Care guidance for your findings</h3></div>
+            {scanResult?.treatmentPlan?.length ? <div className="grid gap-3">{scanResult.treatmentPlan.map((plan) => <article key={plan.name} className="border border-border bg-white rounded-lg p-5">
+              <h4 className="font-semibold text-foreground mb-2">{plan.name}</h4>
+              <p className="text-sm text-foreground">{plan.what_to_do}</p>
+              {plan.why && <p className="text-sm text-muted-foreground mt-2">{plan.why}</p>}
+              <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-xs text-muted-foreground">{plan.frequency && <span><strong>How often:</strong> {plan.frequency}</span>}{plan.timeline && <span><strong>Expected timeframe:</strong> {plan.timeline}</span>}</div>
+              {plan.ingredient_targets?.length > 0 && <div className="mt-3"><p className="text-xs font-semibold text-foreground mb-1">Ingredients to discuss or look for</p><div className="flex flex-wrap gap-2">{plan.ingredient_targets.map((target) => <span key={`${target.ingredient}-${target.concentration}`} title={target.note || undefined} className="px-2.5 py-1 text-xs rounded-md bg-[#edf7ef] text-[#07532e]">{target.ingredient}{target.concentration ? ` · ${target.concentration}` : ""}</span>)}</div></div>}
+              {plan.avoid?.length > 0 && <p className="text-xs text-muted-foreground mt-3"><strong>Avoid:</strong> {plan.avoid.join("; ")}</p>}
+              {plan.see_a_dermatologist_if && <p className="text-xs text-[#8a452b] mt-2"><strong>See a dermatologist if:</strong> {plan.see_a_dermatologist_if}</p>}
+            </article>)}</div> : <p className="text-sm text-muted-foreground">The analysis did not return a care plan for this photo.</p>}
+          </section>
 
           {/* Matched Products from Connected Storefront */}
           <div className="mb-8">
+            {productsWithheld && <div className="border-l-4 border-[#ad623a] bg-[#fff8f2] p-5 mb-5 rounded-r-lg">
+              <h3 className="font-semibold text-foreground">Product matches are paused</h3>
+              <p className="text-sm text-muted-foreground mt-1">{scanResult?.clinicalReferralAdvised ? "This result needs professional review." : "The average confidence in the visible findings is below 65%, or was not supplied."} You can read the assessment, retake your photo, or consult a licensed dermatologist for a closer assessment. We have not recommended products from partner catalogues for this scan.</p>
+            </div>}
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <p className="text-xs tracking-widest text-[#C86B3A] font-semibold uppercase mb-1 font-mono">Storefront Matching</p>
                 <h3 className="text-2xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
-                  {hasVendorBrand ? `${vendorDisplayName}'s matched catalogue` : "Recommended skincare treatments"}
+                  {hasVendorBrand ? `${vendorDisplayName}'s matched catalogue` : "Matched partner products"}
                 </h3>
               </div>
               {matchedProducts.length > 0 && (
@@ -1657,17 +1676,17 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
             {/* Products List or Fallback */}
             <div className="space-y-4">
-              {filteredMatchedProducts.length === 0 ? (
+              {productsWithheld ? null : filteredMatchedProducts.length === 0 ? (
                 <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 text-center">
                   <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-3">
                     <Droplets className="w-6 h-6 text-[#C86B3A]" />
                   </div>
-                  <h4 className="text-base font-semibold text-foreground mb-1">Recommended Active Ingredients</h4>
+                  <h4 className="text-base font-semibold text-foreground mb-1">What to look for</h4>
                   <p className="text-xs text-muted-foreground max-w-md mx-auto mb-4 leading-relaxed">
-                    This connected storefront has no active product stock matching your exact condition profile. You can look for formulations containing these proven clinical ingredients:
+                    No approved catalogue product matched this report. These ingredient targets came from the analysis; check suitability with a qualified professional before buying.
                   </p>
                   <div className="flex flex-wrap justify-center gap-2 max-w-md mx-auto">
-                    {(ingredientFallback.length ? ingredientFallback : ["Niacinamide (5%)", "Azelaic Acid (10%)", "Ceramides NP", "Zinc PCA", "Hyaluronic Acid"]).map((ing) => (
+                    {ingredientFallback.map((ing) => (
                       <span key={ing} className="px-3 py-1 bg-[#008236]/10 text-[#008236] border border-[#008236]/20 rounded-full text-xs font-semibold">
                         {ing}
                       </span>
@@ -1703,6 +1722,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                         <p className="text-xs text-muted-foreground font-medium">
                           {rec.brand} · <span className="text-[#008236] font-bold">{rec.price}</span>
                         </p>
+                        {rec.description && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{rec.description}</p>}
                       </div>
                       {expandedCard === i ? <ChevronUp className="w-5 h-5 text-muted-foreground shrink-0 mt-1" /> : <ChevronDown className="w-5 h-5 text-muted-foreground shrink-0 mt-1" />}
                     </button>
@@ -1710,7 +1730,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                     {expandedCard === i && (
                       <div className="border-t border-border">
                         <div className="p-4.5 bg-[#FAF7F2]/60 border-b border-border">
-                          <p className="text-[11px] font-bold text-[#C86B3A] uppercase tracking-wider mb-1 font-mono">Dermatological rationale</p>
+                          <p className="text-[11px] font-bold text-[#C86B3A] uppercase tracking-wider mb-1 font-mono">Why it matched</p>
                           <p className="text-xs text-foreground leading-relaxed">
                             {rec.matchReasons.length > 0
                               ? rec.matchReasons.join(". ")
@@ -1735,7 +1755,11 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                           <div className="text-xs text-muted-foreground">
                             Sold by <strong className="text-foreground">{rec.vendorName}</strong>
                           </div>
-                          {rec.whatsappUrl ? (
+                          {rec.vendorSlug ? (
+                            <a href={`#/shop/${encodeURIComponent(rec.vendorSlug)}?product=${encodeURIComponent(rec.id)}`} className="inline-flex items-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white px-4 py-2.5 rounded-lg font-bold text-xs transition-colors">
+                              View product <ArrowRight className="w-4 h-4" />
+                            </a>
+                          ) : rec.whatsappUrl ? (
                             <a
                               href={rec.whatsappUrl}
                               target="_blank"
@@ -1766,18 +1790,18 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="flex items-start gap-2.5 p-4 bg-secondary/40 border border-border rounded-2xl mb-8">
             <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-relaxed">
-              This report is a cosmetic and lifestyle dermatological recommendation powered by Anovra AI. It does not replace in-person medical diagnosis by a registered physician or dermatologist.
+              {scanResult?.disclaimer || "This is a cosmetic skin assessment, not a medical diagnosis. For persistent acne, unusual skin changes, or anything painful or distressing, see a registered dermatologist."}
             </p>
           </div>
 
-          {/* Reset / Start New Consultation */}
-          <button
-            onClick={resetFlow}
-            className="w-full py-4 border-2 border-[#C86B3A] text-[#C86B3A] hover:bg-[#C86B3A]/8 rounded-2xl font-bold text-sm transition-all cursor-pointer shadow-xs active:scale-[0.99]"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
-            Start a new skin analysis
-          </button>
+          <div className="print-hide border-t border-border pt-5">
+            <p className="text-sm text-muted-foreground mb-3">Need a clearer photo, or want to assess a different area?</p>
+            <div className="flex flex-wrap gap-3">
+              <button onClick={() => { analysisStartedRef.current = false; setImageBase64(null); setSelectedFile(null); setScanResult(null); setMatchedProducts([]); setStep(2); }} className="inline-flex items-center gap-2 px-4 py-3 border border-border rounded-lg font-semibold text-sm hover:bg-secondary"><Camera className="w-4 h-4" />Retake photo</button>
+              <button onClick={resetFlow} className="inline-flex items-center gap-2 px-4 py-3 border border-border rounded-lg font-semibold text-sm hover:bg-secondary"><RefreshCw className="w-4 h-4" />Start over</button>
+              <button onClick={downloadReport} disabled={downloadingReport} className="inline-flex items-center gap-2 px-4 py-3 bg-[#008236] text-white rounded-lg font-semibold text-sm hover:bg-[#006c2c] disabled:opacity-60"><Download className="w-4 h-4" />{downloadingReport ? "Preparing PDF…" : "Download PDF"}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
