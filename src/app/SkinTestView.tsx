@@ -177,6 +177,11 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const [ingredientFallback, setIngredientFallback] = useState<string[]>([]);
   const [scanId, setScanId] = useState("");
   const [downloadingReport, setDownloadingReport] = useState(false);
+  const [pdfReady, setPdfReady] = useState(false);
+  const [pdfPreparationError, setPdfPreparationError] = useState(false);
+  const [pdfRetryKey, setPdfRetryKey] = useState(0);
+  const pdfModuleRef = useRef<typeof import("./utils/skinReportPdf") | null>(null);
+  const pdfLogoRef = useRef<HTMLImageElement | null>(null);
   const [trialExpired, setTrialExpired] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
@@ -619,6 +624,32 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const findingConfidence = scanResult?.findingConfidence;
   const noIssuesDetected = Boolean(scanResult?.noIssuesDetected);
   const productsWithheld = Boolean(scanResult?.productsWithheld || noIssuesDetected || findingConfidence == null || findingConfidence < 65);
+  const highFindingConfidence = !noIssuesDetected && findingConfidence != null && findingConfidence >= 65;
+  const confidenceLabel = noIssuesDetected ? "No findings to score" : findingConfidence == null ? "Confidence unavailable" : highFindingConfidence ? "High confidence" : "Low confidence";
+
+  useEffect(() => {
+    if (step < 4 || pdfModuleRef.current) return;
+    let cancelled = false;
+    const logoPromise = new Promise<HTMLImageElement | null>((resolve) => {
+      const logo = new Image();
+      const timeout = window.setTimeout(() => resolve(null), 4000);
+      logo.onload = () => { window.clearTimeout(timeout); resolve(logo); };
+      logo.onerror = () => { window.clearTimeout(timeout); resolve(null); };
+      logo.src = "/logo.png";
+    });
+    setPdfPreparationError(false);
+    Promise.all([import("./utils/skinReportPdf"), logoPromise]).then(([pdfModule, logo]) => {
+      if (cancelled) return;
+      pdfModuleRef.current = pdfModule;
+      pdfLogoRef.current = logo;
+      setPdfReady(true);
+    }).catch((error) => {
+      if (cancelled) return;
+      console.error("Could not prepare PDF download:", error);
+      setPdfPreparationError(true);
+    });
+    return () => { cancelled = true; };
+  }, [step, pdfRetryKey]);
 
   // Step 4: Run AI analysis and manage realistic clinical milestone progress
   useEffect(() => {
@@ -830,12 +861,11 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     setRejectionDetail(null);
   }
 
-  async function downloadReport() {
-    if (!scanResult || downloadingReport) return;
+  function downloadReport() {
+    if (!scanResult || downloadingReport || !pdfModuleRef.current) return;
     setDownloadingReport(true);
     try {
-      const { downloadSkinReportPdf } = await import("./utils/skinReportPdf");
-      await downloadSkinReportPdf({
+      pdfModuleRef.current.downloadSkinReportPdf({
         area: selectedArea,
         scanId,
         skinType: scanResult.skinType,
@@ -850,7 +880,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
         providersResponding: scanResult.providersResponding,
         maxConditionSpread: scanResult.maxConditionSpread,
         disclaimer: scanResult.disclaimer || SCAN_DISCLAIMER,
-      });
+      }, pdfLogoRef.current);
     } catch (error) {
       console.error("Could not create skin report PDF:", error);
       toast.error("Could not download the report. Please try again.");
@@ -1592,21 +1622,24 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
       {step === 5 && (
         <div className="scan-report max-w-3xl mx-auto px-4 py-8">
           <style>{`@media print { body * { visibility: hidden !important; } body .scan-report, body .scan-report * { visibility: visible !important; } .scan-report { position: absolute; left: 0; top: 0; width: 100%; max-width: none; color: #1c3125; } .scan-report .print-hide { display: none !important; } .scan-report article, .scan-report section { break-inside: avoid; } }`}</style>
-          <div className="bg-[#07532e] text-white rounded-lg p-6 sm:p-8 mb-5 border border-[#07532e]">
+          <div className={cn("rounded-lg p-5 sm:p-8 mb-5 border", highFindingConfidence ? "bg-[#07532e] text-white border-[#07532e]" : noIssuesDetected ? "bg-white text-foreground border-border" : "bg-[#fff8f2] text-foreground border-[#ebd0bd]")}>
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
               <div className="min-w-0">
-                <p className="text-xs text-white/60 mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
+                <p className={cn("text-xs mb-1", highFindingConfidence ? "text-white/70" : "text-muted-foreground")} style={{ fontFamily: "'DM Mono', monospace" }}>
                   COSMETIC SKIN ASSESSMENT{scanId ? ` · ID ${scanId}` : ""}
                 </p>
-                <h2 className="text-3xl font-light mb-1" style={{ fontFamily: "'Fraunces', serif" }}>
+                <h2 className="text-[26px] sm:text-3xl font-light leading-tight mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
                   Your personalised skin report
                 </h2>
-                <p className="text-sm text-white/80" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Area assessed: <span className="text-white font-bold">{selectedArea}</span>
+                <p className={cn("text-sm", highFindingConfidence ? "text-white/80" : "text-muted-foreground")} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Area assessed: <span className={cn("font-bold", highFindingConfidence ? "text-white" : "text-foreground")}>{selectedArea}</span>
                 </p>
               </div>
 
-              {scanResult?.capture?.confidence != null && <div className="shrink-0 sm:text-right"><strong className="text-2xl">{Math.round(scanResult.capture.confidence)}%</strong><p className="text-xs text-white/75">Capture confidence</p></div>}
+              <div className={cn("shrink-0 rounded-lg px-3 py-2 sm:text-right self-start", highFindingConfidence ? "bg-white/10" : noIssuesDetected ? "bg-muted/70" : "bg-amber-100/70")}>
+                <strong className="text-2xl leading-none">{findingConfidence != null && !noIssuesDetected ? `${Math.round(findingConfidence)}%` : "—"}</strong>
+                <p className={cn("text-xs mt-1", highFindingConfidence ? "text-white/80" : "text-muted-foreground")}>{confidenceLabel}</p>
+              </div>
             </div>
 
             {/* Badges: Skin Type & Primary Condition */}
@@ -1615,20 +1648,20 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 { label: "Skin type", value: scanResult?.skinType ? scanResult.skinType.charAt(0).toUpperCase() + scanResult.skinType.slice(1) : "Not determined" },
                 { label: "Main visible concern", value: noIssuesDetected ? "No notable concerns identified" : scanResult?.concern || "Not determined" },
               ].map((item) => (
-                <div key={item.label} className="bg-white/10 border border-white/10 rounded-2xl px-4 py-3 flex-1 min-w-[200px]">
-                  <p className="text-[10px] text-white/50 mb-0.5 font-mono">{item.label.toUpperCase()}</p>
-                  <p className="text-sm text-white font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
+                <div key={item.label} className={cn("border rounded-lg px-4 py-3 flex-1 min-w-0 sm:min-w-[200px]", highFindingConfidence ? "bg-white/10 border-white/10" : "bg-muted/50 border-border")}>
+                  <p className={cn("text-[10px] mb-0.5 font-mono", highFindingConfidence ? "text-white/65" : "text-muted-foreground")}>{item.label.toUpperCase()}</p>
+                  <p className="text-sm font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
                 </div>
               ))}
             </div>
 
             {/* Severity Breakdown Meters */}
             <div>
-              <p className="text-xs text-white/70 mb-3.5 uppercase tracking-wider font-semibold font-mono">
+              <p className={cn("text-xs mb-3.5 uppercase tracking-wider font-semibold font-mono", highFindingConfidence ? "text-white/80" : "text-muted-foreground")}>
                 Visible findings
               </p>
               {visibleSeverity.length === 0 ? (
-                <p className="text-sm text-white/80">{noIssuesDetected ? "The analysis did not identify a notable visible concern in this photo. This does not rule out a skin condition." : "No visible findings were returned. Retake the photo if this does not reflect what you see."}</p>
+                <p className={cn("text-sm", highFindingConfidence ? "text-white/80" : "text-muted-foreground")}>{noIssuesDetected ? "The analysis did not identify a notable visible concern in this photo. This does not rule out a skin condition." : "No visible findings were returned. Retake the photo if this does not reflect what you see."}</p>
               ) : (
                 <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3.5">
                   {visibleSeverity.map((c) => {
@@ -1637,10 +1670,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                     return (
                       <div key={c.name}>
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs text-white/90" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{c.name}</span>
-                          <span className="text-xs font-bold font-mono text-white">{Math.round(severity)}% · {level}</span>
+                          <span className={cn("text-xs", highFindingConfidence ? "text-white/90" : "text-foreground")} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{c.name}</span>
+                          <span className="text-xs font-bold font-mono">{Math.round(severity)}% · {level}</span>
                         </div>
-                        <div className="h-1.5 rounded-full bg-white/15">
+                        <div className={cn("h-1.5 rounded-full", highFindingConfidence ? "bg-white/20" : "bg-[#ddded9]")}>
                           <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${severity}%`, backgroundColor: level === "Low" ? "#86efac" : level === "Mild" ? "#fcd34d" : "#fdba74" }} />
                         </div>
                       </div>
@@ -1648,7 +1681,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   })}
                 </div>
               )}
-              <p className="mt-4 text-xs text-white/70">{visibleSeverity.length > 0 ? `Percentages describe estimated visible severity, not a diagnosis. Average finding confidence: ${findingConfidence == null ? "not supplied" : `${Math.round(findingConfidence)}%`}.` : "No finding confidence is calculated when there are no findings."} {scanResult?.providersResponding ? `${scanResult.providersResponding} AI responses reviewed.` : ""}</p>
+              <p className={cn("mt-4 text-xs", highFindingConfidence ? "text-white/75" : "text-muted-foreground")}>{visibleSeverity.length > 0 ? "Percentages show estimated visible severity, not confidence or a diagnosis." : "No finding confidence is calculated when there are no findings."} {scanResult?.providersResponding ? `${scanResult.providersResponding} AI responses reviewed.` : ""}</p>
             </div>
           </div>
 
@@ -1708,7 +1741,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   ? "This result needs professional review before product matching. Please consult a registered dermatologist."
                   : findingConfidence == null
                     ? "The analysis did not supply confidence for its visible findings, so we cannot safely match products. You can retake the photo."
-                    : `Average finding confidence was ${Math.round(findingConfidence)}%, below the 65% needed for product matching. You can retake the photo or consult a registered dermatologist.`}</p>
+                    : `Average finding confidence was ${Math.round(findingConfidence)}%, below the 65% needed for product matching. Please consult a registered dermatologist for a closer assessment; you can also retake the photo.`}</p>
             </div>}
             {!productsWithheld && <>
             <div className="flex items-start justify-between gap-4 mb-4">
@@ -1890,7 +1923,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             <div className="flex flex-wrap gap-3">
               <button onClick={() => { analysisStartedRef.current = false; setImageBase64(null); setSelectedFile(null); setScanResult(null); setMatchedProducts([]); setStep(2); }} className="inline-flex items-center gap-2 px-4 py-3 border border-border rounded-lg font-semibold text-sm hover:bg-secondary"><Camera className="w-4 h-4" />Retake photo</button>
               <button onClick={resetFlow} className="inline-flex items-center gap-2 px-4 py-3 border border-border rounded-lg font-semibold text-sm hover:bg-secondary"><RefreshCw className="w-4 h-4" />Start over</button>
-              <button onClick={downloadReport} disabled={downloadingReport} className="inline-flex items-center gap-2 px-4 py-3 bg-[#008236] text-white rounded-lg font-semibold text-sm hover:bg-[#006c2c] disabled:opacity-60"><Download className="w-4 h-4" />{downloadingReport ? "Preparing PDF…" : "Download PDF"}</button>
+              <button onClick={pdfPreparationError ? () => setPdfRetryKey((key) => key + 1) : downloadReport} disabled={(!pdfReady && !pdfPreparationError) || downloadingReport} className="inline-flex items-center gap-2 px-4 py-3 bg-[#008236] text-white rounded-lg font-semibold text-sm hover:bg-[#006c2c] disabled:opacity-60"><Download className="w-4 h-4" />{pdfPreparationError ? "Retry PDF" : !pdfReady || downloadingReport ? "Preparing PDF…" : "Download PDF"}</button>
             </div>
           </div>
         </div>

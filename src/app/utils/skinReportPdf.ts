@@ -1,3 +1,5 @@
+import { jsPDF } from "jspdf";
+
 type Finding = { name: string; percentage: number; level: string; confidence: number };
 type Treatment = {
   name: string; what_to_do: string; why: string; frequency: string; timeline: string;
@@ -6,7 +8,7 @@ type Treatment = {
 };
 type Product = { name: string; brand: string; price: string; score: number; matchReasons: string[]; vendorSlug: string; id: string };
 
-export async function downloadSkinReportPdf(report: {
+export function downloadSkinReportPdf(report: {
   area: string;
   scanId: string;
   skinType?: string;
@@ -21,8 +23,7 @@ export async function downloadSkinReportPdf(report: {
   providersResponding?: number;
   maxConditionSpread?: number;
   disclaimer: string;
-}) {
-  const { jsPDF } = await import("jspdf");
+}, logo?: HTMLImageElement | null) {
   const pdf = new jsPDF({ unit: "mm", format: "a4" });
   const left = 18;
   const right = 192;
@@ -55,13 +56,14 @@ export async function downloadSkinReportPdf(report: {
     line(value, { size: 14, bold: true, colour: [7, 83, 46], gap: 4 });
   };
 
-  try {
-    const logo = new Image();
-    logo.src = "/logo.png";
-    await logo.decode();
-    pdf.addImage(logo, "PNG", left, 12, 43, 14);
-    y = 34;
-  } catch {
+  if (logo?.complete && logo.naturalWidth) {
+    try {
+      pdf.addImage(logo, "PNG", left, 12, 43, 14);
+      y = 34;
+    } catch {
+      line("ANOVRA", { size: 18, bold: true, colour: [7, 83, 46], gap: 6 });
+    }
+  } else {
     line("ANOVRA", { size: 18, bold: true, colour: [7, 83, 46], gap: 6 });
   }
   line("Personalised skin report", { size: 19, bold: true, colour: [7, 83, 46], gap: 4 });
@@ -79,7 +81,7 @@ export async function downloadSkinReportPdf(report: {
     ].filter(Boolean);
     if (details.length) line(details.join("  |  "), { size: 9, colour: [92, 107, 96] });
   }
-  line(report.noIssuesDetected ? "Finding confidence: not applicable when no concerns are identified" : `Average finding confidence: ${report.confidence == null ? "not supplied" : `${Math.round(report.confidence)}%`}`, { size: 9, colour: [92, 107, 96] });
+  line(report.noIssuesDetected ? "Finding confidence: not applicable when no concerns are identified" : `Finding confidence: ${report.confidence == null ? "not supplied" : `${Math.round(report.confidence)}% (${report.confidence >= 65 ? "high" : "low"})`}`, { size: 9, colour: [92, 107, 96] });
   if (report.providersResponding) line(`${report.providersResponding} AI responses reviewed${report.findings.length && report.maxConditionSpread != null ? `; largest difference between assessments: ${Math.round(report.maxConditionSpread)} points` : ""}`, { size: 9, colour: [92, 107, 96] });
 
   heading("Disclaimer");
@@ -111,7 +113,7 @@ export async function downloadSkinReportPdf(report: {
   if (report.noIssuesDetected) {
     line("No targeted partner products were recommended because no notable concern was identified.");
   } else if (report.productsWithheld) {
-    line("Product matches were paused because finding confidence was below 65%, unavailable, or professional review was advised.");
+    line("Product matches were paused because finding confidence was below 65%, unavailable, or professional review was advised. Consult a registered dermatologist for a closer assessment when confidence is low.");
   } else if (report.products.length) {
     for (const product of report.products) {
       nextPage(18);
