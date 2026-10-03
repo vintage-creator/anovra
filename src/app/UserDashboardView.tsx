@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronRight, MessageCircle, Users,
   Calendar, BarChart2, ShoppingBag, BookOpen, Flame, Lock,
   Plus, X, LogOut, Settings, HeartPulse, User,
-  Store,
+  Store, Zap, ArrowRight, ShieldCheck,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -107,7 +107,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
 
-  const [userProfile, setUserProfile] = useState<{ name: string; plan: "glow" | "glowplus" | "premium" } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ id?: string; name: string; plan: "glow" | "glowplus" | "premium" } | null>(null);
   const [analysesList, setAnalysesList] = useState<any[]>([]);
   const [expandedAnalysisId, setExpandedAnalysisId] = useState<string | null>(null);
   const [matchedProducts, setMatchedProducts] = useState<any[]>([]);
@@ -120,6 +120,25 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [trialEndsAt, setTrialEndsAt] = useState<Date | null>(null);
   const [trialMsRemaining, setTrialMsRemaining] = useState(7 * 24 * 60 * 60 * 1000);
   const [showTrialExpiredNotice, setShowTrialExpiredNotice] = useState(true);
+  const [savingTrialNotice, setSavingTrialNotice] = useState(false);
+
+  const dismissTrialExpiredNotice = async () => {
+    if (!userProfile?.id || savingTrialNotice) return;
+    setSavingTrialNotice(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: { trial_notice_dismissed_at: new Date().toISOString() },
+      });
+      if (error) throw error;
+      localStorage.setItem(`anovra_trial_notice_dismissed_${userProfile.id}`, "true");
+      setShowTrialExpiredNotice(false);
+    } catch (error) {
+      console.error("Could not save trial notice acknowledgement:", error);
+      toast.error("Could not save your choice. Please try again.");
+    } finally {
+      setSavingTrialNotice(false);
+    }
+  };
 
   useEffect(() => {
     if (!trialEndsAt || trialExpired) return;
@@ -159,12 +178,24 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         setTrialMsRemaining(Math.max(0, endsAt.getTime() - Date.now()));
         const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
         const rawPlan = profile?.plan || "free";
+        const dismissedLocally = localStorage.getItem(`anovra_trial_notice_dismissed_${user.id}`) === "true";
+        const hasDismissedTrialNotice = Boolean(user.user_metadata?.trial_notice_dismissed_at) || dismissedLocally;
+        if (dismissedLocally && !user.user_metadata?.trial_notice_dismissed_at) {
+          const { error: noticeError } = await supabase.auth.updateUser({
+            data: { trial_notice_dismissed_at: new Date().toISOString() },
+          });
+          if (noticeError) console.warn("Could not sync previous trial notice acknowledgement:", noticeError);
+        }
         if (rawPlan === "free" && daysDiff > 7) {
           setTrialExpired(true);
+          if (hasDismissedTrialNotice) {
+            setShowTrialExpiredNotice(false);
+          }
         }
 
         const pVal = profile?.plan === "premium" ? "premium" : (profile?.plan === "basic" ? "glowplus" : "glow");
         const profileObj = {
+          id: user.id,
           name: profile?.name || "Customer",
           plan: pVal as "glow" | "glowplus" | "premium"
         };
@@ -688,88 +719,195 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 relative">
         {trialExpired && showTrialExpiredNotice && (
-          <div className="fixed inset-0 z-[80] bg-[#1f2a24]/45 backdrop-blur-sm p-3 sm:p-6 flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain" role="dialog" aria-modal="true" aria-labelledby="trial-ended-title">
-            <div className="w-full max-w-4xl max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] bg-card border border-border rounded-lg shadow-2xl overflow-y-auto overscroll-contain">
-              <div className="grid lg:grid-cols-[0.9fr_1.1fr]">
-                <div className="bg-[#fbfaf7] border-b lg:border-b-0 lg:border-r border-border p-5 sm:p-8">
-                  <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center mb-3 sm:mb-5">
-                    <Lock className="w-5 h-5" />
+          <div
+            className="fixed inset-0 z-[80] bg-[#142019]/60 backdrop-blur-md p-3 sm:p-6 flex items-center justify-center overflow-y-auto overscroll-contain animate-in fade-in duration-300"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trial-ended-title"
+          >
+            <div className="relative w-full max-w-4xl max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] bg-card border border-border/80 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={dismissTrialExpiredNotice}
+                disabled={savingTrialNotice}
+                className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-background/80 hover:bg-muted border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                aria-label="Dismiss modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="overflow-y-auto overscroll-contain grid lg:grid-cols-[0.92fr_1.08fr]">
+                {/* Left Column: Trial Ended & Free Glow Pass Info */}
+                <div className="bg-gradient-to-b from-[#FBF9F5] via-[#F6F3EC] to-[#EFEBE1] border-b lg:border-b-0 lg:border-r border-border/70 p-6 sm:p-8 flex flex-col justify-between">
+                  <div>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-800 text-[10px] font-bold uppercase tracking-widest mb-4 font-mono">
+                      <Calendar className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
+                      Free trial completed
+                    </div>
+                    <h2 id="trial-ended-title" className="text-2xl sm:text-3xl font-light text-foreground leading-[1.2]" style={{ fontFamily: "'Fraunces', serif" }}>
+                      Your dashboard is now on the <span className="font-normal italic text-[#008236]">Glow Pass</span>
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-3 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      Your skin records, analysis history, and profile remain securely saved. You can continue using your essential portal tools at no cost, or unlock unlimited analyses whenever you are ready.
+                    </p>
+
+                    {/* Free Plan Card */}
+                    <div className="mt-6 rounded-2xl border border-[#008236]/25 bg-white/80 backdrop-blur-sm p-5 shadow-sm">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-[#008236]/10 text-[#008236] flex items-center justify-center">
+                            <ShieldCheck className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-foreground">Glow Pass</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">Active Forever</p>
+                          </div>
+                        </div>
+                        <span className="text-xs font-bold text-[#008236] bg-[#008236]/10 px-2.5 py-1 rounded-full font-mono">
+                          Free
+                        </span>
+                      </div>
+                      <ul className="mt-3.5 space-y-2 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <li className="flex items-center gap-2">
+                          <Check className="w-3.5 h-3.5 text-[#008236] shrink-0" />
+                          <span>Skin portal workspace & shareable scan links</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="w-3.5 h-3.5 text-[#008236] shrink-0" />
+                          <span>Top cosmetic product recommendations</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="w-3.5 h-3.5 text-[#008236] shrink-0" />
+                          <span>Basic ingredient safety checks</span>
+                        </li>
+                      </ul>
+
+                      <button
+                        type="button"
+                        onClick={dismissTrialExpiredNotice}
+                        disabled={savingTrialNotice}
+                        className="mt-5 w-full py-2.5 px-4 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      >
+                        <span>{savingTrialNotice ? "Saving…" : "Continue on Free Plan"}</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-[11px] font-bold uppercase text-amber-700 mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>
-                    Free trial ended
+
+                  <p className="text-[11px] text-muted-foreground/75 mt-6 font-mono">
+                    You can manage or upgrade your plan anytime under <span className="font-semibold text-foreground">Billing & Plans</span>.
                   </p>
-                  <h2 id="trial-ended-title" className="text-xl sm:text-3xl font-light text-foreground leading-tight" style={{ fontFamily: "'Fraunces', serif" }}>
-                    Your dashboard has moved to the free plan
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-3 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    You can still use your basic skin portal. Premium tools such as unlimited analyses, full history, family profiles, Anovra Care Guide, and deeper progress tracking require an upgrade.
-                  </p>
-                  <div className="mt-5 rounded-lg border border-[#cce2d1] bg-white p-4">
-                    <div className="flex items-baseline justify-between gap-3"><p className="text-sm font-semibold text-foreground">Glow Pass</p><p className="text-sm font-bold text-[#07532e]">Free</p></div>
-                    <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Basic workspace access, scan links, top recommendations, and ingredient checks.</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowTrialExpiredNotice(false);
-                        setUserProfile((prev) => prev ? { ...prev, plan: "glow" } : prev);
-                        toast.success("Continuing on the free Glow Pass.");
-                      }}
-                      className="mt-4 w-full px-4 py-2.5 bg-[#008236] text-white rounded-lg text-sm font-semibold hover:bg-[#006c2c] transition-colors"
-                    >
-                      Continue on Free
-                    </button>
-                  </div>
                 </div>
 
-                <div className="p-5 sm:p-6">
-                  <h3 className="text-sm font-semibold text-foreground mb-3">Explore paid plans</h3>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {[
-                      {
-                        key: "basic" as const,
-                        name: "Glow Pass+",
-                        price: "₦3,500/mo",
-                        tag: "Recommended",
-                        desc: "Unlimited analyses, full recommendation list, saved skin history, and personalised glossary.",
-                        cta: "Upgrade",
-                        featured: true,
-                      },
-                      {
-                        key: "premium" as const,
-                        name: "Premium Glow",
-                        price: "₦7,000/mo",
-                        tag: "Advanced care",
-                        desc: "Anovra Care Guide, monthly progress reports, family profiles, partner offers, and routine builder.",
-                        cta: "Upgrade",
-                        featured: false,
-                      },
-                    ].map((p) => (
-                      <div key={p.key} className={cn(
-                        "border rounded-lg p-4 flex flex-col",
-                        p.featured ? "border-[#C86B3A] bg-[#C86B3A]/5" : "border-border bg-background"
-                      )}>
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <p className="text-sm font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</p>
-                          <span className={cn("text-[9px] uppercase tracking-wider font-bold px-2 py-1 rounded-full", p.featured ? "bg-[#C86B3A] text-white" : "bg-secondary text-muted-foreground")}>{p.tag}</span>
-                        </div>
-                        <p className="text-xl font-bold text-foreground font-mono">{p.price}</p>
-                        <p className="text-xs text-muted-foreground mt-3 leading-relaxed flex-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
-                        <button
-                          type="button"
-                          onClick={() => payWithPaystack(p.key === "basic" ? "basic" : "premium")}
-                          className={cn(
-                            "w-full mt-4 py-2.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer text-center",
-                            p.featured ? "bg-[#C86B3A] hover:bg-[#B85F33] text-white" : "bg-[#008236] hover:bg-[#006c2c] text-white"
-                          )}
-                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                        >
-                          {p.cta}
-                        </button>
+                {/* Right Column: Premium Upgrades */}
+                <div className="p-6 sm:p-8 bg-card flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-baseline justify-between mb-4">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono">Upgrade anytime</p>
+                        <h3 className="text-lg font-semibold text-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          Choose your skincare companion
+                        </h3>
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="space-y-3.5">
+                      {[
+                        {
+                          key: "basic" as const,
+                          name: "Glow Pass+",
+                          price: "₦3,500",
+                          period: "month",
+                          tag: "Most Popular",
+                          desc: "Ideal for steady progress tracking & complete product lists.",
+                          features: [
+                            "Unlimited skin analyses & scans",
+                            "Complete recommended product catalogue",
+                            "Full historical scan timeline & logging",
+                            "Personalised ingredient glossary",
+                          ],
+                          cta: "Upgrade to Glow Pass+",
+                          featured: true,
+                        },
+                        {
+                          key: "premium" as const,
+                          name: "Premium Glow",
+                          price: "₦7,000",
+                          period: "month",
+                          tag: "Full Concierge",
+                          desc: "Complete dermatology guidance & family care suite.",
+                          features: [
+                            "Everything in Glow Pass+",
+                            "Anovra AI Care Guide 24/7",
+                            "Monthly progress reports & trend scores",
+                            "Up to 5 family skin profiles & routine builder",
+                          ],
+                          cta: "Upgrade to Premium",
+                          featured: false,
+                        },
+                      ].map((p) => (
+                        <div
+                          key={p.key}
+                          className={cn(
+                            "rounded-2xl p-4 sm:p-5 border transition-all relative",
+                            p.featured
+                              ? "border-[#C86B3A] bg-gradient-to-br from-[#C86B3A]/[0.06] to-transparent shadow-sm ring-1 ring-[#C86B3A]/20"
+                              : "border-border bg-background/50 hover:border-border/80"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</span>
+                                <span
+                                  className={cn(
+                                    "text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full font-mono",
+                                    p.featured ? "bg-[#C86B3A] text-white" : "bg-muted text-muted-foreground"
+                                  )}
+                                >
+                                  {p.tag}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-lg font-bold text-foreground font-mono leading-none">{p.price}</p>
+                              <span className="text-[10px] text-muted-foreground">/{p.period}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-1.5 my-3 text-[11px] text-foreground/80" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {p.features.map((feat) => (
+                              <div key={feat} className="flex items-center gap-1.5">
+                                <Check className={cn("w-3 h-3 shrink-0", p.featured ? "text-[#C86B3A]" : "text-[#008236]")} />
+                                <span className="truncate">{feat}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => payWithPaystack(p.key === "basic" ? "basic" : "premium")}
+                            className={cn(
+                              "w-full mt-2 py-2.5 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm",
+                              p.featured
+                                ? "bg-[#C86B3A] hover:bg-[#B85F33] text-white hover:shadow-md"
+                                : "bg-[#008236] hover:bg-[#006c2c] text-white"
+                            )}
+                            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                          >
+                            <span>{p.cta}</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-4 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    You can change plans later from Billing & Plans. Your saved analyses and profile are preserved.
+
+                  <p className="text-[11px] text-muted-foreground mt-4 text-center" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Secured by Paystack. Cancel or upgrade anytime with one click.
                   </p>
                 </div>
               </div>
@@ -1791,6 +1929,32 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{item.label}</p>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {trialExpired && plan === "glow" && (
+            <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-[#008236]/10 text-[#008236] flex items-center justify-center shrink-0 mt-0.5">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#008236] bg-[#008236]/10 px-2.5 py-0.5 rounded-full font-mono">
+                        Active Plan
+                      </span>
+                      <span className="text-xs text-muted-foreground font-mono">Trial ended</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      Glow Pass (Free Tier)
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 max-w-xl leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      You are using the free Glow Pass. Your saved skin analyses, records, and basic recommendations remain intact. You can upgrade below to unlock unlimited scans and full history tracking anytime.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
