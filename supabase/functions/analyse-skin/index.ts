@@ -170,8 +170,6 @@ serve(async (request) => {
       legacy?: { concern: string; result: string; score: number; severity: unknown[]; benefits: string[] };
       products?: Record<string, unknown>[]; ingredient_fallback?: unknown[]; treatment?: unknown[];
       conditions?: { name: string; percentage: number; level: string; confidence: number }[];
-      providers?: { name: string; model: string; ok: boolean; ms: number }[];
-      disagreement?: { max_condition_spread: number; providers_responding: number };
       skin_type?: string; clinical_referral_advised?: boolean;
       disclaimer?: string; no_issues_detected?: boolean;
     };
@@ -202,8 +200,6 @@ serve(async (request) => {
     return reply({ accepted: true, ...result.legacy, products,
       capture: result.capture || verdict.capture,
       conditions: result.conditions || [], skinType: result.skin_type,
-      providersResponding: result.disagreement?.providers_responding ?? result.providers?.filter((provider) => provider.ok).length ?? 0,
-      maxConditionSpread: result.disagreement?.max_condition_spread,
       findingConfidence, productsWithheld,
       clinicalReferralAdvised: Boolean(result.clinical_referral_advised),
       ingredientFallback: result.ingredient_fallback || [],

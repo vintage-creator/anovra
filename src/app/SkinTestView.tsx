@@ -72,6 +72,12 @@ type ApiCapture = {
 
 const SCAN_DISCLAIMER = "This is a cosmetic skin assessment, not a medical diagnosis. For persistent acne, unusual skin changes, or anything painful or distressing, see a registered dermatologist.";
 
+const describeMainConcern = (primary: string, selected: string[]) => {
+  // The analysis API currently accepts a single string, not a concerns array.
+  const additional = selected.filter((concern) => concern !== primary);
+  return additional.length ? `Primary concern: ${primary}. Other reported concerns: ${additional.join(", ")}.` : primary;
+};
+
 const captureGuidance = (reason: { message: string; guidance: string }, area: string) => {
   if (/does not look like the area|area you selected/i.test(reason.message)) {
     return {
@@ -190,8 +196,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
   // Questionnaire state
   const [questionnaire, setQuestionnaire] = useState({
-    skinFeel: "",
+    skinFeel: [] as string[],
     mainConcern: "",
+    concerns: [] as string[],
     ageRange: "",
     sensitivities: "",
     pregnantOrBreastfeeding: false,
@@ -273,8 +280,6 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     productsWithheld?: boolean;
     noIssuesDetected?: boolean;
     clinicalReferralAdvised?: boolean;
-    providersResponding?: number;
-    maxConditionSpread?: number;
     disclaimer?: string;
   } | null>(null);
   const [analyzingError, setAnalyzingError] = useState<string | null>(null);
@@ -625,7 +630,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   const noIssuesDetected = Boolean(scanResult?.noIssuesDetected);
   const productsWithheld = Boolean(scanResult?.productsWithheld || noIssuesDetected || findingConfidence == null || findingConfidence < 65);
   const highFindingConfidence = !noIssuesDetected && findingConfidence != null && findingConfidence >= 65;
-  const confidenceLabel = noIssuesDetected ? "No findings to score" : findingConfidence == null ? "Confidence unavailable" : highFindingConfidence ? "High confidence" : "Low confidence";
+  const confidenceLabel = noIssuesDetected ? "No notable findings" : findingConfidence == null ? "Assessment limited" : highFindingConfidence ? "High confidence" : "Low confidence";
 
   useEffect(() => {
     if (step < 4 || pdfModuleRef.current) return;
@@ -683,10 +688,10 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             skinArea: selectedArea,
             vendorId: vendorProfile?.id || null,
             questionnaire: {
-              skinFeel: questionnaire.skinFeel,
-              mainConcern: questionnaire.mainConcern,
+              skinFeel: questionnaire.skinFeel.join("; "),
+              mainConcern: describeMainConcern(questionnaire.mainConcern, questionnaire.concerns),
               ageRange: questionnaire.ageRange,
-              sensitivities: questionnaire.sensitivities ? [questionnaire.sensitivities] : [],
+              sensitivities: questionnaire.sensitivities.split(",").map((item) => item.trim()).filter(Boolean),
               ...(questionnaire.pregnantOrBreastfeeding ? { pregnantOrBreastfeeding: true } : {}),
             }
           }
@@ -859,6 +864,14 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     setMatchedProducts([]);
     setIngredientFallback([]);
     setRejectionDetail(null);
+    setQuestionnaire({
+      skinFeel: [],
+      mainConcern: "",
+      concerns: [],
+      ageRange: "",
+      sensitivities: "",
+      pregnantOrBreastfeeding: false,
+    });
   }
 
   function downloadReport() {
@@ -877,8 +890,6 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
         products: matchedProducts,
         productsWithheld,
         noIssuesDetected,
-        providersResponding: scanResult.providersResponding,
-        maxConditionSpread: scanResult.maxConditionSpread,
         disclaimer: scanResult.disclaimer || SCAN_DISCLAIMER,
       }, pdfLogoRef.current);
     } catch (error) {
@@ -1321,25 +1332,32 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           <div className="space-y-6 bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
             {/* 1. Skin feel by midday */}
             <div>
-              <label className="block text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
+              <p className="block text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">
                 1. How does your skin feel by midday?
-              </label>
+              </p>
+              <p className="text-xs text-muted-foreground mb-3">Select all that apply, including sensitive if your skin reacts easily.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {SKIN_FEEL_OPTIONS.map((opt) => {
-                  const isSelected = questionnaire.skinFeel === opt.id;
+                  const isSelected = questionnaire.skinFeel.includes(opt.id);
                   return (
                     <button
                       key={opt.id}
                       type="button"
-                      onClick={() => setQuestionnaire((prev) => ({ ...prev, skinFeel: opt.id }))}
+                      aria-pressed={isSelected}
+                      onClick={() => setQuestionnaire((prev) => ({
+                        ...prev,
+                        skinFeel: prev.skinFeel.includes(opt.id)
+                          ? prev.skinFeel.filter((item) => item !== opt.id)
+                          : [...prev.skinFeel, opt.id],
+                      }))}
                       className={cn(
-                        "p-3 rounded-xl border text-left transition-all cursor-pointer",
+                        "p-3 rounded-lg border text-left transition-all cursor-pointer",
                         isSelected
                           ? "border-[#008236] bg-[#008236]/10 text-foreground font-semibold ring-1 ring-[#008236]/30"
                           : "border-border bg-card text-muted-foreground hover:border-[#008236]/30 hover:text-foreground"
                       )}
                     >
-                      <p className="text-xs font-semibold">{opt.label}</p>
+                      <span className="flex items-center justify-between gap-2 text-xs font-semibold">{opt.label}{isSelected && <Check className="h-4 w-4 shrink-0 text-[#008236]" aria-hidden="true" />}</span>
                       <p className="text-[11px] text-muted-foreground mt-0.5">{opt.desc}</p>
                     </button>
                   );
@@ -1347,31 +1365,56 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               </div>
             </div>
 
-            {/* 2. Main skin concern */}
+            {/* 2. Skin concerns */}
             <div>
-              <label className="block text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
-                2. What is your primary skin concern?
-              </label>
+              <p className="block text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">2. Which skin concerns would you like help with?</p>
+              <p className="text-xs text-muted-foreground mb-3">Select all that apply. You can choose your main focus below.</p>
               <div className="flex flex-wrap gap-2">
                 {MAIN_CONCERN_OPTIONS.map((concern) => {
-                  const isSelected = questionnaire.mainConcern === concern;
+                  const isSelected = questionnaire.concerns.includes(concern);
                   return (
                     <button
                       key={concern}
                       type="button"
-                      onClick={() => setQuestionnaire((prev) => ({ ...prev, mainConcern: concern }))}
+                      aria-pressed={isSelected}
+                      onClick={() => setQuestionnaire((prev) => {
+                        const concerns = isSelected
+                          ? prev.concerns.filter((item) => item !== concern)
+                          : [...prev.concerns, concern];
+                        return {
+                          ...prev,
+                          concerns,
+                          mainConcern: concerns.includes(prev.mainConcern) ? prev.mainConcern : concerns[0] || "",
+                        };
+                      })}
                       className={cn(
-                        "px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer",
+                        "inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-xs font-semibold transition-all cursor-pointer",
                         isSelected
                           ? "border-[#C86B3A] bg-[#C86B3A]/10 text-[#C86B3A] ring-1 ring-[#C86B3A]/30"
                           : "border-border bg-card text-muted-foreground hover:border-border hover:text-foreground"
                       )}
                     >
+                      {isSelected && <Check className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />}
                       {concern}
                     </button>
                   );
                 })}
               </div>
+              {questionnaire.concerns.length > 1 && <fieldset className="mt-4 rounded-lg border border-border bg-secondary/30 p-3.5">
+                <legend className="px-1 text-xs font-semibold text-foreground">Your main focus</legend>
+                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  {questionnaire.concerns.map((concern) => <label key={concern} className="inline-flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                    <input
+                      type="radio"
+                      name="main-skin-concern"
+                      checked={questionnaire.mainConcern === concern}
+                      onChange={() => setQuestionnaire((prev) => ({ ...prev, mainConcern: concern }))}
+                      className="h-4 w-4 accent-[#008236]"
+                    />
+                    {concern}
+                  </label>)}
+                </div>
+              </fieldset>}
             </div>
 
             {/* 3. Age bracket */}
@@ -1450,7 +1493,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                 analysisStartedRef.current = false;
                 setStep(4);
               }}
-              disabled={!questionnaire.skinFeel || !questionnaire.mainConcern || !questionnaire.ageRange}
+              disabled={questionnaire.skinFeel.length === 0 || !questionnaire.mainConcern || !questionnaire.ageRange}
               className="flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white py-4 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-md hover:shadow-lg active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
@@ -1637,7 +1680,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               </div>
 
               <div className={cn("shrink-0 rounded-lg px-3 py-2 sm:text-right self-start", highFindingConfidence ? "bg-white/10" : noIssuesDetected ? "bg-muted/70" : "bg-amber-100/70")}>
-                <strong className="text-2xl leading-none">{findingConfidence != null && !noIssuesDetected ? `${Math.round(findingConfidence)}%` : "—"}</strong>
+                {findingConfidence != null && !noIssuesDetected && <strong className="text-2xl leading-none">{Math.round(findingConfidence)}%</strong>}
                 <p className={cn("text-xs mt-1", highFindingConfidence ? "text-white/80" : "text-muted-foreground")}>{confidenceLabel}</p>
               </div>
             </div>
@@ -1681,17 +1724,9 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                   })}
                 </div>
               )}
-              <p className={cn("mt-4 text-xs", highFindingConfidence ? "text-white/75" : "text-muted-foreground")}>{visibleSeverity.length > 0 ? "Percentages show estimated visible severity, not confidence or a diagnosis." : "No finding confidence is calculated when there are no findings."} {scanResult?.providersResponding ? `${scanResult.providersResponding} AI responses reviewed.` : ""}</p>
+              {visibleSeverity.length > 0 && <p className={cn("mt-4 text-xs", highFindingConfidence ? "text-white/75" : "text-muted-foreground")}>Percentages show estimated visible severity, not confidence or a diagnosis.</p>}
             </div>
           </div>
-
-          <section className="mb-5 flex items-start gap-3 rounded-lg border border-[#d9e5dc] bg-[#f4f8f5] p-4" aria-label="Medical disclaimer">
-            <Info className="w-5 h-5 shrink-0 mt-0.5 text-[#07532e]" />
-            <div>
-              <h3 className="text-sm font-semibold text-[#07532e]">Disclaimer</h3>
-              <p className="text-sm text-[#3e5d49] mt-1 leading-relaxed">{scanResult?.disclaimer || SCAN_DISCLAIMER}</p>
-            </div>
-          </section>
 
           {scanResult?.capture && <section className="border border-border bg-white rounded-lg p-5 sm:p-6 mb-6" aria-label="Capture quality">
             <div className="flex items-center gap-2 mb-3"><CheckCircle className="w-5 h-5 text-[#008236]" /><h3 className="font-semibold text-foreground">Photo accepted for analysis</h3></div>
@@ -1704,12 +1739,6 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               {scanResult.capture.authenticity?.verdict === "clean" && !scanResult.capture.filter_suspected && <span>Filter check: none flagged</span>}
               {(scanResult.capture.filter_suspected || scanResult.capture.authenticity?.verdict === "suspect") && <span>Filter check: possible editing flagged</span>}
             </div>
-            {(scanResult.providersResponding || (visibleSeverity.length > 0 && scanResult.maxConditionSpread != null)) && (
-              <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-                {scanResult.providersResponding ? <span>{scanResult.providersResponding} AI responses reviewed</span> : null}
-                {visibleSeverity.length > 0 && scanResult.maxConditionSpread != null && <span>Largest difference between assessments: {Math.round(scanResult.maxConditionSpread)} points</span>}
-              </div>
-            )}
             <p className="mt-3 text-xs text-muted-foreground">Capture confidence measures whether the photo could be assessed. It is not the confidence of the skin findings. Filter checks are automated and cannot prove a photo is unedited.</p>
           </section>}
 
@@ -1736,7 +1765,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             {productsWithheld && <div className="border-l-4 border-[#ad623a] bg-[#fff8f2] p-5 rounded-r-lg">
               <h3 className="font-semibold text-foreground">{noIssuesDetected ? "No targeted products recommended" : "Product matches are paused"}</h3>
               <p className="text-sm text-muted-foreground mt-1">{noIssuesDetected
-                ? "No notable concern was identified to match with partner products. This is different from a low-confidence result; no finding confidence is calculated when there are no findings."
+                ? "No notable visible concern was identified, so there is no specific product match for this scan. If you have a concern, try another clear photo or speak to a registered dermatologist."
                 : scanResult?.clinicalReferralAdvised
                   ? "This result needs professional review before product matching. Please consult a registered dermatologist."
                   : findingConfidence == null
@@ -1926,6 +1955,13 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
               <button onClick={pdfPreparationError ? () => setPdfRetryKey((key) => key + 1) : downloadReport} disabled={(!pdfReady && !pdfPreparationError) || downloadingReport} className="inline-flex items-center gap-2 px-4 py-3 bg-[#008236] text-white rounded-lg font-semibold text-sm hover:bg-[#006c2c] disabled:opacity-60"><Download className="w-4 h-4" />{pdfPreparationError ? "Retry PDF" : !pdfReady || downloadingReport ? "Preparing PDF…" : "Download PDF"}</button>
             </div>
           </div>
+          <section className="mt-8 flex items-start gap-3 border-t border-[#d9e5dc] pt-5" aria-label="Medical disclaimer">
+            <Info className="w-5 h-5 shrink-0 mt-0.5 text-[#07532e]" />
+            <div>
+              <h3 className="text-sm font-semibold text-[#07532e]">Disclaimer</h3>
+              <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{scanResult?.disclaimer || SCAN_DISCLAIMER}</p>
+            </div>
+          </section>
         </div>
       )}
     </div>

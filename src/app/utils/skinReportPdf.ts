@@ -20,8 +20,6 @@ export function downloadSkinReportPdf(report: {
   products: Product[];
   productsWithheld: boolean;
   noIssuesDetected: boolean;
-  providersResponding?: number;
-  maxConditionSpread?: number;
   disclaimer: string;
 }, logo?: HTMLImageElement | null) {
   const pdf = new jsPDF({ unit: "mm", format: "a4" });
@@ -81,11 +79,7 @@ export function downloadSkinReportPdf(report: {
     ].filter(Boolean);
     if (details.length) line(details.join("  |  "), { size: 9, colour: [92, 107, 96] });
   }
-  line(report.noIssuesDetected ? "Finding confidence: not applicable when no concerns are identified" : `Finding confidence: ${report.confidence == null ? "not supplied" : `${Math.round(report.confidence)}% (${report.confidence >= 65 ? "high" : "low"})`}`, { size: 9, colour: [92, 107, 96] });
-  if (report.providersResponding) line(`${report.providersResponding} AI responses reviewed${report.findings.length && report.maxConditionSpread != null ? `; largest difference between assessments: ${Math.round(report.maxConditionSpread)} points` : ""}`, { size: 9, colour: [92, 107, 96] });
-
-  heading("Disclaimer");
-  line(report.disclaimer, { size: 9 });
+  if (!report.noIssuesDetected) line(`Finding confidence: ${report.confidence == null ? "not supplied" : `${Math.round(report.confidence)}% (${report.confidence >= 65 ? "high" : "low"})`}`, { size: 9, colour: [92, 107, 96] });
 
   heading("Visible findings");
   if (!report.findings.length) line(report.noIssuesDetected ? "No notable visible concerns were identified in this photo. This does not rule out a skin condition." : "No visible findings were returned by the analysis.");
@@ -132,6 +126,9 @@ export function downloadSkinReportPdf(report: {
     line("No approved catalogue product matched this report.");
     if (report.ingredients.length) line(`Ingredient targets from the analysis: ${report.ingredients.join(", ")}`);
   }
+
+  heading("Disclaimer");
+  line(report.disclaimer, { size: 9 });
 
   const pages = pdf.getNumberOfPages();
   for (let page = 1; page <= pages; page += 1) {
