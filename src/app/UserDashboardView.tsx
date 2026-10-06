@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
@@ -34,17 +34,17 @@ function PlanBadge({ required, current }: { required: "glow" | "glowplus" | "pre
 
 function LockedOverlay({ label, onUpgrade }: { label: string; onUpgrade: () => void }) {
   return (
-    <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-3 z-10">
-      <div className="w-10 h-10 rounded-full bg-muted border border-border flex items-center justify-center">
-        <Lock className="w-4 h-4 text-muted-foreground" />
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div><p className="text-sm font-semibold text-foreground">Available with {label}</p><p className="text-xs text-muted-foreground">Your saved data remains available after upgrading.</p></div>
       </div>
-      <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Upgrade to {label}</p>
       <button
         onClick={onUpgrade}
-        className="px-4 py-1.5 bg-[#008236] hover:bg-[#006c2c] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+        className="self-start whitespace-nowrap rounded-md bg-[#008236] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#006c2c] sm:self-auto"
         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
       >
-        Upgrade plan →
+        View plans
       </button>
     </div>
   );
@@ -87,6 +87,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [tab, setTab] = useState<UserTab>(() => (sessionStorage.getItem("active_user_tab") as UserTab) || "overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [shareFallback, setShareFallback] = useState<string | null>(null);
+  const shareTextRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     sessionStorage.setItem("active_user_tab", tab);
@@ -223,25 +225,31 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           const formatted = scans.map((s, idx) => {
             const dateObj = new Date(s.created_at);
             const dateStr = dateObj.toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" });
+            const inconclusive = Boolean(s.image_quality?.products_withheld)
+              || s.image_quality?.finding_confidence == null
+              || (Number.isFinite(Number(s.image_quality.finding_confidence)) && Number(s.image_quality.finding_confidence) < 90);
             return {
               id: s.id.substring(0, 8).toUpperCase(),
               fullId: s.id,
               date: dateStr,
               vendor: s.vendor_name || s.vendor_brand || "Recorded scan",
               concerns: typeof s.concern === "string" && s.concern ? [s.concern] : [],
-              skinType: typeof s.result === "string" ? s.result : "Not recorded",
+              skinType: typeof s.image_quality?.skin_type === "string" && s.image_quality.skin_type.trim() ? s.image_quality.skin_type : "Not recorded",
+              selectedFocus: typeof s.image_quality?.selected_focus === "string" ? s.image_quality.selected_focus : "",
+              inconclusive,
               score: s.score !== null && s.score !== undefined && !Number.isNaN(Number(s.score)) ? Math.round(Number(s.score)) : null,
-              products: Array.isArray(s.matched_products) ? s.matched_products.length : 0,
-              severity: Array.isArray(s.severity) ? s.severity : [],
+              products: !inconclusive && Array.isArray(s.matched_products) ? s.matched_products.length : 0,
+              severity: Array.isArray(s.image_quality?.conditions) && s.image_quality.conditions.length
+                ? s.image_quality.conditions : Array.isArray(s.severity) ? s.severity : [],
               benefits: Array.isArray(s.benefits) ? s.benefits : [],
-              treatmentPlan: Array.isArray(s.treatment_plan) ? s.treatment_plan : [],
+              treatmentPlan: !inconclusive && Array.isArray(s.treatment_plan) ? s.treatment_plan : [],
               area: s.skin_area || "Skin",
               createdAt: s.created_at,
             };
           });
           setAnalysesList(formatted);
 
-          const savedMatches = Array.isArray(scans[0].matched_products) ? scans[0].matched_products : [];
+          const savedMatches = formatted[0].inconclusive ? [] : Array.isArray(scans[0].matched_products) ? scans[0].matched_products : [];
           const matchIds = [...new Set(savedMatches.map((match: any) => match?.id).filter(Boolean))];
           let eligibleMatches: any[] = [];
           if (matchIds.length) {
@@ -292,9 +300,16 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           })));
           const ingredientNames = [...new Set(eligibleMatches.flatMap((match: any) =>
             Array.isArray(match.ingredients) ? match.ingredients.filter((name: unknown) => typeof name === "string") : []))] as string[];
-          const fallbacks = Array.isArray(scans[0].ingredient_fallback) ? scans[0].ingredient_fallback : [];
+          const fallbacks = !formatted[0].inconclusive && Array.isArray(scans[0].ingredient_fallback) ? scans[0].ingredient_fallback : [];
           for (const name of fallbacks) {
             if (typeof name === "string" && !ingredientNames.some((known) => known.toLowerCase() === name.toLowerCase())) ingredientNames.push(name);
+          }
+          const treatmentItems = !formatted[0].inconclusive && Array.isArray(scans[0].treatment_plan) ? scans[0].treatment_plan : [];
+          for (const item of treatmentItems) {
+            for (const target of Array.isArray(item?.ingredient_targets) ? item.ingredient_targets : []) {
+              const name = typeof target === "string" ? target : target?.ingredient;
+              if (typeof name === "string" && name.trim() && !ingredientNames.some((known) => known.toLowerCase() === name.trim().toLowerCase())) ingredientNames.push(name.trim());
+            }
           }
           if (ingredientNames.length) {
             const { data: safetyRows, error: safetyError } = await supabase.from("safety_ingredients")
@@ -308,7 +323,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 scope: row?.scope || "Not assessed", maxConc: row?.max_conc || "Not specified" };
             }));
           }
-          const savedTreatments = Array.isArray(scans[0].treatment_plan) ? scans[0].treatment_plan : [];
+          const savedTreatments = treatmentItems;
           setRoutineList(savedTreatments.flatMap((item: any) => {
             const frequency = String(item.frequency || "").toLowerCase();
             const periods = frequency.includes("am") && frequency.includes("pm") ? ["AM", "PM"]
@@ -354,10 +369,20 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     loadDashboardData();
   }, []);
 
-  function copy(text: string, key: string) {
-    navigator.clipboard.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied(null), 2000);
+  async function shareLatestAnalysis() {
+    if (!latestAnalysis) return;
+    const summary = `Anovra skin analysis · ${latestAnalysis.date}\nArea: ${latestAnalysis.area}\nSkin type: ${latestAnalysis.skinType}${latestAnalysis.selectedFocus ? `\nYour selected focus: ${latestAnalysis.selectedFocus}` : ""}\nStrongest visible finding: ${latestAnalysis.concerns.join(", ") || "None recorded"}${latestAnalysis.inconclusive ? "\nResult inconclusive: do not use it to choose products or treatment." : ""}\nThis is a cosmetic assessment, not a medical diagnosis.`;
+    try {
+      if (navigator.share) await navigator.share({ title: "My Anovra skin summary", text: summary });
+      else {
+        await navigator.clipboard.writeText(summary);
+        setCopied("result-summary");
+        setTimeout(() => setCopied(null), 2000);
+        toast.success("Summary copied. Only share it with someone you trust.");
+      }
+    } catch (error) {
+      if ((error as DOMException)?.name !== "AbortError") setShareFallback(summary);
+    }
   }
 
   function openCustomerSkinTest() {
@@ -674,7 +699,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   }
 
   const severityName = (item: any) => String(item?.name || item?.concern || item?.label || item?.condition || item?.metric || "Skin concern");
-  const severityValue = (item: any) => String(item?.severity || item?.level || item?.status || item?.value || item?.score || "Recorded");
+  const severityValue = (item: any) => Number.isFinite(Number(item?.percentage))
+    ? `${Math.round(Number(item.percentage))}% · ${item.level || "Recorded"}`
+    : String(item?.severity || item?.level || item?.status || item?.value || item?.score || "Recorded");
   const progressScores = scoredAnalyses
     .slice()
     .reverse()
@@ -692,7 +719,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       name,
       current: currentValue,
       previous: previousValue,
-      trend: previousValue === "—" ? "New" : currentValue === previousValue ? "Stable" : "Changed",
+      trend: previousValue === "—" ? "New" : currentValue === previousValue ? "Stable"
+        : Number.isFinite(Number(item?.percentage)) && Number.isFinite(Number(previous?.percentage))
+          ? Number(item.percentage) < Number(previous.percentage) ? "Lower" : "Higher" : "Changed",
     };
   });
   const routineGroups = [
@@ -746,7 +775,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                       Free trial completed
                     </div>
                     <h2 id="trial-ended-title" className="text-2xl sm:text-3xl font-light text-foreground leading-[1.2]" style={{ fontFamily: "'Fraunces', serif" }}>
-                      Your dashboard is now on the <span className="font-normal italic text-[#008236]">Glow Pass</span>
+                      Your dashboard is now on the <span className="font-normal italic text-[#008236]">Free plan</span>
                     </h2>
                     <p className="text-sm text-muted-foreground mt-3 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                       Your skin records, analysis history, and profile remain securely saved. You can continue using your essential portal tools at no cost, or unlock unlimited analyses whenever you are ready.
@@ -760,8 +789,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                             <ShieldCheck className="w-4 h-4" />
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-foreground">Glow Pass</p>
-                            <p className="text-[10px] text-muted-foreground font-mono">Active Forever</p>
+                            <p className="text-sm font-bold text-foreground">Free plan</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">Current plan</p>
                           </div>
                         </div>
                         <span className="text-xs font-bold text-[#008236] bg-[#008236]/10 px-2.5 py-1 rounded-full font-mono">
@@ -1063,8 +1092,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             {[
               { label: "Skin score", value: latestAnalysis && typeof latestAnalysis.score === "number" ? String(latestAnalysis.score) : "—", delta: latestAnalysis ? "From saved scan data" : "No scan yet", icon: <Star className="w-4 h-4" />, color: "text-amber-500" },
               { label: "Analyses done", value: String(analysesList.length), delta: "Platform scans", icon: <Scan className="w-4 h-4" />, color: "text-accent" },
-              { label: "Products matched", value: latestAnalysis ? String(matchedProducts.length) : "0", delta: "Safety verified", icon: <ShoppingBag className="w-4 h-4" />, color: "text-blue-500" },
-              { label: "Days on routine", value: latestAnalysis ? String(Math.max(1, Math.round((Date.now() - new Date(latestAnalysis.createdAt || latestAnalysis.date).getTime()) / (1000 * 60 * 60 * 24)))) : "—", delta: "Tracked days", icon: <Flame className="w-4 h-4" />, color: "text-orange-500" },
+              { label: "Products matched", value: latestAnalysis ? String(latestAnalysis.products) : "0", delta: "From latest scan", icon: <ShoppingBag className="w-4 h-4" />, color: "text-blue-500" },
+              { label: "Days since analysis", value: latestAnalysis ? String(Math.max(0, Math.floor((Date.now() - new Date(latestAnalysis.createdAt).getTime()) / (1000 * 60 * 60 * 24)))) : "—", delta: "Latest saved report", icon: <Flame className="w-4 h-4" />, color: "text-orange-500" },
             ].map((s) => (
               <div key={s.label} className="bg-card border border-border rounded-xl p-4 shadow-sm">
                 <div className={`flex items-center gap-2 mb-2 ${s.color}`}>
@@ -1099,22 +1128,20 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   <p className="text-sm font-medium text-foreground">{latestAnalysis.skinType}</p>
                 </div>
                   <div className="bg-muted/50 rounded-xl p-3">
-                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Primary concerns</p>
+                  <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Strongest visible finding</p>
                   <p className="text-sm font-medium text-foreground">{latestAnalysis.concerns.join(", ")}</p>
+                  {latestAnalysis.selectedFocus && <p className="mt-1 text-xs text-muted-foreground">You asked about {latestAnalysis.selectedFocus}</p>}
                 </div>
                   <div className="bg-muted/50 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Products matched</p>
-                  <p className="text-sm font-medium text-foreground">{matchedProducts.length} products</p>
+                  <p className="text-sm font-medium text-foreground">{latestAnalysis.products} products</p>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2 flex-1 min-w-0">
-                  <p className="text-xs font-mono text-foreground truncate flex-1">{latestAnalysis.link}</p>
-                  <button onClick={() => copy(latestAnalysis.link, "result-link")} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 transition-colors flex-shrink-0" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    {copied === "result-link" ? <><Check className="w-3 h-3" /> Copied</> : <><Share2 className="w-3 h-3" /> Share</>}
-                  </button>
-                </div>
+                <button onClick={shareLatestAnalysis} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs font-semibold text-accent hover:bg-muted/50">
+                  {copied === "result-summary" ? <><Check className="h-4 w-4" /> Copied</> : <><Share2 className="h-4 w-4" /> Share summary</>}
+                </button>
                 <button onClick={() => setTab("recommendations")} className="flex items-center gap-1.5 text-xs px-3 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   View recommendations <ChevronRight className="w-3 h-3" />
                 </button>
@@ -1206,15 +1233,45 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
                   {expandedAnalysisId === a.fullId && (
                     <div className="border-t border-border px-5 py-5 space-y-4">
+                      {a.inconclusive && <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">This assessment was inconclusive. Findings are provisional and should not guide treatment or product choices.</p>}
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div><p className="text-xs text-muted-foreground">Skin area</p><p className="text-sm font-medium">{a.area}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Primary concern</p><p className="text-sm font-medium">{a.concerns[0] || "Not recorded"}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Strongest visible finding</p><p className="text-sm font-medium">{a.concerns[0] || "Not recorded"}</p></div>
+                        {a.selectedFocus && <div><p className="text-xs text-muted-foreground">Your selected focus</p><p className="text-sm font-medium">{a.selectedFocus}</p></div>}
                       </div>
                       {a.severity.length > 0 && (
                         <div><p className="text-xs font-semibold mb-2">Concern levels</p><div className="flex flex-wrap gap-2">{a.severity.map((item: any, index: number) => <span key={index} className="text-xs rounded-md border border-border px-2.5 py-1">{typeof item === "string" ? item : `${item.concern || item.name || "Concern"}: ${item.level || item.severity || "Recorded"}`}</span>)}</div></div>
                       )}
                       {a.treatmentPlan.length > 0 && (
-                        <div><p className="text-xs font-semibold mb-2">Suggested care</p><ul className="space-y-1 text-sm text-muted-foreground">{a.treatmentPlan.map((step: any, index: number) => <li key={index}>{typeof step === "string" ? step : step.description || step.step || step.name || "Care step"}</li>)}</ul></div>
+                        <div>
+                          <p className="text-xs font-semibold mb-2">Care guidance from this analysis</p>
+                          <div className="space-y-3">{a.treatmentPlan.map((step: any, index: number) => (
+                            <article key={index} className="rounded-md border border-border bg-background p-3 text-sm">
+                              <h4 className="border-b border-border pb-2 font-semibold text-foreground">{typeof step === "string" ? step : step.name || step.condition || "Care step"}</h4>
+                              {typeof step !== "string" && <div className="mt-3 space-y-2.5">
+                                {[
+                                  ["Do", step.what_to_do],
+                                  ["Why", step.why],
+                                  ["How often", step.frequency],
+                                  ["Timeline", step.timeline],
+                                  ["Avoid", Array.isArray(step.avoid) && step.avoid.length ? step.avoid.join("; ") : "—"],
+                                  ["See a doctor", step.see_a_dermatologist_if],
+                                ].filter(([, value]) => value).map(([label, value]) => (
+                                  <div key={label} className="grid grid-cols-[90px_minmax(0,1fr)] gap-3 text-xs sm:grid-cols-[110px_minmax(0,1fr)]">
+                                    <span className={cn("font-mono text-[10px] font-semibold uppercase", label === "See a doctor" ? "text-amber-800" : "text-muted-foreground")}>{label}</span>
+                                    <span className="min-w-0 break-words text-foreground">{value}</span>
+                                  </div>
+                                ))}
+                                {Array.isArray(step.ingredient_targets) && step.ingredient_targets.length > 0 && (
+                                  <div className="grid grid-cols-[90px_minmax(0,1fr)] gap-3 text-xs sm:grid-cols-[110px_minmax(0,1fr)]">
+                                    <span className="font-mono text-[10px] font-semibold uppercase text-muted-foreground">Look for</span>
+                                    <div className="flex flex-wrap gap-1.5">{step.ingredient_targets.map((target: any, targetIndex: number) => <span key={targetIndex} className="rounded-md border border-border bg-muted px-2 py-1 text-foreground">{typeof target === "string" ? target : `${target.ingredient || "Ingredient"}${target.concentration ? ` · ${target.concentration}` : ""}`}</span>)}</div>
+                                  </div>
+                                )}
+                              </div>}
+                            </article>
+                          ))}</div>
+                        </div>
                       )}
                       {i === 0 && <button onClick={() => setTab("recommendations")} className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white">View matched products <ChevronRight className="w-3.5 h-3.5" /></button>}
                     </div>
@@ -1224,7 +1281,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             ) : (
               <div className="bg-card border border-border border-dashed rounded-xl p-8 text-center text-muted-foreground">
                 <p className="text-sm font-medium text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No analyses yet</p>
-                <p className="text-xs mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run a skin analysis and this page will show the saved report, score, concern, result link, and the path into recommendations.</p>
+                <p className="text-xs mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run a skin analysis to save its report, visible findings, care guidance, and eligible product matches here.</p>
                 <button onClick={() => openCustomerSkinTest()} className="px-4 py-2 rounded-lg bg-accent text-white text-xs font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Start analysis</button>
               </div>
             )}
@@ -1279,8 +1336,14 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             ) : (
               <div className="bg-card border border-border border-dashed rounded-xl p-8 text-center text-muted-foreground">
                 <p className="text-sm font-medium text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No recommendations yet</p>
-                <p className="text-xs mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Recommendations appear after a scan is saved and approved vendor products are available for matching.</p>
-                <button onClick={() => openCustomerSkinTest()} className="px-4 py-2 rounded-lg bg-accent text-white text-xs font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Run analysis</button>
+                <p className="text-xs mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {!latestAnalysis ? "Run an analysis to see approved products matched to your skin." : latestAnalysis.inconclusive
+                    ? "Your latest analysis was inconclusive, so no products are recommended. Retake the photo or consult a registered dermatologist."
+                    : latestAnalysis.products > 0
+                    ? "Your scan recorded product matches, but those products are not currently available from approved partners. Your report and care guidance remain saved."
+                    : "Your latest analysis did not produce eligible product matches. Review its care guidance or retake a clearer photo; products are never added without a suitable match."}
+                </p>
+                <button onClick={() => latestAnalysis ? setTab("history") : openCustomerSkinTest()} className="px-4 py-2 rounded-lg bg-accent text-white text-xs font-semibold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{latestAnalysis ? "View saved report" : "Start analysis"}</button>
               </div>
             )}
           </div>
@@ -1306,8 +1369,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               </p>
             </div>
           </div>
-          <div className="relative space-y-3">
-            {accessPlan === "glow" && <LockedOverlay label="Glow Pass+" onUpgrade={() => payWithPaystack("basic")} />}
+          <div className={cn("space-y-3", accessPlan === "glow" && "[&>*:not(:first-child)]:hidden")}>
+            {accessPlan === "glow" && <LockedOverlay label="Glow Pass+" onUpgrade={() => setTab("settings")} />}
             {visibleIngredients.length > 0 ? visibleIngredients.map((ing) => (
               <button
                 key={ing.name}
@@ -1336,7 +1399,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center">
                 <p className="text-sm font-medium text-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No scan-derived ingredient checks yet</p>
                 <p className="text-xs text-muted-foreground max-w-md mx-auto" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Run an analysis and choose matched products with saved ingredients. This page will then show ingredient safety notes based on real scan and catalogue data.
+                  Ingredient guidance appears here when your saved report includes ingredient targets or matched products with identified ingredients.
                 </p>
               </div>
             )}
@@ -1370,8 +1433,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
           </section>
 
-          <div className="relative bg-card border border-border rounded-2xl p-5 shadow-sm">
-            {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
+          <div className={cn("bg-card border border-border rounded-2xl p-5 shadow-sm", accessPlan !== "premium" && "[&>*:not(:first-child)]:hidden")}>
+            {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => setTab("settings")} />}
             <div className="grid lg:grid-cols-[180px_1fr] gap-5 mb-5">
               <div className="rounded-2xl border border-accent/20 bg-accent/5 p-5 flex flex-col justify-center text-center">
                 <p className="text-xs text-muted-foreground mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Current skin score</p>
@@ -1452,7 +1515,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                     <div key={row.name} className="rounded-lg border border-border p-3">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <p className="min-w-0 text-sm font-medium text-foreground break-words">{row.name}</p>
-                        <span className="shrink-0 text-[10px] px-2 py-1 rounded-full bg-accent/10 text-accent">{row.trend}</span>
+                        <span className={cn("shrink-0 text-[10px] px-2 py-1 rounded-full", row.trend === "Higher" ? "bg-amber-50 text-amber-800" : "bg-accent/10 text-accent")}>{row.trend}</span>
                       </div>
                       <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
                         <span className="text-muted-foreground">Previous: {row.previous}</span>
@@ -1479,7 +1542,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                           <td className="py-3 pr-3 text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{row.previous}</td>
                           <td className="py-3 pr-3 text-xs text-foreground font-medium" style={{ fontFamily: "'DM Mono', monospace" }}>{row.current}</td>
                           <td className="py-3">
-                            <span className="text-[10px] px-2 py-1 rounded-full bg-accent/10 text-accent" style={{ fontFamily: "'DM Mono', monospace" }}>{row.trend}</span>
+                            <span className={cn("text-[10px] px-2 py-1 rounded-full", row.trend === "Higher" ? "bg-amber-50 text-amber-800" : "bg-accent/10 text-accent")} style={{ fontFamily: "'DM Mono', monospace" }}>{row.trend}</span>
                           </td>
                         </tr>
                       ))}
@@ -1578,8 +1641,8 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
           </section>
 
-          <div className="relative">
-            {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
+          <div className={cn(accessPlan !== "premium" && "[&>*:not(:first-child)]:hidden")}>
+            {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => setTab("settings")} />}
             {routineSteps.length > 0 ? (
             <div className="grid xl:grid-cols-[1fr_320px] gap-5">
               <div className="space-y-4">
@@ -1635,7 +1698,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
                   <h3 className="text-base font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Why this routine</h3>
                   <p className="text-xs text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    This routine is generated from your latest analysis, concern severity, and matched product data. Use it consistently, then re-analyse to measure change.
+                    This routine is generated from the care guidance in your latest saved analysis. Re-analyse later to compare visible changes.
                   </p>
                   <div className="mt-4 space-y-2">
                     {(latestAnalysis?.concerns || []).slice(0, 4).map((concern) => (
@@ -1696,12 +1759,12 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               </div>
               <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Keep skin notes for up to five family members.</p>
             </div>
-            <button onClick={() => setShowAddFamily((v) => !v)} disabled={familyProfiles.length >= 5} className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors font-medium disabled:opacity-50" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            {accessPlan === "premium" && <button onClick={() => setShowAddFamily((v) => !v)} disabled={familyProfiles.length >= 5} className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors font-medium disabled:opacity-50" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               <Plus className="w-3.5 h-3.5" /> Add member
-            </button>
+            </button>}
           </div>
-          <div className="relative space-y-3">
-            {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => payWithPaystack("premium")} />}
+          <div className={cn("space-y-3", accessPlan !== "premium" && "[&>*:not(:first-child)]:hidden")}>
+            {accessPlan !== "premium" && <LockedOverlay label="Premium Glow" onUpgrade={() => setTab("settings")} />}
             {showAddFamily && (
               <div className="bg-muted/30 border border-dashed border-border rounded-xl p-4 grid sm:grid-cols-2 lg:grid-cols-[1fr_150px_140px] gap-3">
                 <input
@@ -1935,28 +1998,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           )}
 
           {trialExpired && plan === "glow" && (
-            <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-[#008236]/10 text-[#008236] flex items-center justify-center shrink-0 mt-0.5">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#008236] bg-[#008236]/10 px-2.5 py-0.5 rounded-full font-mono">
-                        Active Plan
-                      </span>
-                      <span className="text-xs text-muted-foreground font-mono">Trial ended</span>
-                    </div>
-                    <h3 className="text-lg font-semibold text-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      Glow Pass (Free Tier)
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5 max-w-xl leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      You are using the free Glow Pass. Your saved skin analyses, records, and basic recommendations remain intact. You can upgrade below to unlock unlimited scans and full history tracking anytime.
-                    </p>
-                  </div>
-                </div>
-              </div>
+            <div className="flex items-start gap-3 rounded-lg border border-[#DCE8DE] bg-[#F4F9F5] p-4 text-sm text-[#31563B]">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>Your 7-day trial has ended. The Free plan is active, and your saved analyses remain available. You can restore premium tools below.</p>
             </div>
           )}
 
@@ -1968,7 +2012,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 price: "₦0",
                 period: "month",
                 desc: "Basic access after the free trial ends.",
-                features: ["Limited skin analysis access", "Top product recommendations", "Basic skin type and concern report", "Ingredient safety check", "Results shared via link"],
+                features: ["Limited skin analyses", "Top available product matches", "Basic skin report", "Ingredient safety checks", "Shareable report summary"],
                 cta: trialAccessActive ? "Available after trial" : (plan === "glow" ? "Current plan" : "Downgrade to free plan"),
                 planKey: null,
                 active: plan === "glow" && !trialAccessActive,
@@ -1979,7 +2023,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 name: "Glow Pass+",
                 price: "₦3,500",
                 period: "month",
-                desc: "Unlimited skin analyses and complete history log files tracking.",
+                desc: "Unlimited analyses, full product matches and complete skin history.",
                 features: ["Unlimited skin analyses", "Full product recommendation list", "Detailed skin health report", "Save and track skin history", "Personalised ingredient glossary", "Priority product matching"],
                 cta: trialAccessActive ? "Keep access after trial" : (plan === "glow" ? "Upgrade to Glow Pass+" : (plan === "glowplus" ? "Current plan" : "Downgrade to Glow Pass+")),
                 planKey: "basic" as const,
@@ -2159,6 +2203,19 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {shareFallback && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation" onClick={() => setShareFallback(null)}>
+          <div className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="share-summary-title" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div><h3 id="share-summary-title" className="text-lg font-semibold text-foreground">Share your skin summary</h3><p className="mt-1 text-sm text-muted-foreground">Automatic sharing is unavailable here. Select the text below to copy it yourself. Only share it with someone you trust.</p></div>
+              <button onClick={() => setShareFallback(null)} aria-label="Close share summary" className="rounded-md p-1 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
+            </div>
+            <textarea ref={shareTextRef} readOnly value={shareFallback} onFocus={(event) => event.currentTarget.select()} className="mt-4 h-40 w-full resize-none rounded-md border border-border bg-background p-3 text-sm text-foreground" />
+            <button onClick={() => shareTextRef.current?.select()} className="mt-3 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white">Select text</button>
           </div>
         </div>
       )}

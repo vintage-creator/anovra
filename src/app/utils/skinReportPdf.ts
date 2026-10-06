@@ -12,6 +12,8 @@ export function downloadSkinReportPdf(report: {
   area: string;
   scanId: string;
   skinType?: string;
+  selectedFocus?: string;
+  mainFinding?: string;
   confidence?: number | null;
   capture?: { confidence?: number; threshold?: number; lighting?: { brightness?: number; glare_pct?: number; verdict?: string }; frames_used?: number; frames_received?: number };
   findings: Finding[];
@@ -68,6 +70,8 @@ export function downloadSkinReportPdf(report: {
   line("Prepared by Anovra AI skin analysis", { size: 9, colour: [92, 107, 96], gap: 3 });
   line(`Area: ${report.area}    Date: ${new Date().toLocaleDateString("en-GB")}${report.scanId ? `    Scan ID: ${report.scanId}` : ""}`, { size: 9, colour: [92, 107, 96], gap: 5 });
   if (report.skinType) line(`Skin type: ${report.skinType}`, { bold: true });
+  if (report.selectedFocus) line(`Your selected focus: ${report.selectedFocus}`);
+  if (report.mainFinding) line(`Strongest visible finding: ${report.mainFinding}`);
   if (report.capture?.confidence != null) {
     const capture = report.capture;
     line(`Capture confidence: ${Math.round(capture.confidence)}%${capture.threshold != null ? ` (required ${Math.round(capture.threshold)}%)` : ""}`);
@@ -79,9 +83,10 @@ export function downloadSkinReportPdf(report: {
     ].filter(Boolean);
     if (details.length) line(details.join("  |  "), { size: 9, colour: [92, 107, 96] });
   }
-  if (!report.noIssuesDetected) line(`Finding confidence: ${report.confidence == null ? "not supplied" : `${Math.round(report.confidence)}% (${report.confidence >= 65 ? "high" : "low"})`}`, { size: 9, colour: [92, 107, 96] });
+  if (!report.noIssuesDetected) line(`Finding confidence: ${report.confidence == null ? "not supplied" : `${Math.round(report.confidence)}% (${report.confidence >= 90 ? "high" : "below matching threshold"})`}`, { size: 9, colour: [92, 107, 96] });
 
-  heading("Visible findings");
+  heading(report.productsWithheld && !report.noIssuesDetected ? "Possible visible findings - inconclusive" : "Visible findings");
+  if (report.productsWithheld && !report.noIssuesDetected) line("These findings are provisional. Do not use them to choose products or treatment. Retake the photo or consult a registered dermatologist.", { size: 9, colour: [138, 69, 43] });
   if (!report.findings.length) line(report.noIssuesDetected ? "No notable visible concerns were identified in this photo. This does not rule out a skin condition." : "No visible findings were returned by the analysis.");
   for (const finding of report.findings) {
     line(`${finding.name}: ${Math.round(finding.percentage)}% severity (${finding.level}); finding confidence ${Math.round(finding.confidence)}%`, { size: 10 });
@@ -89,7 +94,7 @@ export function downloadSkinReportPdf(report: {
   line("Severity percentages describe visible features, not a medical diagnosis.", { size: 9, colour: [92, 107, 96] });
 
   heading("Care guidance");
-  if (!report.treatment.length) line(report.noIssuesDetected ? "No condition-specific care plan was generated because no notable concerns were identified. Retake the photo if this does not reflect what you see." : "The analysis returned no condition-specific care guidance for this photo.");
+  if (!report.treatment.length) line(report.noIssuesDetected ? "No condition-specific care plan was generated because no notable concerns were identified. Retake the photo if this does not reflect what you see." : report.productsWithheld ? "No personalised treatment plan is provided for this inconclusive result." : "The analysis returned no condition-specific care guidance for this photo.");
   for (const item of report.treatment) {
     nextPage(22);
     line(item.name, { bold: true, gap: 1 });
@@ -107,7 +112,7 @@ export function downloadSkinReportPdf(report: {
   if (report.noIssuesDetected) {
     line("No targeted partner products were recommended because no notable concern was identified.");
   } else if (report.productsWithheld) {
-    line("Product matches were paused because finding confidence was below 65%, unavailable, or professional review was advised. Consult a registered dermatologist for a closer assessment when confidence is low.");
+    line("Product matches were paused because finding confidence was below Anovra's 90% requirement, unavailable, or professional review was advised. This result should not guide product choices. Retake the photo or consult a registered dermatologist.");
   } else if (report.products.length) {
     for (const product of report.products) {
       nextPage(18);

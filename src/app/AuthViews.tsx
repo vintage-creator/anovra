@@ -1056,13 +1056,12 @@ export function EmailVerificationPendingView({ setView }: { setView: (v: View) =
   );
 }
 
-export function SignInView({ setView, accountKind = "any" }: { setView: (v: View) => void; accountKind?: "any" | "customer" | "vendor" | "brand" }) {
+export function SignInView({ setView }: { setView: (v: View) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showSignupChoices, setShowSignupChoices] = useState(false);
 
   // Email OTP states
   const [useOtp, setUseOtp] = useState(false);
@@ -1126,6 +1125,7 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
           .maybeSingle();
         if (staff) {
           if (staff.status === "suspended") {
+            await supabase.auth.signOut();
             toast.error("Your staff account is suspended. Access denied.");
             setLoading(false);
             return;
@@ -1155,16 +1155,6 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
       if (teamMemberSuspended) {
         await supabase.auth.signOut();
         throw new Error("Your branch team access is suspended. Contact your Brand HQ owner.");
-      }
-      if (accountKind !== "any") {
-        const allowed =
-          accountKind === "brand" ? userRole === "brand" :
-          accountKind === "vendor" ? userRole === "vendor" || teamMemberRole === "Manager" || teamMemberRole === "Viewer" :
-          userRole === "customer";
-        if (!allowed) {
-          await supabase.auth.signOut();
-          throw new Error(`This is the ${accountKind === "brand" ? "Brand HQ" : accountKind === "vendor" ? "Vendor" : "Customer"} sign-in page. Please use the correct login page for this account.`);
-        }
       }
 
       if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
@@ -1240,6 +1230,7 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
           .maybeSingle();
         if (staff) {
           if (staff.status === "suspended") {
+            await supabase.auth.signOut();
             toast.error("Your staff account is suspended. Access denied.");
             setLoading(false);
             return;
@@ -1269,16 +1260,6 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
       if (teamMemberSuspended) {
         await supabase.auth.signOut();
         throw new Error("Your branch team access is suspended. Contact your Brand HQ owner.");
-      }
-      if (accountKind !== "any") {
-        const allowed =
-          accountKind === "brand" ? userRole === "brand" :
-          accountKind === "vendor" ? userRole === "vendor" || teamMemberRole === "Manager" || teamMemberRole === "Viewer" :
-          userRole === "customer";
-        if (!allowed) {
-          await supabase.auth.signOut();
-          throw new Error(`This is the ${accountKind === "brand" ? "Brand HQ" : accountKind === "vendor" ? "Vendor" : "Customer"} sign-in page. Please use the correct login page for this account.`);
-        }
       }
 
       if (cleanEmail === "admin@anovra.africa" || cleanEmail === "hello@anovra.africa" || userRole === "admin") {
@@ -1346,13 +1327,13 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
             </button>
 
             <p className="text-xs tracking-[0.2em] uppercase text-[#C86B3A] font-bold mb-1.5" style={{ fontFamily: "'DM Mono', monospace" }}>
-              {accountKind === "brand" ? "Brand HQ Login" : accountKind === "vendor" ? "Vendor Login" : accountKind === "customer" ? "Customer Login" : "Account sign in"}
+              Account sign in
             </p>
             <h1 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              {accountKind === "brand" ? "Brand HQ sign in" : accountKind === "vendor" ? "Vendor sign in" : accountKind === "customer" ? "Customer sign in" : "Welcome back"}
+              Welcome back
             </h1>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {accountKind === "any" ? "One sign-in for customers, vendors, brands and Anovra staff." : "Sign in to your account"}
+              Sign in with your Anovra account. We will open the right workspace for you.
             </p>
           </div>
         </div>
@@ -1480,27 +1461,43 @@ export function SignInView({ setView, accountKind = "any" }: { setView: (v: View
             </button>
 
             <div className="border-t border-border pt-5 text-center" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              <button type="button" onClick={() => setShowSignupChoices((value) => !value)} aria-expanded={showSignupChoices} className="text-sm font-semibold text-[#008236] hover:underline">
-                {showSignupChoices ? "Hide account options" : "New to Anovra? Create an account"}
-              </button>
-              {showSignupChoices && (
-                <div className="mt-4 grid gap-2 text-left">
-                  {[
-                    { label: "Customer", description: "Get skin insights and product matches", view: "customersignup" as View },
-                    { label: "Vendor", description: "Create a skincare storefront", view: "signup" as View },
-                    { label: "Brand HQ", description: "Manage branches from one workspace", view: "brandsignup" as View },
-                  ].map((option) => (
-                    <button key={option.label} type="button" onClick={() => setView(option.view)} className="flex w-full items-center justify-between gap-3 rounded-md border border-border px-4 py-3 text-left transition-colors hover:border-[#008236]/50 hover:bg-[#f5f8f5]">
-                      <span className="min-w-0"><span className="block text-sm font-semibold text-foreground">{option.label}</span><span className="block text-xs text-muted-foreground">{option.description}</span></span>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-[#008236]" />
-                    </button>
-                  ))}
-                </div>
-              )}
+              <p className="text-xs text-muted-foreground mb-2">New to Anovra?</p>
+              <button type="button" onClick={() => setView("accountchoice")} className="text-sm font-semibold text-[#008236] hover:underline">Create an account</button>
             </div>
           </div>
         </div>
       </div>
+  );
+}
+
+export function AccountChoiceView({ setView }: { setView: (v: View) => void }) {
+  const options = [
+    { title: "For my skin", detail: "Create a customer account for analyses and product matches.", icon: User, view: "customersignup" as View },
+    { title: "For my shop", detail: "Apply as a vendor and set up a skincare storefront.", icon: Store, view: "signup" as View },
+    { title: "For my brand", detail: "Register a brand with branches and a central workspace.", icon: ShieldCheck, view: "brandsignup" as View },
+  ];
+  return (
+    <main className="min-h-screen bg-[#FAF7F2]/30 px-4 py-8 sm:py-14">
+      <div className="mx-auto max-w-xl">
+        <button onClick={() => setView("signin")} className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground"><ChevronLeft className="h-4 w-4" /> Back to sign in</button>
+        <div className="mt-8">
+          <img src="/logo.png" alt="Anovra" className="h-12 w-auto object-contain" />
+          <p className="mt-8 text-xs font-bold uppercase text-[#C86B3A]">Create an account</p>
+          <h1 className="mt-2 text-3xl font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>How will you use Anovra?</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Choose one account type to open the right registration form. You can sign in with the same form later.</p>
+        </div>
+        <div className="mt-7 space-y-3">
+          {options.map(({ title, detail, icon: Icon, view }) => (
+            <button key={view} onClick={() => setView(view)} className="flex w-full items-center gap-4 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-[#008236] hover:bg-[#f5f8f5]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#008236]/10 text-[#008236]"><Icon className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-foreground">{title}</span><span className="block text-xs text-muted-foreground">{detail}</span></span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-[#008236]" />
+            </button>
+          ))}
+        </div>
+        <p className="mt-6 text-center text-sm text-muted-foreground">Already registered? <button onClick={() => setView("signin")} className="font-semibold text-[#008236] hover:underline">Sign in</button></p>
+      </div>
+    </main>
   );
 }
 

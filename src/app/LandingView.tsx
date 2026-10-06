@@ -511,7 +511,7 @@ function RecommendationEngineSection() {
 
 // ---- LANDING ----
 
-export function LandingView({ setView }: { setView: (v: View) => void }) {
+export function LandingView({ setView, startSkinTest }: { setView: (v: View) => void; startSkinTest: () => void }) {
   const [workflowAudience, setWorkflowAudience] = useState<"vendors" | "customers">("vendors");
   const [pricingAudience, setPricingAudience] = useState<"vendors" | "customers">("vendors");
   const openSignup = (kind: "vendor" | "brand" = "vendor") => {
@@ -625,9 +625,9 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-20 md:pt-24 md:pb-28 grid md:grid-cols-2 gap-12 items-center">
-          <div className="landing-hero-intro">
-            <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs font-semibold px-3 py-1 rounded-full mb-6 border border-emerald-500/20">
-              <Leaf className="w-3.5 h-3.5" />
+          <div className="landing-hero-intro min-w-0">
+            <span className="inline-flex max-w-full items-center gap-1.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs font-semibold px-3 py-1 rounded-full mb-6 border border-emerald-500/20">
+              <Leaf className="w-3.5 h-3.5 shrink-0" />
               Built for African skin. Regulated for African markets.
             </span>
             <h1
@@ -644,7 +644,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
             <div className="space-y-3.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-xl">
                 <button
-                  onClick={() => setView("skintest")}
+                  onClick={startSkinTest}
                   className="min-h-12 flex items-center justify-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all text-center cursor-pointer whitespace-nowrap"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
@@ -829,7 +829,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                 </h3>
               </div>
               <button
-                onClick={() => workflowAudience === "vendors" ? openSignup("vendor") : setView("skintest")}
+                onClick={() => workflowAudience === "vendors" ? openSignup("vendor") : startSkinTest()}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#008236] px-5 py-3 text-sm font-bold text-white hover:bg-[#006c2c] transition-colors"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
@@ -1111,18 +1111,18 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
             <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
               {[
                 {
-                  name: "Glow Pass",
-                  price: "₦1,500",
+                  name: "Free plan",
+                  price: "₦0",
                   sub: "per month",
                   highlight: false,
                   features: [
-                    "1 full skin analysis per month",
-                    "Top 3 product recommendations",
-                    "Basic skin type & concern report",
-                    "Ingredient safety check",
-                    "Results shared via link",
+                    "Limited skin analyses after trial",
+                    "Top available product matches",
+                    "Basic skin report",
+                    "Ingredient safety checks",
+                    "Shareable report summary",
                   ],
-                  cta: "Start 7-day free trial",
+                  cta: "Create free account",
                 },
                 {
                   name: "Glow Pass+",
@@ -1189,7 +1189,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                   </p>
                   <p className="text-xs mb-3 text-white/70" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
                   <span className="mb-6 inline-flex w-fit rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold text-white border border-white/20">
-                    7-day free trial
+                    {t.price === "₦0" ? "Free after trial" : "7-day trial included"}
                   </span>
                   <ul className="space-y-2.5 flex-1 mb-6">
                     {t.features.map((f) => (
@@ -1200,6 +1200,7 @@ export function LandingView({ setView }: { setView: (v: View) => void }) {
                     ))}
                   </ul>
                   <button
+                    onClick={() => setView("customersignup")}
                     className={cn(
                       "w-full py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm cursor-pointer",
                       t.highlight

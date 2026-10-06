@@ -505,7 +505,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
     {
       cat: "support",
       q: "Which plan is best for me?",
-      a: "For users: Glow Pass is ideal for occasional skin check-ups. Glow Pass+ suits users building a skincare routine and tracking progress. Premium Glow offers deeper guidance, family profiles, and partner benefits. For businesses: Basic suits small skincare shops. Vendor Pro adds unlimited tests, a larger catalogue, and analytics. Premium Tier adds API access, a custom domain, and onboarding. Every new account starts with a 7-day trial."
+      a: "For customers: the Free plan keeps basic skin reports and limited access after your 7-day trial. Glow Pass+ adds unlimited analyses, full matches and saved history. Premium Glow adds the care guide, family profiles and progress tools. For businesses: Basic suits small skincare shops. Vendor Pro adds unlimited tests, a larger catalogue and analytics. Premium Tier adds API access, a custom domain and onboarding. New accounts start with a 7-day trial."
     },
     {
       cat: "support",

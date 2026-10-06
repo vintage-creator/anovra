@@ -181,7 +181,7 @@ serve(async (request) => {
     const findingConfidence = findings.length && findings.every((item) => Number.isFinite(item.confidence))
       ? Math.round(findings.reduce((sum, item) => sum + item.confidence, 0) / findings.length)
       : null;
-    const productsWithheld = findingConfidence === null || findingConfidence < 65 || Boolean(result.clinical_referral_advised);
+    const productsWithheld = findingConfidence === null || findingConfidence < 90 || Boolean(result.clinical_referral_advised);
     const sourceById = new Map(sourceProducts.map((source) => [String(source.id), source]));
     const products = (productsWithheld ? [] : result.products || []).flatMap((item) => {
       const source = sourceById.get(String(item.id));
@@ -202,8 +202,8 @@ serve(async (request) => {
       conditions: result.conditions || [], skinType: result.skin_type,
       findingConfidence, productsWithheld,
       clinicalReferralAdvised: Boolean(result.clinical_referral_advised),
-      ingredientFallback: result.ingredient_fallback || [],
-      treatmentPlan: result.treatment || [],
+      ingredientFallback: productsWithheld ? [] : result.ingredient_fallback || [],
+      treatmentPlan: productsWithheld ? [] : result.treatment || [],
       disclaimer: result.disclaimer, noIssuesDetected: result.no_issues_detected });
   } catch (error) {
     console.error("analyse-skin failed", error);

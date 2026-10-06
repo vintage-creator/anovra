@@ -20,7 +20,7 @@ import { ShopView } from "./ShopView";
 import { DashboardView } from "./DashboardView";
 import { CatalogView } from "./CatalogView";
 import { SkinTestView } from "./SkinTestView";
-import { SignUpView, CustomerSignUpView, SignInView, EmailVerificationPendingView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
+import { SignUpView, CustomerSignUpView, SignInView, AccountChoiceView, EmailVerificationPendingView, ForgotPasswordView, ResetPasswordView } from "./AuthViews";
 import { TeamLoginView, TeamDashboardView } from "./TeamViews";
 import { initialAuthRedirect, supabase } from "./utils/supabase";
 import { AboutView, ContactView, FAQView } from "./ContentViews";
@@ -39,7 +39,7 @@ import {
   SheetClose,
 } from "./components/ui/sheet";
 
-function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
+function Nav({ view, setView, startSkinTest }: { view: View; setView: (v: View) => void; startSkinTest: () => void }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const primaryNavLinks: { id: View; label: string; icon: React.ElementType }[] = [
@@ -96,7 +96,7 @@ function Nav({ view, setView }: { view: View; setView: (v: View) => void }) {
 
             {/* Analyse Skin Button (Secondary Outline Button) */}
             <button
-              onClick={() => setView("skintest")}
+              onClick={startSkinTest}
               className="text-sm px-4 py-2 rounded-lg border-2 border-[#008236] text-[#008236] hover:bg-[#008236]/10 font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
@@ -244,6 +244,8 @@ function ScrollToTopButton({ hidden }: { hidden?: boolean }) {
 }
 
 export default function App() {
+  const [scanAccount, setScanAccount] = useState<string | null>(null);
+  const [checkingScanAccount, setCheckingScanAccount] = useState(false);
   const getViewFromHash = (): View => {
     const isSystemDomain = [
       "anovra.africa",
@@ -305,7 +307,7 @@ export default function App() {
     if (hash.startsWith("resetpassword#")) return "verifyemail";
     const validViews: View[] = [
       "landing", "dashboard", "catalog", "skintest", "admin",
-      "adminlogin", "shop", "brand", "signin", "vendorlogin", "brandlogin", "customerlogin", "signup", "brandsignup", "customersignup", "verifyemail", "forgotpassword",
+      "adminlogin", "shop", "brand", "signin", "vendorlogin", "brandlogin", "customerlogin", "accountchoice", "signup", "brandsignup", "customersignup", "verifyemail", "forgotpassword",
       "resetpassword", "teamlogin", "teamdashboard", "branddashboard", "about", "contact", "faq",
       "userdashboard"
     ];
@@ -348,6 +350,27 @@ export default function App() {
     } else {
       window.location.hash = `#/${v}`;
     }
+  };
+  const startSkinTest = async () => {
+    if (checkingScanAccount) return;
+    setCheckingScanAccount(true);
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error && error.name !== "AuthSessionMissingError") throw error;
+      if (user?.email) setScanAccount(user.email);
+      else setView("skintest");
+    } catch {
+      toast.error("We could not check your session. Please try again.");
+    } finally {
+      setCheckingScanAccount(false);
+    }
+  };
+  const switchScanAccount = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) return toast.error("Could not sign out. Please try again.");
+    setScanAccount(null);
+    rememberCustomerScan();
+    setView("customerlogin");
   };
 
   useEffect(() => {
@@ -822,6 +845,7 @@ export default function App() {
     "signup",
     "brandsignup",
     "customersignup",
+    "accountchoice",
     "verifyemail",
     "forgotpassword",
     "resetpassword",
@@ -848,9 +872,9 @@ export default function App() {
       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
     >
       <Toaster position="top-right" closeButton richColors />
-      {!hideNav && <Nav view={view} setView={setView} />}
+      {!hideNav && <Nav view={view} setView={setView} startSkinTest={startSkinTest} />}
       <div className="flex-1">
-        {view === "landing" && <LandingView setView={setView} />}
+        {view === "landing" && <LandingView setView={setView} startSkinTest={startSkinTest} />}
         {view === "about" && <AboutView setView={setView} />}
         {view === "contact" && <ContactView setView={setView} />}
         {view === "faq" && <FAQView setView={setView} />}
@@ -862,9 +886,10 @@ export default function App() {
         {view === "shop" && <ShopView setView={setView} />}
         {view === "brand" && <BrandPublicView setView={setView} />}
         {view === "signin" && <SignInView setView={setView} />}
-        {view === "vendorlogin" && <SignInView setView={setView} accountKind="vendor" />}
-        {view === "brandlogin" && <SignInView setView={setView} accountKind="brand" />}
-        {view === "customerlogin" && <SignInView setView={setView} accountKind="customer" />}
+        {view === "vendorlogin" && <SignInView setView={setView} />}
+        {view === "brandlogin" && <SignInView setView={setView} />}
+        {view === "customerlogin" && <SignInView setView={setView} />}
+        {view === "accountchoice" && <AccountChoiceView setView={setView} />}
         {view === "signup" && <SignUpView setView={setView} accountKind="vendor" />}
         {view === "brandsignup" && <SignUpView setView={setView} accountKind="brand" />}
         {view === "customersignup" && <CustomerSignUpView setView={setView} />}
@@ -876,6 +901,19 @@ export default function App() {
         {view === "branddashboard" && <BrandDashboardView setView={setView} />}
         {view === "userdashboard" && <UserDashboardView setView={setView} />}
       </div>
+      {scanAccount && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4" role="presentation" onClick={() => setScanAccount(null)}>
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="scan-account-title" onClick={(event) => event.stopPropagation()}>
+            <h2 id="scan-account-title" className="text-xl font-semibold text-[#1c3125]">Continue your skin test</h2>
+            <p className="mt-2 text-sm text-[#59675e]">This browser is still signed in as <strong className="break-all text-[#1c3125]">{scanAccount}</strong>. Your result will be saved to that account.</p>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+              <button className="rounded-md bg-[#008236] px-4 py-2.5 text-sm font-semibold text-white" onClick={() => { setScanAccount(null); setView("skintest"); }}>Continue as this account</button>
+              <button className="rounded-md border border-[#d7e0d7] px-4 py-2.5 text-sm font-semibold text-[#1c3125]" onClick={switchScanAccount}>Use another account</button>
+            </div>
+            <button className="mt-4 text-sm text-[#59675e] underline" onClick={() => setScanAccount(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       <ScrollToTopButton hidden={view === "admin"} />
       {!hideNav && <Footer setView={setView} view={view} />}
     </div>
