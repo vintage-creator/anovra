@@ -1849,13 +1849,13 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
 
       {/* ── SETTINGS / BILLING ── */}
       {tab === "settings" && (
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           <div>
-            <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Account settings</h2>
-            <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Manage your profile, sign-in security, trial access, and paid plan options.</p>
+            <h2 className="text-lg font-light text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>Billing & Plans</h2>
+            <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Review your current access and choose a plan that suits you.</p>
           </div>
 
-          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
+          <div className="order-4 bg-card border border-border rounded-2xl p-5 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
               <div>
                 <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Profile details</h3>
@@ -1882,7 +1882,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
+          <div className="order-5 bg-card border border-border rounded-2xl p-5 sm:p-6">
             <div className="mb-5">
               <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Contact details</h3>
               <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Keep your email, phone number, and location up to date for account recovery and support.</p>
@@ -1930,7 +1930,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
+          <div className="order-6 bg-card border border-border rounded-2xl p-5 sm:p-6">
             <div className="mb-5">
               <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Security</h3>
               <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Change your password for this customer account.</p>
@@ -1970,7 +1970,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
 
           {trialAccessActive && (
-            <div className="bg-card border border-[#008236]/25 rounded-2xl p-5 sm:p-6">
+            <div className="order-1 bg-card border border-[#008236]/25 rounded-2xl p-5 sm:p-6">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                 <div>
                   <span className="inline-flex text-[10px] uppercase tracking-wider font-bold text-[#008236] bg-[#008236]/10 border border-[#008236]/20 px-2.5 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>
@@ -1998,13 +1998,13 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           )}
 
           {trialExpired && plan === "glow" && (
-            <div className="flex items-start gap-3 rounded-lg border border-[#DCE8DE] bg-[#F4F9F5] p-4 text-sm text-[#31563B]">
+            <div className="order-1 flex items-start gap-3 rounded-lg border border-[#DCE8DE] bg-[#F4F9F5] p-4 text-sm text-[#31563B]">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
               <p>Your 7-day trial has ended. The Free plan is active, and your saved analyses remain available. You can restore premium tools below.</p>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="order-2 grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
                 id: "glow" as const,
@@ -2091,7 +2091,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               </div>
             ))}
           </div>
-          <AccountDeletionSection kind="customer" setView={setView} />
+          <div className="order-7"><AccountDeletionSection kind="customer" setView={setView} /></div>
         </div>
       )}
           </main>
