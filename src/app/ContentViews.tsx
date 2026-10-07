@@ -7,7 +7,7 @@ import { SocialLinks } from "./SocialLinks";
 export function AboutView({ setView }: { setView: (v: View) => void }) {
   const users = [
     {
-      role: "Skin Care Customers",
+      role: "Individuals",
       icon: User,
       tagline: "Know your skin. Find what actually works.",
       color: "bg-amber-50 border-amber-200",
@@ -43,7 +43,7 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
         "Ingredient safety layer flags harmful chemicals before they reach customers",
       ],
       cta: { label: "Join as a vendor", view: "signup" as View },
-      ctaSecondary: { label: "See vendor dashboard", view: "dashboard" as View },
+      ctaSecondary: { label: "Register your brand", view: "brandsignup" as View },
     },
     {
       role: "Sales & Marketing Team",
@@ -55,7 +55,7 @@ export function AboutView({ setView }: { setView: (v: View) => void }) {
       photo: "/network-referrals-feature.jpg",
       desc: "Anovra's growth runs on the people who bring vendors onto the platform. The team portal gives every sales and marketing staff member their own referral link, live performance data, and everything they need to close.",
       benefits: [
-        "Unique referral link — every vendor or customer who signs up is tracked to you",
+        "Unique referral link — every vendor or user who signs up is tracked to you",
         "Live dashboard: see clicks, scans, vendor sign-ups, and revenue generated",
         "Team leaderboard with monthly targets and commission tier tracking",
         "Downloadable pitch decks, WhatsApp scripts, and brand assets",
@@ -474,7 +474,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
     {
       cat: "privacy",
       q: "Can I delete my account?",
-      a: "Yes. Customers, independent vendors and Brand HQ owners can permanently delete their account in account settings. Brand HQ deletion also removes its branches. A one-way email fingerprint and the original trial date are retained to prevent repeat free trials."
+      a: "Yes. Individuals, independent vendors and Brand HQ owners can permanently delete their account in account settings. Brand HQ deletion also removes its branches. A one-way email fingerprint and the original trial date are retained to prevent repeat free trials."
     },
     // Account & Support
     {
@@ -490,7 +490,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
     {
       cat: "support",
       q: "Is Anovra free to use?",
-      a: "New accounts can try premium features for seven days. A free tier remains available afterwards, while paid plans unlock additional customer and business tools."
+      a: "New accounts can try premium features for three days. After the trial, choose a paid individual or business plan to continue using those tools."
     },
     {
       cat: "support",
@@ -505,7 +505,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
     {
       cat: "support",
       q: "Which plan is best for me?",
-      a: "For customers: the Free plan keeps basic skin reports and limited access after your 7-day trial. Glow Pass+ adds unlimited analyses, full matches and saved history. Premium Glow adds the care guide, family profiles and progress tools. For businesses: Basic suits small skincare shops. Vendor Pro adds unlimited tests, a larger catalogue and analytics. Premium Tier adds API access, a custom domain and onboarding. New accounts start with a 7-day trial."
+      a: "For individuals: Glow Pass is ₦1,500 per month for essential reports and limited analyses. Glow Pass+ adds unlimited analyses, full matches and saved history. Premium Glow adds the care guide, family profiles and progress tools. For businesses: Basic suits small skincare shops. Vendor Pro adds unlimited tests, a larger catalogue and analytics. Premium Tier adds API access, a custom domain and onboarding. New accounts start with a 3-day trial."
     },
     {
       cat: "support",
@@ -683,7 +683,7 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
                     className="w-full bg-card border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-accent transition-colors appearance-none"
                   >
                     <option value="">Select your role</option>
-                    <option value="customer">Customer / Skin test user</option>
+                    <option value="customer">Individual / Skin test user</option>
                     <option value="vendor">Skincare vendor</option>
                     <option value="partner">Brand or partner</option>
                     <option value="press">Press / Media</option>
@@ -762,8 +762,8 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
             <h2 className="text-3xl font-light text-primary-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
               Ready to get started?
             </h2>
-            <p className="text-white/50 text-sm mb-8">No long forms. No waiting. Start your skin test or vendor account in minutes.</p>
-            <div className="flex flex-wrap gap-3 justify-center">
+            <p className="text-white/70 text-sm mb-8">Explore your skin, open a storefront, or bring your branches together under Brand HQ.</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
               <button
                 onClick={() => setView("skintest")}
                 className="px-6 py-3 bg-accent text-white rounded-xl text-sm font-medium hover:bg-accent/90 transition-colors"
@@ -775,6 +775,12 @@ export function ContactView({ setView, faqOnly = false }: { setView: (v: View) =
                 className="px-6 py-3 bg-white/10 text-white rounded-xl text-sm font-medium hover:bg-white/15 transition-colors border border-white/15"
               >
                 Join as a vendor
+              </button>
+              <button
+                onClick={() => setView("brandsignup")}
+                className="px-6 py-3 bg-transparent text-white rounded-xl text-sm font-medium hover:bg-white/10 transition-colors border border-white/40"
+              >
+                Register your brand
               </button>
             </div>
           </div>

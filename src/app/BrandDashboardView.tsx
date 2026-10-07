@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ElementType } from "react";
 import {
-  Activity, AlertCircle, Archive, ArrowRight, ArrowUpRight, BarChart2, Building2, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, CreditCard, Edit,
+  Activity, AlertCircle, Archive, ArrowRight, ArrowUpRight, BarChart2, Building2, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, CreditCard, Edit,
   ExternalLink, Eye, Filter, GripVertical, HelpCircle, Image as ImageIcon, Info, LayoutDashboard, LayoutGrid, Link as LinkIcon, List, Loader2,
-  LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, Scan, Search, Settings, ShieldCheck,
+  Lock, LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, Scan, Search, Settings, ShieldCheck,
   Tag, Trash2, Upload, Users, X,
 } from "lucide-react";
 import type { View } from "./types";
@@ -93,6 +93,9 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState("");
   const [brandProfile, setBrandProfile] = useState<any>(null);
+  const brandTrialExpired = brandProfile?.plan === "free"
+    && Date.now() > new Date(brandProfile.created_at || 0).getTime() + 3 * 24 * 60 * 60 * 1000;
+  const isBrandVerified = Boolean(brandProfile?.is_verified) && (brandProfile?.verification_status ? brandProfile.verification_status === "approved" : true);
   const [branches, setBranches] = useState<any[]>([]);
   const [branchProfiles, setBranchProfiles] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -353,8 +356,13 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
   };
 
   const copy = async (value: string, key: string) => {
+    if ((key.includes("brand-url") || key.includes("shop") || key.includes("scan")) && !isBrandVerified) {
+      toast.error("Links cannot be copied until your brand account is CAC-verified by Anovra compliance.");
+      return;
+    }
     await navigator.clipboard?.writeText(value).catch(() => {});
     setCopied(key);
+    toast.success("Copied to clipboard!");
     setTimeout(() => setCopied(""), 1800);
   };
 
@@ -375,6 +383,10 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
   };
 
   const createBranch = async () => {
+    if (brandTrialExpired) {
+      toast.error("Your Brand HQ trial has ended. Contact Anovra to activate branch management.");
+      return;
+    }
     const branchName = form.branchName.trim();
     const branchEmail = form.branchEmail.trim().toLowerCase();
     const location = form.location.trim();
@@ -677,6 +689,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
               tab={tab}
               copied={copied}
               brandUrl={brandUrl}
+              isBrandVerified={isBrandVerified}
               copy={copy}
               setTab={selectTab}
               signOut={signOut}
@@ -695,6 +708,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
               tab={tab}
               copied={copied}
               brandUrl={brandUrl}
+              isBrandVerified={isBrandVerified}
               copy={copy}
               setTab={selectTab}
               signOut={signOut}
@@ -704,6 +718,44 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
           </aside>
 
           <main className="space-y-6">
+            {brandTrialExpired && <section className="flex flex-col gap-4 rounded-lg border border-[#d69b54] bg-[#fff5e9] p-5 sm:flex-row sm:items-center sm:justify-between" role="status">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-[#9b4b18]" />
+                <div>
+                  <h2 className="font-semibold text-[#5b2c12]">Your 3-day Brand HQ trial has ended</h2>
+                  <p className="mt-1 text-sm text-[#683b22]">Your reports remain available. Branch and team changes, storefront scans, and product matching need an active Brand HQ plan.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setView("contact")} className="shrink-0 rounded-md bg-[#8b431b] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6e3515]">Contact Anovra</button>
+            </section>}
+
+            {!isBrandVerified && (
+              <section className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50/70 p-4 sm:p-5 text-amber-900 sm:flex-row sm:items-center sm:justify-between shadow-xs" role="status">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0 text-amber-800">
+                    <Clock className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-semibold text-amber-950 text-sm">CAC Verification Pending</h2>
+                      <span className="text-[10px] uppercase font-bold font-mono bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                        In Review
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-amber-800 leading-relaxed max-w-2xl">
+                      Your CAC documents and brand credentials are currently under review by Anovra compliance. Public links (brand profile, branch stores, and skin tests) remain locked and cannot be copied until approved.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setView("contact")}
+                  className="shrink-0 rounded-xl bg-amber-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-900 transition-colors self-start sm:self-auto cursor-pointer"
+                >
+                  Contact Compliance
+                </button>
+              </section>
+            )}
             {tab === "overview" && (
               <>
                 <section className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-xs">
@@ -1194,10 +1246,10 @@ function BranchCreatedCard({
           </div>
         ))}
         {branch.shop && (
-          <LinkCopyCard label="Storefront" value={branch.shop} copyKey="created-shop" copied={copied} copy={copy} />
+          <LinkCopyCard label="Storefront" value={branch.shop} copyKey="created-shop" copied={copied} copy={copy} disabled={!isBrandVerified} />
         )}
         {branch.scan && (
-          <LinkCopyCard label="Skin test link" value={branch.scan} copyKey="created-scan" copied={copied} copy={copy} />
+          <LinkCopyCard label="Skin test link" value={branch.scan} copyKey="created-scan" copied={copied} copy={copy} disabled={!isBrandVerified} />
         )}
       </div>
     </section>
@@ -1210,20 +1262,42 @@ function LinkCopyCard({
   copyKey,
   copied,
   copy,
+  disabled = false,
 }: {
   label: string;
   value: string;
   copyKey: string;
   copied: string;
   copy: (value: string, key: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="bg-white/85 border border-emerald-100 rounded-xl p-3 min-w-0">
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">{label}</p>
       <div className="mt-2 flex items-center justify-between gap-2 min-w-0">
         <p className="text-sm font-semibold text-foreground truncate">{value}</p>
-        <button onClick={() => copy(value, copyKey)} className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0" aria-label={`Copy ${label}`}>
-          {copied === copyKey ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+        <button
+          onClick={() => {
+            if (disabled) {
+              toast.error("Links cannot be copied until your brand is CAC-verified.");
+              return;
+            }
+            copy(value, copyKey);
+          }}
+          className={cn(
+            "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors",
+            disabled ? "bg-amber-100 text-amber-700" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          )}
+          aria-label={`Copy ${label}`}
+          title={disabled ? "Locked pending CAC verification" : `Copy ${label}`}
+        >
+          {copied === copyKey ? (
+            <Check className="w-3.5 h-3.5" />
+          ) : disabled ? (
+            <Lock className="w-3.5 h-3.5" />
+          ) : (
+            <Copy className="w-3.5 h-3.5" />
+          )}
         </button>
       </div>
     </div>
@@ -1237,6 +1311,7 @@ function BrandSidebar({
   tab,
   copied,
   brandUrl,
+  isBrandVerified = false,
   copy,
   setTab,
   signOut,
@@ -1249,6 +1324,7 @@ function BrandSidebar({
   tab: BrandTab;
   copied: string;
   brandUrl: string;
+  isBrandVerified?: boolean;
   copy: (value: string, key: string) => void;
   setTab: (tab: BrandTab) => void;
   signOut: () => void;
@@ -1275,9 +1351,35 @@ function BrandSidebar({
             </div>
           </div>
           <div className="mt-2.5 flex items-center justify-between gap-2 pt-2 border-t border-border/60">
-            <button onClick={() => copy(brandUrl, "brand-url")} className="text-xs text-accent hover:text-accent/80 inline-flex items-center gap-1 font-semibold cursor-pointer">
-              {copied === "brand-url" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+            <button
+              onClick={() => {
+                if (!isBrandVerified) {
+                  toast.error("Your brand link cannot be copied until your account is CAC-verified by Anovra compliance.");
+                  return;
+                }
+                copy(brandUrl, "brand-url");
+              }}
+              className={cn(
+                "text-xs inline-flex items-center gap-1.5 font-semibold transition-colors cursor-pointer",
+                isBrandVerified
+                  ? "text-accent hover:text-accent/80"
+                  : "text-amber-800 bg-amber-500/10 border border-amber-500/25 px-2 py-1 rounded-lg hover:bg-amber-500/20"
+              )}
+              title={isBrandVerified ? "Copy brand link" : "Account pending CAC verification"}
+            >
+              {copied === "brand-url" ? (
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              ) : isBrandVerified ? (
+                <Copy className="w-3.5 h-3.5" />
+              ) : (
+                <Lock className="w-3.5 h-3.5 text-amber-700" />
+              )}
               <span>Brand link</span>
+              {!isBrandVerified && (
+                <span className="text-[9px] uppercase px-1.5 py-0.5 bg-amber-200/80 text-amber-900 rounded font-mono font-bold leading-none">
+                  Pending
+                </span>
+              )}
             </button>
             {onEditBrandIdentity && (
               <button
@@ -2003,11 +2105,11 @@ function BranchDetail({
     : "Recently";
 
   return (
-    <section className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+    <section className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm min-w-0 max-w-full">
       {/* Branch Header with Real Metadata & Clean Actions */}
       <div className="px-5 sm:px-6 py-5 border-b border-border bg-muted/20">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-          <div>
+        <div className="flex flex-col 2xl:flex-row 2xl:items-start 2xl:justify-between gap-4 min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5 flex-wrap">
               <p className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Selected branch</p>
               <span
@@ -2024,12 +2126,12 @@ function BranchDetail({
               </span>
             </div>
 
-            <h2 className="text-2xl font-light text-foreground mt-1" style={{ fontFamily: "'Fraunces', serif" }}>
+            <h2 className="text-2xl font-light text-foreground mt-1 truncate" style={{ fontFamily: "'Fraunces', serif" }}>
               {branch.branch_name}
             </h2>
 
             {/* Rich metadata tags */}
-            <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <div className="mt-2.5 flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5 text-accent shrink-0" />
                 <span>{branch.location || "Location not set"}</span>
@@ -2037,7 +2139,7 @@ function BranchDetail({
 
               <span className="flex items-center gap-1">
                 <Mail className="w-3.5 h-3.5 text-muted-foreground/70 shrink-0" />
-                <span>{branch.branch_email}</span>
+                <span className="truncate max-w-[220px]">{branch.branch_email}</span>
               </span>
 
               {branch.phone && (
@@ -2059,30 +2161,30 @@ function BranchDetail({
           </div>
 
           {/* Primary Action CTAs & Settings Dropdown */}
-          <div className="flex items-center gap-2 lg:justify-end shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap min-w-0 shrink-0 2xl:justify-end">
             <button
               onClick={openShop}
-              className="text-xs px-3.5 py-2 rounded-xl bg-accent text-white inline-flex items-center justify-center gap-1.5 font-semibold hover:bg-accent/90 transition-all shadow-xs"
+              className="text-xs px-3 sm:px-3.5 py-2 rounded-xl bg-accent text-white inline-flex items-center justify-center gap-1.5 font-semibold hover:bg-accent/90 transition-all shadow-xs shrink-0 cursor-pointer"
               title="Open branch storefront in new tab"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
               <span>Open storefront</span>
             </button>
             <button
               onClick={openScan}
-              className="text-xs px-3.5 py-2 rounded-xl bg-foreground text-background inline-flex items-center justify-center gap-1.5 font-semibold hover:bg-foreground/90 transition-all shadow-xs"
+              className="text-xs px-3 sm:px-3.5 py-2 rounded-xl bg-foreground text-background inline-flex items-center justify-center gap-1.5 font-semibold hover:bg-foreground/90 transition-all shadow-xs shrink-0 cursor-pointer"
               title="Test customer skin scan consultation in new tab"
             >
-              <Scan className="w-3.5 h-3.5" />
+              <Scan className="w-3.5 h-3.5 shrink-0" />
               <span>Test scan</span>
             </button>
 
             {/* Branch Settings Dropdown */}
             <DropdownMenu>
-              <DropdownMenuTrigger className="text-xs px-3 py-2 rounded-xl bg-background border border-border text-foreground hover:bg-muted font-semibold inline-flex items-center gap-1.5 transition-colors focus:outline-none shadow-xs cursor-pointer">
-                <Settings className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="hidden sm:inline">Settings</span>
-                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              <DropdownMenuTrigger className="text-xs px-3 py-2 rounded-xl bg-background border border-border text-foreground hover:bg-muted font-semibold inline-flex items-center gap-1.5 transition-colors focus:outline-none shadow-xs cursor-pointer shrink-0">
+                <Settings className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span>Settings</span>
+                <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-2xl shadow-lg border border-border bg-card">
                 {!isFlagship && <DropdownMenuItem
@@ -2093,22 +2195,34 @@ function BranchDetail({
                   <span>Edit branch details</span>
                 </DropdownMenuItem>}
                 <DropdownMenuItem
-                  onClick={() => copy(branch.shopUrl, `${branch.id}-detail-shop`)}
+                  onClick={() => {
+                    if (!isBrandVerified) {
+                      toast.error("Storefront link cannot be copied until your brand is CAC-verified.");
+                      return;
+                    }
+                    copy(branch.shopUrl, `${branch.id}-detail-shop`);
+                  }}
                   className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl cursor-pointer hover:bg-muted focus:bg-muted outline-none"
                 >
                   <div className="flex items-center gap-2.5">
-                    <Copy className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    {isBrandVerified ? <Copy className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />}
                     <span>Copy storefront link</span>
                   </div>
                   {copied === `${branch.id}-detail-shop` && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => copy(branch.scanUrl, `${branch.id}-detail-scan`)}
+                  onClick={() => {
+                    if (!isBrandVerified) {
+                      toast.error("Skin test link cannot be copied until your brand is CAC-verified.");
+                      return;
+                    }
+                    copy(branch.scanUrl, `${branch.id}-detail-scan`);
+                  }}
                   className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl cursor-pointer hover:bg-muted focus:bg-muted outline-none"
                 >
                   <div className="flex items-center gap-2.5">
-                    <Scan className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span>Copy skin scan link</span>
+                    {isBrandVerified ? <Copy className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />}
+                    <span>Copy test link</span>
                   </div>
                   {copied === `${branch.id}-detail-scan` && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                 </DropdownMenuItem>

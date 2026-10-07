@@ -112,6 +112,8 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
 
         // 1. Fetch profiles to match by stored slug, business name slug, or custom domain
         const { data: profiles } = await supabase.from("profiles").select("*");
+        const hasActiveAccess = (profile: any) => profile?.plan !== "free"
+          || Date.now() <= new Date(profile?.created_at || 0).getTime() + 3 * 24 * 60 * 60 * 1000;
         const marketplaceProfiles = (profiles || [])
           .filter((p) =>
             p.business_name
@@ -119,9 +121,10 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
             && p.account_type !== "brand"
             && p.is_verified === true
             && (p.verification_status || "pending") === "approved"
+            && hasActiveAccess(p)
             && (p.account_type !== "branch" || p.branch_status === "active")
             && (!p.parent_brand_id || (profiles || []).some((parent) =>
-              parent.id === p.parent_brand_id && parent.is_verified && parent.verification_status === "approved"))
+              parent.id === p.parent_brand_id && parent.is_verified && parent.verification_status === "approved" && hasActiveAccess(parent)))
           )
           .map((p) => ({ id: p.id, name: p.business_name, slug: p.slug || slugify(p.business_name), verified: p.is_verified }));
         setVendorOptions(marketplaceProfiles);
@@ -159,6 +162,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         if (
           !canPreviewOwnStore && targetProfile && (
             !isApprovedForPublic
+            || !hasActiveAccess(targetProfile)
             || (targetProfile.account_type === "branch" && targetProfile.branch_status !== "active")
             || ["suspended", "banned"].includes(targetProfile.verification_status)
           )
@@ -171,7 +175,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         }
         if (!canPreviewOwnStore && targetProfile?.account_type === "branch" && targetProfile.parent_brand_id) {
           const parentProfile = profiles?.find((profile) => profile.id === targetProfile.parent_brand_id);
-          if (!parentProfile?.is_verified || (parentProfile?.verification_status || "pending") !== "approved") {
+          if (!parentProfile?.is_verified || (parentProfile?.verification_status || "pending") !== "approved" || !hasActiveAccess(parentProfile)) {
             setProfileNotFound(true);
             setVendorProfileId(null);
             setProductsList([]);

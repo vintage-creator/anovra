@@ -29,15 +29,25 @@ serve(async (request) => {
     const body = await request.json();
     const plan = String(body.plan || "");
     const reference = String(body.reference || "").trim();
-    const amount = plan === "basic" ? 350000 : plan === "premium" ? 700000 : 0;
+    const amount = plan === "starter" ? 150000 : plan === "basic" ? 350000 : plan === "premium" ? 700000 : 0;
     if (!amount || !/^[A-Za-z0-9.=-]{6,100}$/.test(reference))
       return reply({ error: "Invalid payment details." }, 400);
 
+    const { data: profile, error: profileError } = await admin.from("profiles")
+      .select("account_type, plan, customer_plan_expires_at").eq("id", user.id).maybeSingle();
+    if (profileError) throw profileError;
+    if (profile?.account_type !== "customer") return reply({ error: "This checkout is for individual accounts only." }, 403);
+
     const { data: existing, error: lookupError } = await admin.from("payments")
-      .select("vendor_id, plan, status").eq("reference", reference).maybeSingle();
+      .select("vendor_id, plan, status, created_at").eq("reference", reference).maybeSingle();
     if (lookupError) throw lookupError;
     if (existing && (existing.vendor_id !== user.id || existing.plan !== plan || existing.status !== "success"))
       return reply({ error: "This payment reference belongs to another transaction." }, 409);
+    if (existing && profile.customer_plan_expires_at) {
+      if (profile.plan !== plan || Date.now() > new Date(profile.customer_plan_expires_at).getTime())
+        return reply({ error: "This payment has already been applied. Start a new checkout to renew or change plans." }, 409);
+      return reply({ success: true, plan: profile.plan, expires_at: profile.customer_plan_expires_at });
+    }
 
     if (!existing) {
       const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
@@ -61,9 +71,13 @@ serve(async (request) => {
       }
     }
 
-    const { error: updateError } = await admin.from("profiles").update({ plan }).eq("id", user.id);
+    const paidUntil = new Date(profile.customer_plan_expires_at || 0).getTime();
+    const expiryBase = existing ? new Date(existing.created_at).getTime() : Math.max(Date.now(), Number.isFinite(paidUntil) ? paidUntil : 0);
+    const nextExpiry = new Date(expiryBase + 30 * 24 * 60 * 60 * 1000);
+    const { error: updateError } = await admin.from("profiles")
+      .update({ plan, customer_plan_expires_at: nextExpiry.toISOString() }).eq("id", user.id);
     if (updateError) throw updateError;
-    return reply({ success: true, plan });
+    return reply({ success: true, plan, expires_at: nextExpiry.toISOString() });
   } catch (error) {
     console.error("verify-customer-payment failed", error);
     return reply({ error: "We could not activate your plan. Please contact support with your Paystack reference." }, 500);

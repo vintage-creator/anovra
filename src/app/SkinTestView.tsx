@@ -1759,18 +1759,29 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
             </div>
           </div>
 
-          {scanResult?.capture && <section className="border border-border bg-white rounded-lg p-5 sm:p-6 mb-6" aria-label="Capture quality">
-            <div className="flex items-center gap-2 mb-3"><CheckCircle className="w-5 h-5 text-[#008236]" /><h3 className="font-semibold text-foreground">Photo accepted for analysis</h3></div>
-            <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-              {scanResult.capture.confidence != null && <span>Capture confidence <strong className="text-foreground">{Math.round(scanResult.capture.confidence)}%</strong>{scanResult.capture.threshold != null && ` · threshold ${Math.round(scanResult.capture.threshold)}%`}</span>}
-              {scanResult.capture.lighting?.brightness != null && <span>Brightness {Math.round(scanResult.capture.lighting.brightness)}</span>}
-              {scanResult.capture.lighting?.glare_pct != null && <span>Glare {Math.round(scanResult.capture.lighting.glare_pct)}%</span>}
-              {scanResult.capture.lighting?.verdict && <span>Lighting {scanResult.capture.lighting.verdict}</span>}
-              {scanResult.capture.frames_used != null && <span>{scanResult.capture.frames_used} of {scanResult.capture.frames_received ?? scanResult.capture.frames_used} frames used</span>}
-              {scanResult.capture.authenticity?.verdict === "clean" && !scanResult.capture.filter_suspected && <span>Filter check: none flagged</span>}
-              {(scanResult.capture.filter_suspected || scanResult.capture.authenticity?.verdict === "suspect") && <span>Filter check: possible editing flagged</span>}
+          {scanResult?.capture && <section className="mb-6 overflow-hidden rounded-lg border border-[#cfe4d5] bg-white" aria-label="Capture quality">
+            <div className="flex items-start gap-3 border-b border-[#e2eee5] bg-[#f4faf5] px-5 py-4 sm:px-6">
+              <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-[#087443]" />
+              <div>
+                <h3 className="font-semibold text-[#164b2d]">Photo accepted for analysis</h3>
+                <p className="mt-1 text-sm text-[#45614c]">The image passed the photo-quality check. The skin findings are assessed separately.</p>
+              </div>
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">Capture confidence measures whether the photo could be assessed. It is not the confidence of the skin findings. Filter checks are automated and cannot prove a photo is unedited.</p>
+            <div className="grid grid-cols-2 gap-4 px-5 py-5 sm:grid-cols-3 sm:px-6">
+              {scanResult.capture.confidence != null && <div><p className="text-xs text-muted-foreground">Photo quality</p><p className="mt-1 text-lg font-semibold text-foreground">{Math.round(scanResult.capture.confidence)}%</p></div>}
+              {scanResult.capture.lighting?.verdict && <div><p className="text-xs text-muted-foreground">Lighting</p><p className="mt-1 text-sm font-semibold capitalize text-foreground">{scanResult.capture.lighting.verdict}</p></div>}
+              {scanResult.capture.frames_used != null && <div><p className="text-xs text-muted-foreground">Frames assessed</p><p className="mt-1 text-sm font-semibold text-foreground">{scanResult.capture.frames_used} of {scanResult.capture.frames_received ?? scanResult.capture.frames_used}</p></div>}
+            </div>
+            <details className="border-t border-border px-5 py-3 text-xs text-muted-foreground sm:px-6">
+              <summary className="cursor-pointer font-medium text-[#087443]">Photo check details</summary>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+                {scanResult.capture.threshold != null && <span>Quality threshold: {Math.round(scanResult.capture.threshold)}%</span>}
+                {scanResult.capture.lighting?.brightness != null && <span>Brightness: {Math.round(scanResult.capture.lighting.brightness)}</span>}
+                {scanResult.capture.lighting?.glare_pct != null && <span>Glare: {Math.round(scanResult.capture.lighting.glare_pct)}%</span>}
+                {(scanResult.capture.filter_suspected || scanResult.capture.authenticity?.verdict === "suspect") && <span>Possible editing flagged</span>}
+              </div>
+              <p className="mt-2">Photo checks are automated and do not verify authenticity or diagnose a skin condition.</p>
+            </details>
           </section>}
 
           <section className="mb-8">
@@ -1871,15 +1882,24 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
 
           {/* Matched Products from Connected Storefront */}
           <div className="mb-8">
-            {productsWithheld && <div className="border-l-4 border-[#ad623a] bg-[#fff8f2] p-5 rounded-r-lg">
-              <h3 className="font-semibold text-foreground">{noIssuesDetected ? "No targeted products recommended" : "Product matches are paused"}</h3>
-              <p className="text-sm text-muted-foreground mt-1">{noIssuesDetected
+            {productsWithheld && <div role="status" className={cn("overflow-hidden rounded-lg border shadow-sm", noIssuesDetected ? "border-[#cfe4d5] bg-[#f4faf5]" : "border-[#d69b54] bg-[#fff5e9]")}>
+              <div className={cn("flex items-start gap-3 border-b px-5 py-4 sm:px-6", noIssuesDetected ? "border-[#dce9df]" : "border-[#eed5b6]")}>
+                {noIssuesDetected ? <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-[#087443]" /> : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#9b4b18]" />}
+                <div>
+                  <p className={cn("text-xs font-bold uppercase tracking-wide", noIssuesDetected ? "text-[#087443]" : "text-[#9b4b18]")}>{noIssuesDetected ? "No targeted match" : "Inconclusive result"}</p>
+                  <h3 className={cn("mt-1 text-lg font-semibold", noIssuesDetected ? "text-[#164b2d]" : "text-[#5b2c12]")}>{noIssuesDetected ? "No targeted products recommended" : "Product matches are paused"}</h3>
+                </div>
+              </div>
+              <div className="px-5 py-4 sm:px-6">
+              <p className={cn("text-sm leading-relaxed", noIssuesDetected ? "text-[#45614c]" : "text-[#683b22]")}>{noIssuesDetected
                 ? "No notable visible concern was identified, so there is no specific product match for this scan. If you have a concern, try another clear photo or speak to a registered dermatologist."
                 : scanResult?.clinicalReferralAdvised
                   ? "This result needs professional review before product matching. Please consult a registered dermatologist."
                   : findingConfidence == null
                     ? "The analysis did not supply a reliable finding-confidence score. This result is inconclusive, so no products or personalised treatment are recommended. Please retake the photo or consult a registered dermatologist."
                     : `Average finding confidence was ${Math.round(findingConfidence)}%, below Anovra's 90% requirement for product matching. This result is inconclusive; its possible findings should not guide product or treatment choices. Please retake the photo or consult a registered dermatologist.`}</p>
+              {setView && <button type="button" onClick={() => setView("contact")} className={cn("mt-4 inline-flex items-center gap-2 text-left text-sm font-semibold underline underline-offset-4", noIssuesDetected ? "text-[#087443] hover:text-[#164b2d]" : "text-[#7a3512] hover:text-[#4f220c]")}>Need help finding a registered dermatologist? Contact us <ArrowRight className="h-4 w-4 shrink-0" /></button>}
+              </div>
             </div>}
             {!productsWithheld && <>
             <div className="flex items-start justify-between gap-4 mb-4">

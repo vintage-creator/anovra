@@ -95,13 +95,15 @@ serve(async (req) => {
     const callerEmail = caller.email?.toLowerCase();
     const { data: callerProfile } = await admin
       .from("profiles")
-      .select("id, name, business_name, account_type, slug")
+      .select("id, name, business_name, account_type, slug, plan, created_at")
       .eq("id", caller.id)
       .maybeSingle();
 
     const isBrand = callerRole === "brand" || callerProfile?.account_type === "brand";
     const isAdmin = callerRole === "admin" || callerEmail === "admin@anovra.africa" || callerEmail === "hello@anovra.africa";
     if (!isBrand && !isAdmin) throw new Error("Only Brand Admins or Platform Admins can manage brand branches.");
+    if (!isAdmin && callerProfile?.plan === "free" && Date.now() > new Date(callerProfile.created_at || 0).getTime() + 3 * 24 * 60 * 60 * 1000)
+      return json({ error: "Your 3-day Brand HQ trial has ended. Contact Anovra to activate branch management." }, 403);
 
     const body = await req.json().catch(() => ({}));
     const action = body.action || (req.method === "PATCH" ? "update" : "create");

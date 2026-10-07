@@ -563,7 +563,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
         "Shareable test link",
         "Basic analytics",
       ],
-      cta: "Start 7-day free trial",
+      cta: "Start 3-day free trial",
       highlight: false,
     },
     {
@@ -578,7 +578,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
         "Full analytics dashboard",
         "Priority support via WhatsApp",
       ],
-      cta: "Start 7-day free trial",
+      cta: "Start 3-day free trial",
       highlight: true,
     },
     {
@@ -592,7 +592,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
         "SLA support",
         "Dedicated onboarding",
       ],
-      cta: "Start 7-day free trial",
+      cta: "Start 3-day free trial",
       highlight: false,
     },
   ];
@@ -608,7 +608,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
       ],
     },
     customers: {
-      eyebrow: "For skincare customers",
+      eyebrow: "For individuals",
       title: "Find products that make sense for your skin",
       accent: "amber",
       steps: [
@@ -791,7 +791,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
             <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1 shadow-xs">
               {[
                 { id: "vendors" as const, label: "Vendors" },
-                { id: "customers" as const, label: "Customers" },
+                { id: "customers" as const, label: "Individuals" },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -926,7 +926,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
                 </h3>
               </div>
               <span className="text-xs font-bold text-emerald-700 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
-                7-day trial
+                3-day trial
               </span>
             </div>
             <div className="space-y-3">
@@ -967,13 +967,13 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
             Transparent pricing in naira.
           </h2>
           <p className="text-center text-sm text-muted-foreground mb-12" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Start with a 7-day free trial, then choose the plan that fits how you use Anovra.
+            Start with a 3-day free trial, then choose the plan that fits how you use Anovra.
           </p>
 
           <div className="max-w-md mx-auto mb-10 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-white p-1 shadow-xs">
             {[
               { id: "vendors" as const, label: "For vendors" },
-              { id: "customers" as const, label: "For customers" },
+              { id: "customers" as const, label: "For individuals" },
             ].map((item) => (
               <button
                 key={item.id}
@@ -1004,13 +1004,13 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
                   <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skincare Vendors</h3>
                   <p className="text-xs uppercase tracking-widest text-[#008236] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Vendor Plans</p>
                   <p className="mt-2 max-w-xl text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Choose the plan that matches how many customers you serve, how large your catalogue is, and how much control you want over your storefront and analytics.
+                    Choose the plan that matches how many clients you serve, how large your catalogue is, and how much control you want over your storefront and analytics.
                   </p>
                 </div>
               </div>
               <div className="flex-1 h-px bg-border/60" />
               <span className="text-xs text-[#008236] bg-[#008236]/10 border border-[#008236]/30 px-3 py-1 rounded-full font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                7-day free trial on every plan
+                3-day free trial on every plan
               </span>
             </div>
             <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
@@ -1057,7 +1057,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
                         : "bg-[#008236]/10 text-[#008236] border-[#008236]/20"
                     )}
                   >
-                    7-day free trial
+                    3-day free trial
                   </span>
                   <ul className="space-y-2.5 flex-1 mb-6">
                     {t.features.map((f) => (
@@ -1096,8 +1096,8 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
                   <Leaf className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Skincare Customers</h3>
-                  <p className="text-xs uppercase tracking-widest text-[#C86B3A] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Consumer Plans</p>
+                  <h3 className="text-2xl font-light text-foreground mb-0.5" style={{ fontFamily: "'Fraunces', serif" }}>For Individuals</h3>
+                  <p className="text-xs uppercase tracking-widest text-[#C86B3A] font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>Individual Plans</p>
                   <p className="mt-2 max-w-xl text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     Choose the plan that matches how often you want to analyse your skin, track progress, compare products, and get guided skincare support.
                   </p>
@@ -1105,24 +1105,24 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
               </div>
               <div className="flex-1 h-px bg-border/60" />
               <span className="text-xs text-amber-800 bg-[#C86B3A]/10 border border-[#C86B3A]/30 px-2.5 py-1 rounded-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                7-day free trial on every plan
+                3-day free trial on every plan
               </span>
             </div>
             <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
               {[
                 {
-                  name: "Free plan",
-                  price: "₦0",
+                  name: "Glow Pass",
+                  price: "₦1,500",
                   sub: "per month",
                   highlight: false,
                   features: [
-                    "Limited skin analyses after trial",
+                    "Limited skin analyses",
                     "Top available product matches",
                     "Basic skin report",
                     "Ingredient safety checks",
                     "Shareable report summary",
                   ],
-                  cta: "Create free account",
+                  cta: "Start 3-day free trial",
                 },
                 {
                   name: "Glow Pass+",
@@ -1137,7 +1137,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
                     "Personalised ingredient glossary",
                     "Priority product matching",
                   ],
-                  cta: "Start 7-day free trial",
+                  cta: "Start 3-day free trial",
                 },
                 {
                   name: "Premium Glow",
@@ -1153,7 +1153,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
                     "Early access to new AI features",
                     "Personalised skincare routine builder",
                   ],
-                  cta: "Start 7-day free trial",
+                  cta: "Start 3-day free trial",
                 },
               ].map((t) => (
                 <div
@@ -1189,7 +1189,7 @@ export function LandingView({ setView, startSkinTest }: { setView: (v: View) => 
                   </p>
                   <p className="text-xs mb-3 text-white/70" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.sub}</p>
                   <span className="mb-6 inline-flex w-fit rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold text-white border border-white/20">
-                    {t.price === "₦0" ? "Free after trial" : "7-day trial included"}
+                    3-day trial included
                   </span>
                   <ul className="space-y-2.5 flex-1 mb-6">
                     {t.features.map((f) => (

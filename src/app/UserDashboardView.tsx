@@ -109,7 +109,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
 
-  const [userProfile, setUserProfile] = useState<{ id?: string; name: string; plan: "glow" | "glowplus" | "premium" } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ id?: string; name: string; plan: "none" | "starter" | "glowplus" | "premium" } | null>(null);
   const [analysesList, setAnalysesList] = useState<any[]>([]);
   const [expandedAnalysisId, setExpandedAnalysisId] = useState<string | null>(null);
   const [matchedProducts, setMatchedProducts] = useState<any[]>([]);
@@ -119,8 +119,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   const [selectedIngredient, setSelectedIngredient] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [trialExpired, setTrialExpired] = useState(false);
+  const [paidAccessExpired, setPaidAccessExpired] = useState(false);
   const [trialEndsAt, setTrialEndsAt] = useState<Date | null>(null);
-  const [trialMsRemaining, setTrialMsRemaining] = useState(7 * 24 * 60 * 60 * 1000);
+  const [trialMsRemaining, setTrialMsRemaining] = useState(3 * 24 * 60 * 60 * 1000);
   const [showTrialExpiredNotice, setShowTrialExpiredNotice] = useState(true);
   const [savingTrialNotice, setSavingTrialNotice] = useState(false);
 
@@ -169,17 +170,20 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         // Fetch profile
         const { data: profile } = await supabase
           .from("profiles")
-          .select("name, email, phone, location, plan, created_at")
+          .select("name, email, phone, location, plan, created_at, customer_plan_expires_at")
           .eq("id", user.id)
           .maybeSingle();
 
-        // Enforce 7-day trial check
+        // Trial access is tied to account creation, not a browser countdown.
         const createdDate = profile?.created_at ? new Date(profile.created_at) : (user.created_at ? new Date(user.created_at) : new Date());
-        const endsAt = new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const endsAt = new Date(createdDate.getTime() + 3 * 24 * 60 * 60 * 1000);
         setTrialEndsAt(endsAt);
         setTrialMsRemaining(Math.max(0, endsAt.getTime() - Date.now()));
         const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
         const rawPlan = profile?.plan || "free";
+        const paidPlanExpired = rawPlan !== "free" && Boolean(profile?.customer_plan_expires_at)
+          && Date.now() > new Date(profile!.customer_plan_expires_at).getTime();
+        setPaidAccessExpired(paidPlanExpired);
         const dismissedLocally = localStorage.getItem(`anovra_trial_notice_dismissed_${user.id}`) === "true";
         const hasDismissedTrialNotice = Boolean(user.user_metadata?.trial_notice_dismissed_at) || dismissedLocally;
         if (dismissedLocally && !user.user_metadata?.trial_notice_dismissed_at) {
@@ -188,18 +192,18 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           });
           if (noticeError) console.warn("Could not sync previous trial notice acknowledgement:", noticeError);
         }
-        if (rawPlan === "free" && daysDiff > 7) {
+        if ((rawPlan === "free" && daysDiff > 3) || paidPlanExpired) {
           setTrialExpired(true);
           if (hasDismissedTrialNotice) {
             setShowTrialExpiredNotice(false);
           }
         }
 
-        const pVal = profile?.plan === "premium" ? "premium" : (profile?.plan === "basic" ? "glowplus" : "glow");
+        const pVal = paidPlanExpired ? "none" : profile?.plan === "premium" ? "premium" : profile?.plan === "basic" ? "glowplus" : profile?.plan === "starter" ? "starter" : "none";
         const profileObj = {
           id: user.id,
-          name: profile?.name || "Customer",
-          plan: pVal as "glow" | "glowplus" | "premium"
+          name: profile?.name || "Individual",
+          plan: pVal as "none" | "starter" | "glowplus" | "premium"
         };
         setUserProfile(profileObj);
         setProfileForm({
@@ -276,7 +280,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               const product = productById.get(match.id);
               const seller = product ? sellerById.get(product.vendor_id) : null;
               const owner = seller?.parent_brand_id ? parentById.get(seller.parent_brand_id) : seller;
-              const trialEnd = new Date(owner?.created_at || 0).getTime() + 7 * 24 * 60 * 60 * 1000;
+              const trialEnd = new Date(owner?.created_at || 0).getTime() + 3 * 24 * 60 * 60 * 1000;
               if (!seller?.is_verified || seller.verification_status !== "approved"
                 || (seller.account_type === "branch" && seller.branch_status !== "active")
                 || !owner?.is_verified || owner.verification_status !== "approved"
@@ -386,6 +390,11 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   }
 
   function openCustomerSkinTest() {
+    if (trialExpired && userProfile?.plan === "none") {
+      setTab("settings");
+      toast.info("Your trial has ended. Choose a plan to start another analysis.");
+      return;
+    }
     sessionStorage.removeItem("active_scan_slug");
     setView("skintest");
   }
@@ -513,7 +522,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     }
   };
 
-  const payWithPaystack = async (planKey: "basic" | "premium") => {
+  const payWithPaystack = async (planKey: "starter" | "basic" | "premium") => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) {
@@ -552,7 +561,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       const handler = (window as any).PaystackPop.setup({
         key: paystackPublicKey,
         email: user.email,
-        amount: (planKey === "basic" ? 3500 : 7000) * 100,
+        amount: (planKey === "starter" ? 1500 : planKey === "basic" ? 3500 : 7000) * 100,
         currency: "NGN",
         callback: async (response: { reference?: string; trxref?: string }) => {
           paymentCompleted = true;
@@ -569,10 +578,12 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             return;
           }
           setUserProfile((current) => current ? {
-            ...current, plan: planKey === "premium" ? "premium" : "glowplus",
+            ...current, plan: planKey === "premium" ? "premium" : planKey === "basic" ? "glowplus" : "starter",
           } : current);
           setTrialExpired(false);
-          toast.success(`${planKey === "premium" ? "Premium Glow" : "Glow Pass+"} is active.`);
+          setPaidAccessExpired(false);
+          setShowTrialExpiredNotice(false);
+          toast.success(`${planKey === "premium" ? "Premium Glow" : planKey === "basic" ? "Glow Pass+" : "Glow Pass"} is active.`);
         },
         onClose: () => {
           if (!paymentCompleted) toast.info("Checkout closed.");
@@ -608,7 +619,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
         .join("\n\n");
       const latest = analysesList[0] || null;
       const dashboardContext = {
-        customerName: userProfile?.name || "Customer",
+        customerName: userProfile?.name || "Individual",
         latestAnalysis: latest ? {
           area: latest.area,
           skinType: latest.skinType,
@@ -653,9 +664,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
   };
 
   const latestAnalysis = analysesList[0] || null;
-  const plan = userProfile?.plan || "glow";
-  const trialAccessActive = plan === "glow" && !trialExpired;
-  const accessPlan = trialAccessActive ? "premium" : plan;
+  const plan = userProfile?.plan || "none";
+  const trialAccessActive = plan === "none" && !trialExpired;
+  const accessPlan = trialAccessActive ? "premium" : plan === "none" || plan === "starter" ? "glow" : plan;
   const trialDays = Math.floor(trialMsRemaining / (1000 * 60 * 60 * 24));
   const trialHours = Math.floor((trialMsRemaining / (1000 * 60 * 60)) % 24);
   const trialMinutes = Math.floor((trialMsRemaining / (1000 * 60)) % 60);
@@ -685,7 +696,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "U";
-  const planLabel = trialAccessActive ? "Free trial" : (userProfile?.plan === "premium" ? "Premium Glow" : (userProfile?.plan === "glowplus" ? "Glow Pass+" : "Free plan"));
+  const planLabel = trialAccessActive ? "3-day trial" : plan === "premium" ? "Premium Glow" : plan === "glowplus" ? "Glow Pass+" : plan === "starter" ? "Glow Pass" : "No active plan";
 
   if (loading) {
     return (
@@ -747,7 +758,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 relative">
-        {trialExpired && showTrialExpiredNotice && (
+        {trialExpired && plan === "none" && showTrialExpiredNotice && (
           <div
             className="fixed inset-0 z-[80] bg-[#142019]/60 backdrop-blur-md p-3 sm:p-6 flex items-center justify-center overflow-y-auto overscroll-contain animate-in fade-in duration-300"
             role="dialog"
@@ -767,21 +778,21 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
               </button>
 
               <div className="overflow-y-auto overscroll-contain grid lg:grid-cols-[0.92fr_1.08fr]">
-                {/* Left Column: Trial Ended & Free Glow Pass Info */}
+                {/* Trial status and entry plan */}
                 <div className="bg-gradient-to-b from-[#FBF9F5] via-[#F6F3EC] to-[#EFEBE1] border-b lg:border-b-0 lg:border-r border-border/70 p-6 sm:p-8 flex flex-col justify-between">
                   <div>
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-800 text-[10px] font-bold uppercase tracking-widest mb-4 font-mono">
                       <Calendar className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
-                      Free trial completed
+                      {paidAccessExpired ? "Paid access ended" : "Free trial completed"}
                     </div>
                     <h2 id="trial-ended-title" className="text-2xl sm:text-3xl font-light text-foreground leading-[1.2]" style={{ fontFamily: "'Fraunces', serif" }}>
-                      Your dashboard is now on the <span className="font-normal italic text-[#008236]">Free plan</span>
+                      {paidAccessExpired ? "Your paid access has ended" : "Your 3-day trial has ended"}
                     </h2>
                     <p className="text-sm text-muted-foreground mt-3 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      Your skin records, analysis history, and profile remain securely saved. You can continue using your essential portal tools at no cost, or unlock unlimited analyses whenever you are ready.
+                      Your reports and profile are still saved. Choose a plan to start new analyses and keep using your skin tools.
                     </p>
 
-                    {/* Free Plan Card */}
+                    {/* Entry plan */}
                     <div className="mt-6 rounded-2xl border border-[#008236]/25 bg-white/80 backdrop-blur-sm p-5 shadow-sm">
                       <div className="flex items-center justify-between gap-3 mb-2">
                         <div className="flex items-center gap-2">
@@ -789,12 +800,12 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                             <ShieldCheck className="w-4 h-4" />
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-foreground">Free plan</p>
-                            <p className="text-[10px] text-muted-foreground font-mono">Current plan</p>
+                            <p className="text-sm font-bold text-foreground">Glow Pass</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">Entry plan</p>
                           </div>
                         </div>
                         <span className="text-xs font-bold text-[#008236] bg-[#008236]/10 px-2.5 py-1 rounded-full font-mono">
-                          Free
+                          ₦1,500/mo
                         </span>
                       </div>
                       <ul className="mt-3.5 space-y-2 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -814,19 +825,18 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
 
                       <button
                         type="button"
-                        onClick={dismissTrialExpiredNotice}
-                        disabled={savingTrialNotice}
-                        className="mt-5 w-full py-2.5 px-4 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                        onClick={() => payWithPaystack("starter")}
+                        className="mt-5 w-full py-2.5 px-4 bg-[#008236] hover:bg-[#006c2c] text-white rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       >
-                        <span>{savingTrialNotice ? "Saving…" : "Continue on Free Plan"}</span>
-                        <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span>Subscribe to Glow Pass</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
                   <p className="text-[11px] text-muted-foreground/75 mt-6 font-mono">
-                    You can manage or upgrade your plan anytime under <span className="font-semibold text-foreground">Billing & Plans</span>.
+                    Not ready to subscribe? Close this window to review your saved records. New analyses require an active plan.
                   </p>
                 </div>
 
@@ -936,7 +946,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
 
                   <p className="text-[11px] text-muted-foreground mt-4 text-center" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Secured by Paystack. Cancel or upgrade anytime with one click.
+                    Payments are processed by Paystack. Contact support for subscription changes.
                   </p>
                 </div>
               </div>
@@ -962,7 +972,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   {userInitials}
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-foreground truncate">{userProfile?.name || "Customer"}</span>
+                  <span className="block text-sm font-semibold text-foreground truncate">{userProfile?.name || "Individual"}</span>
                   <span className="block text-[11px] text-muted-foreground mt-0.5">{planLabel}</span>
                 </span>
               </button>
@@ -1859,7 +1869,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
               <div>
                 <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Profile details</h3>
-                <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Update the customer identity used across your skin portal.</p>
+                <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Update your individual profile details used across your skin portal.</p>
               </div>
               <span className="inline-flex items-center gap-1.5 text-xs bg-accent/10 text-accent border border-accent/20 px-2.5 py-1 rounded-full font-semibold self-start" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 <User className="w-3.5 h-3.5" />
@@ -1933,7 +1943,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           <div className="order-6 bg-card border border-border rounded-2xl p-5 sm:p-6">
             <div className="mb-5">
               <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Security</h3>
-              <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Change your password for this customer account.</p>
+              <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Change your password for this individual account.</p>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <label className="block">
@@ -1976,9 +1986,9 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   <span className="inline-flex text-[10px] uppercase tracking-wider font-bold text-[#008236] bg-[#008236]/10 border border-[#008236]/20 px-2.5 py-1 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>
                     Current plan
                   </span>
-                  <h3 className="text-2xl font-light text-foreground mt-3" style={{ fontFamily: "'Fraunces', serif" }}>7-day free trial</h3>
+                  <h3 className="text-2xl font-light text-foreground mt-3" style={{ fontFamily: "'Fraunces', serif" }}>3-day free trial</h3>
                   <p className="text-sm text-muted-foreground mt-1 max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Full customer dashboard access is active during your trial. When it ends, advanced tools require a paid plan.
+                    Full individual dashboard access is active during your trial. When it ends, advanced tools require a paid plan.
                   </p>
                 </div>
                 <div className="grid grid-cols-3 gap-3 min-w-[260px]">
@@ -1997,26 +2007,26 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             </div>
           )}
 
-          {trialExpired && plan === "glow" && (
+          {trialExpired && plan === "none" && (
             <div className="order-1 flex items-start gap-3 rounded-lg border border-[#DCE8DE] bg-[#F4F9F5] p-4 text-sm text-[#31563B]">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>Your 7-day trial has ended. The Free plan is active, and your saved analyses remain available. You can restore premium tools below.</p>
+              <p>{paidAccessExpired ? "Your paid access has ended." : "Your 3-day trial has ended."} Your saved analyses remain available. Renew a plan below to start new analyses.</p>
             </div>
           )}
 
           <div className="order-2 grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
-                id: "glow" as const,
-                name: "Free plan",
-                price: "₦0",
+                id: "starter" as const,
+                name: "Glow Pass",
+                price: "₦1,500",
                 period: "month",
-                desc: "Basic access after the free trial ends.",
+                desc: "Essential skin reports and limited analysis access.",
                 features: ["Limited skin analyses", "Top available product matches", "Basic skin report", "Ingredient safety checks", "Shareable report summary"],
-                cta: trialAccessActive ? "Available after trial" : (plan === "glow" ? "Current plan" : "Downgrade to free plan"),
-                planKey: null,
-                active: plan === "glow" && !trialAccessActive,
-                disabled: trialAccessActive,
+                cta: plan === "starter" ? "Current plan" : "Subscribe to Glow Pass",
+                planKey: "starter" as const,
+                active: plan === "starter",
+                disabled: false,
               },
               {
                 id: "glowplus" as const,
@@ -2025,7 +2035,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                 period: "month",
                 desc: "Unlimited analyses, full product matches and complete skin history.",
                 features: ["Unlimited skin analyses", "Full product recommendation list", "Detailed skin health report", "Save and track skin history", "Personalised ingredient glossary", "Priority product matching"],
-                cta: trialAccessActive ? "Keep access after trial" : (plan === "glow" ? "Upgrade to Glow Pass+" : (plan === "glowplus" ? "Current plan" : "Downgrade to Glow Pass+")),
+                cta: trialAccessActive ? "Keep access after trial" : (plan === "glowplus" ? "Current plan" : "Upgrade to Glow Pass+"),
                 planKey: "basic" as const,
                 active: plan === "glowplus"
               },

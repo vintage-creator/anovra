@@ -12,8 +12,7 @@ const adminEmail = "admin@anovra.africa";
 
 const subjects: Record<string, string> = {
   vendor_signup_trial_started: "Your Anovra trial has started",
-  trial_day_7: "Your Anovra trial: 7 days in",
-  trial_day_12: "Your Anovra trial ends soon",
+  trial_day_2: "Your Anovra trial ends soon",
   trial_expired: "Your Anovra trial has ended",
   payment_success_receipt: "Anovra payment receipt",
   payment_failed_retry: "Payment could not be completed",
@@ -70,8 +69,8 @@ function bodyFor(template: string, payload: any) {
     return emailShell({
       eyebrow: "Trial started",
       title: subjects[template],
-      preview: "Your 7-day Anovra trial is active.",
-      body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0 0 14px;">Your 7-day Anovra trial for <strong>${brand}</strong> has started. During trial, you can test your storefront, scan link, catalogue, API preview, webhooks, and analytics workflows.</p>${button("Open your workspace", appLink("/#/vendorlogin"))}`,
+      preview: "Your 3-day Anovra trial is active.",
+      body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0 0 14px;">Your 3-day Anovra trial for <strong>${brand}</strong> has started. During trial, you can test your storefront, scan link, catalogue, API preview, webhooks, and analytics workflows.</p>${button("Open your workspace", appLink("/#/signin"))}`,
     });
   }
   if (template === "product_submitted") {

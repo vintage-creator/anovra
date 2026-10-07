@@ -24,6 +24,7 @@ import { SignUpView, CustomerSignUpView, SignInView, AccountChoiceView, EmailVer
 import { TeamLoginView, TeamDashboardView } from "./TeamViews";
 import { initialAuthRedirect, supabase } from "./utils/supabase";
 import { AboutView, ContactView, FAQView } from "./ContentViews";
+import { TermsView, PrivacyView } from "./LegalViews";
 import { AdminView } from "./AdminView";
 import { UserDashboardView } from "./UserDashboardView";
 import { BrandDashboardView } from "./BrandDashboardView";
@@ -309,11 +310,29 @@ export default function App() {
       "landing", "dashboard", "catalog", "skintest", "admin",
       "adminlogin", "shop", "brand", "signin", "vendorlogin", "brandlogin", "customerlogin", "accountchoice", "signup", "brandsignup", "customersignup", "verifyemail", "forgotpassword",
       "resetpassword", "teamlogin", "teamdashboard", "branddashboard", "about", "contact", "faq",
-      "userdashboard"
+      "userdashboard", "terms", "privacy"
     ];
     
     if (validViews.includes(hash as View)) {
       return hash as View;
+    }
+
+    const termsSections = [
+      "acceptance", "medical-disclaimer", "eligibility", "facial-data",
+      "vendor-rules", "marketplace-orders", "subscriptions",
+      "intellectual-property", "prohibited-conduct", "liability",
+      "governing-law", "legal-inquiries"
+    ];
+    const privacySections = [
+      "overview", "data-we-collect", "facial-images", "how-we-use-data",
+      "data-security", "data-retention", "third-party-sharing",
+      "user-rights", "cookies", "contact-dpo"
+    ];
+    if (hash === "terms" || hash.startsWith("terms") || termsSections.includes(hash)) {
+      return "terms";
+    }
+    if (hash === "privacy" || hash.startsWith("privacy") || privacySections.includes(hash)) {
+      return "privacy";
     }
     
     // If on a custom domain, default to storefront shop view instead of main Anovra landing page
@@ -425,9 +444,9 @@ export default function App() {
       const fragment = new URLSearchParams(callbackUrl.hash.slice(callbackUrl.hash.lastIndexOf("#") + 1));
       const isSignup = initialAuthRedirect.signup || callbackUrl.searchParams.get("type") === "signup" || fragment.get("type") === "signup";
       const requestedAt = Number(sessionStorage.getItem("password_recovery_requested_at"));
-      const isRecovery = initialAuthRedirect.recovery || fragment.get("type") === "recovery"
+      const isRecovery = !isSignup && (initialAuthRedirect.recovery || fragment.get("type") === "recovery"
         || callbackUrl.hash.startsWith("#resetpassword#")
-        || (callbackUrl.pathname === "/auth/callback" && requestedAt > 0 && Date.now() - requestedAt < 60 * 60 * 1000);
+        || (callbackUrl.pathname === "/auth/callback" && requestedAt > 0 && Date.now() - requestedAt < 60 * 60 * 1000));
       const routeAfterAuth = (target: View) => {
         if (protectedViews.includes(target)) setIsValidatingRoute(true);
         setViewState(target);
@@ -437,7 +456,7 @@ export default function App() {
       if (isSignup || isRecovery || code || tokenHash || ["/auth/callback", "/auth/confirm"].includes(callbackUrl.pathname)) {
         if (callbackUrl.searchParams.get("error") || fragment.get("error")) {
           toast.error(isRecovery ? "This reset link has expired. Request a new one." : "This verification link has expired. Request a new one.");
-          routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
+          routeAfterAuth(isRecovery ? "forgotpassword" : "signin");
           return;
         }
         if (tokenHash) {
@@ -450,7 +469,7 @@ export default function App() {
           const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
           if (error) {
             toast.error(isRecovery ? "This reset link has expired. Request a new one." : "This confirmation link has expired. Request a new one.");
-            routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
+            routeAfterAuth(isRecovery ? "forgotpassword" : "signin");
             return;
           }
         } else if (code) {
@@ -459,7 +478,7 @@ export default function App() {
             const { data: { session } } = await supabase.auth.getSession();
             if (isRecovery || !session) {
               toast.error(isRecovery ? "This reset link has expired. Request a new one." : "This verification link has expired or has already been used. Please sign in or request a new link.");
-              routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
+              routeAfterAuth(isRecovery ? "forgotpassword" : "signin");
               return;
             }
           }
@@ -473,12 +492,19 @@ export default function App() {
               })).error;
           if (sessionError) {
             toast.error(isRecovery ? "This reset link could not be verified. Request a new one." : "This verification link could not be completed. Please sign in or request a new link.");
-            routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
+            routeAfterAuth(isRecovery ? "forgotpassword" : "signin");
             return;
           }
         }
-        if (!code) await new Promise((resolve) => setTimeout(resolve, 600));
-        const { data: { user } } = await supabase.auth.getUser();
+        let user = null;
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const { data } = await supabase.auth.getUser();
+          if (data.user?.email_confirmed_at) {
+            user = data.user;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
         if (user) {
           if (isRecovery) {
             sessionStorage.removeItem("password_recovery_requested_at");
@@ -486,6 +512,8 @@ export default function App() {
             routeAfterAuth("resetpassword");
             return;
           }
+          sessionStorage.removeItem("pending_verification_email");
+          sessionStorage.removeItem("pending_verification_kind");
           sessionStorage.setItem("show_welcome", "true");
 
           let teamMemberRole: string | null = null;
@@ -530,21 +558,23 @@ export default function App() {
           }
         } else {
           toast.error(isRecovery ? "We could not verify this reset link. Request a new one." : "We could not verify this link. Please request a new confirmation email or sign in if you have already verified.");
-          routeAfterAuth(isRecovery ? "forgotpassword" : "verifyemail");
+          routeAfterAuth(isRecovery ? "forgotpassword" : "signin");
         }
       }
     };
     const handleAuthCallbackFailure = () => {
       toast.error("We could not complete this email link. Please request a new link.");
-      window.history.replaceState(null, "", `${window.location.origin}/#/forgotpassword`);
-      setViewState("forgotpassword");
+      const target = initialAuthRedirect.recovery ? "forgotpassword" : "signin";
+      window.history.replaceState(null, "", `${window.location.origin}/#/${target}`);
+      setViewState(target);
       setIsProcessingAuthCallback(false);
     };
     if (initialAuthRedirect.callback) {
       const callbackTimeout = window.setTimeout(() => {
         toast.error("This email link is taking too long. Please request a new one.");
-        window.history.replaceState(null, "", `${window.location.origin}/#/forgotpassword`);
-        setViewState("forgotpassword");
+        const target = initialAuthRedirect.recovery ? "forgotpassword" : "signin";
+        window.history.replaceState(null, "", `${window.location.origin}/#/${target}`);
+        setViewState(target);
         setIsProcessingAuthCallback(false);
       }, 15000);
       void handleEmailConfirmation().catch(handleAuthCallbackFailure).finally(() => window.clearTimeout(callbackTimeout));
@@ -900,6 +930,8 @@ export default function App() {
         {view === "teamdashboard" && <TeamDashboardView setView={setView} />}
         {view === "branddashboard" && <BrandDashboardView setView={setView} />}
         {view === "userdashboard" && <UserDashboardView setView={setView} />}
+        {view === "terms" && <TermsView setView={setView} />}
+        {view === "privacy" && <PrivacyView setView={setView} />}
       </div>
       {scanAccount && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4" role="presentation" onClick={() => setScanAccount(null)}>

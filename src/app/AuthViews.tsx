@@ -7,7 +7,6 @@ import { sendEmailNotification } from "./utils/notifications";
 import { consumeCustomerScan } from "./utils/customerScanReturn";
 
 const ANOVRA_AUTH_REDIRECT_ORIGIN = "https://anovra-api.vercel.app";
-const TRIAL_DAYS = 7;
 
 export const NIGERIA_LOCATIONS = [
   "Abuja, Nigeria",
@@ -93,11 +92,15 @@ function PasswordStrength({ password }: { password: string }) {
   );
 }
 
-function CACVerifier({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function CACVerifier({ value, onChange, hasError }: { value: string; onChange: (v: string) => void; hasError?: boolean }) {
   return (
     <div>
       <input
-        className="w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+        className={`w-full px-3.5 py-2.5 bg-input-background border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none transition-all ${
+          hasError
+            ? "border-red-500 ring-1 ring-red-500/30"
+            : "border-border focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30"
+        }`}
         placeholder="e.g. RC-123456 or BN-112233"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -110,13 +113,18 @@ function CACVerifier({ value, onChange }: { value: string; onChange: (v: string)
 
 function isSocialUrl(url: string): boolean {
   if (!url) return true;
-  let testUrl = url.trim();
-  if (!/^https?:\/\//i.test(testUrl)) {
-    testUrl = "https://" + testUrl;
+  const testUrl = url.trim();
+  // Allow social handles like @handle or handle with letters, numbers, underscores, dots
+  if (/^@?[a-zA-Z0-9_.-]{2,60}$/.test(testUrl)) {
+    return true;
+  }
+  let fullUrl = testUrl;
+  if (!/^https?:\/\//i.test(fullUrl)) {
+    fullUrl = "https://" + fullUrl;
   }
   try {
-    const u = new URL(testUrl);
-    return u.hostname.length > 3 && u.hostname.includes(".");
+    const u = new URL(fullUrl);
+    return u.hostname.length > 3;
   } catch {
     return false;
   }
@@ -160,8 +168,18 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: keyof typeof form, v: string) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    if (errors[k]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[k];
+        return next;
+      });
+    }
+  };
 
   const addSocialAccount = () => {
     setSocialAccounts((prev) => [...prev, { platform: "Instagram", url: "" }]);
@@ -171,6 +189,13 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
     setSocialAccounts((prev) =>
       prev.map((acc, i) => (i === index ? { ...acc, [key]: val } : acc))
     );
+    if (errors.social) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.social;
+        return next;
+      });
+    }
   };
 
   const removeSocialAccount = (index: number) => {
@@ -191,23 +216,93 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
     (acc) => !acc.url || isSocialUrl(acc.url)
   );
 
-  // Vendor Step Validations
-  const step1Valid = form.fullName.trim().length >= 3 && form.email.includes("@") && form.whatsapp.length === 10;
-  const isCacValid = form.cac.trim().length >= 5 && form.cac.trim().length <= 14;
-  const brandIdentityValid = accountKind !== "brand" || (
-    NIGERIA_LOCATIONS.includes(form.headquarters.trim()) &&
-    form.brandTagline.trim().length >= 10
-  );
-  const step2Valid = isCacValid && form.businessName.trim().length >= 3 && form.cacDoc && socialAccounts[0].url.trim().length >= 3 && validSocialUrls && brandIdentityValid;
-  const step3Valid = passwordScore >= 4 && passwordsMatch;
-  const canSubmitVendor = step1Valid && step2Valid && step3Valid;
+  const validateStep1 = () => {
+    const errs: Record<string, string> = {};
+    if (!form.fullName.trim() || form.fullName.trim().length < 3) {
+      errs.fullName = "Please enter your full legal name (minimum 3 characters).";
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!form.email.trim() || !emailRegex.test(form.email.trim())) {
+      errs.email = "Please enter a valid email address.";
+    }
+    const cleanedWhatsapp = form.whatsapp.replace(/\D/g, "");
+    if (cleanedWhatsapp.length !== 10) {
+      errs.whatsapp = "Enter a valid 10-digit WhatsApp number (e.g. 8012345678).";
+    }
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      toast.error(Object.values(errs)[0]);
+      return false;
+    }
+    return true;
+  };
 
-  // Customer Validations
-  const isCustomerValid = 
-    form.fullName.trim().length > 2 &&
-    form.email.includes("@") &&
-    passwordScore >= 3 &&
-    passwordsMatch;
+  const validateStep2 = () => {
+    const errs: Record<string, string> = {};
+    const cacTrimmed = form.cac.trim();
+    if (!cacTrimmed || cacTrimmed.length < 5 || cacTrimmed.length > 14) {
+      errs.cac = "CAC registration number must be between 5 and 14 characters.";
+    }
+    if (!form.businessName.trim() || form.businessName.trim().length < 3) {
+      errs.businessName = accountKind === "brand" ? "Brand name must be at least 3 characters." : "Business name must be at least 3 characters.";
+    }
+    if (accountKind === "brand") {
+      if (!form.headquarters.trim() || form.headquarters.trim().length < 3) {
+        errs.headquarters = "Please enter your brand headquarters (minimum 3 characters).";
+      }
+      if (!form.brandTagline.trim() || form.brandTagline.trim().length < 5) {
+        errs.brandTagline = "Please enter a brief brand description (minimum 5 characters).";
+      }
+    }
+    if (!form.cacDoc) {
+      errs.cacDoc = "Please upload your CAC certificate document.";
+    }
+    const firstSocial = socialAccounts[0]?.url.trim() || "";
+    if (!firstSocial) {
+      errs.social = "Please enter at least one social media account handle or link.";
+    } else if (!isSocialUrl(firstSocial)) {
+      errs.social = "Please enter a valid social handle (e.g. @username) or web address.";
+    } else {
+      const invalidExtra = socialAccounts.find((acc, idx) => idx > 0 && acc.url.trim() && !isSocialUrl(acc.url.trim()));
+      if (invalidExtra) {
+        errs.social = `Invalid address format for ${invalidExtra.platform}.`;
+      }
+    }
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      toast.error(Object.values(errs)[0]);
+      return false;
+    }
+    return true;
+  };
+
+  const validateStep3 = () => {
+    const errs: Record<string, string> = {};
+    if (!form.password || form.password.length < 8) {
+      errs.password = "Password must be at least 8 characters long.";
+    } else if (passwordScore < 3) {
+      errs.password = "Password is too weak. Include uppercase, lowercase, numbers, or symbols.";
+    }
+    if (!form.confirmPassword) {
+      errs.confirmPassword = "Please confirm your password.";
+    } else if (form.password !== form.confirmPassword) {
+      errs.confirmPassword = "Passwords do not match.";
+    }
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      toast.error(Object.values(errs)[0]);
+      return false;
+    }
+    return true;
+  };
+
+  const handleNextStep = () => {
+    if (currentStep === 1) {
+      if (validateStep1()) setCurrentStep(2);
+    } else if (currentStep === 2) {
+      if (validateStep2()) setCurrentStep(3);
+    }
+  };
 
   const inputCls =
     "w-full px-3.5 py-2.5 bg-input-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all";
@@ -215,8 +310,9 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
     "block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-wider";
 
   const handleFormSubmit = async () => {
-    if (selectedRole === "customer" && !isCustomerValid) return;
-    if ((selectedRole === "vendor" || selectedRole === "brand") && !canSubmitVendor) return;
+    if (currentStep === 1 && !validateStep1()) return;
+    if (currentStep === 2 && !validateStep2()) return;
+    if (!validateStep3()) return;
 
     setLoading(true);
     try {
@@ -322,9 +418,15 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
         }
       }
 
-      sessionStorage.setItem("pending_verification_email", form.email);
-      toast.success("Account created. Check your email to verify it.");
-      setView("verifyemail");
+      if (data.session && data.user.email_confirmed_at) {
+        toast.success("Account created. Your email is verified.");
+        setView(selectedRole === "brand" ? "branddashboard" : "dashboard");
+      } else {
+        sessionStorage.setItem("pending_verification_email", form.email);
+        sessionStorage.setItem("pending_verification_kind", selectedRole);
+        toast.success("Account created. Check your email to verify it.");
+        setView("verifyemail");
+      }
     } catch (err: any) {
       toast.error(err.message || "Registration encountered an unexpected error.");
     } finally {
@@ -393,24 +495,36 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                     <div>
                       <label className={labelCls}>Full Name *</label>
                       <input
-                        className={inputCls}
+                        className={`${inputCls} ${errors.fullName ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                         placeholder="Your full legal name"
                         value={form.fullName}
                         onChange={(e) => set("fullName", e.target.value)}
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       />
+                      {errors.fullName && (
+                        <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {errors.fullName}
+                        </p>
+                      )}
                     </div>
 
                     <div>
                       <label className={labelCls}>Email Address *</label>
                       <input
-                        className={inputCls}
+                        className={`${inputCls} ${errors.email ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                         type="email"
                         placeholder="you@example.com"
                         value={form.email}
                         onChange={(e) => set("email", e.target.value)}
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       />
+                      {errors.email && (
+                        <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {errors.email}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -423,16 +537,23 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                           🇳🇬 +234
                         </div>
                         <input
-                          className={inputCls}
+                          className={`${inputCls} ${errors.whatsapp ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                           placeholder="8012345678"
                           value={form.whatsapp}
                           onChange={(e) => set("whatsapp", e.target.value.replace(/\D/g, "").slice(0, 10))}
                           style={{ fontFamily: "'DM Mono', monospace" }}
                         />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Used for customer inquiries and platform alerts.
-                      </p>
+                      {errors.whatsapp ? (
+                        <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {errors.whatsapp}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          Used for client inquiries and platform alerts.
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -441,24 +562,38 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                   <div className="space-y-5 animate-in fade-in duration-300">
                     <div>
                       <label className={labelCls}>CAC Registration Number *</label>
-                      <CACVerifier value={form.cac} onChange={(v) => set("cac", v)} />
-                      <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Must be between 5 and 14 characters.
-                      </p>
+                      <CACVerifier value={form.cac} onChange={(v) => set("cac", v)} hasError={!!errors.cac} />
+                      {errors.cac ? (
+                        <p className="text-xs text-red-500 font-medium mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {errors.cac}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          Must be between 5 and 14 characters.
+                        </p>
+                      )}
                     </div>
 
                     <div>
                       <label className={labelCls}>{accountKind === "brand" ? "Brand / Company Name *" : "Business / Company Name *"}</label>
                       <input
-                        className={inputCls}
+                        className={`${inputCls} ${errors.businessName ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                         placeholder={accountKind === "brand" ? "e.g. Tulip Skincare Group" : "e.g. Radiant Skin Co."}
                         value={form.businessName}
                         onChange={(e) => set("businessName", e.target.value)}
                         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                       />
-                      <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Minimum 3 characters.
-                      </p>
+                      {errors.businessName ? (
+                        <p className="text-xs text-red-500 font-medium mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {errors.businessName}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          Minimum 3 characters.
+                        </p>
+                      )}
                     </div>
 
                     {accountKind === "brand" && (
@@ -467,7 +602,7 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                           <label className={labelCls}>Brand Headquarters *</label>
                           <input
                             list="anovra-location-options"
-                            className={inputCls}
+                            className={`${inputCls} ${errors.headquarters ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                             placeholder="e.g. Lagos, Nigeria"
                             value={form.headquarters}
                             onChange={(e) => set("headquarters", e.target.value)}
@@ -477,22 +612,36 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                           <datalist id="anovra-location-options">
                             {NIGERIA_LOCATIONS.map((item) => <option key={item} value={item} />)}
                           </datalist>
-                          <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                            Enter the organisation&apos;s head office, not a branch name.
-                          </p>
+                          {errors.headquarters ? (
+                            <p className="text-xs text-red-500 font-medium mt-1 flex items-center gap-1">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              {errors.headquarters}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              Enter the organisation&apos;s head office, not a branch name.
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className={labelCls}>Brand Description *</label>
                           <input
-                            className={inputCls}
+                            className={`${inputCls} ${errors.brandTagline ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                             placeholder="What your organisation is known for"
                             value={form.brandTagline}
                             onChange={(e) => set("brandTagline", e.target.value.slice(0, 140))}
                             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                           />
-                          <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                            Shown on the public Brand HQ profile. {form.brandTagline.length}/140
-                          </p>
+                          {errors.brandTagline ? (
+                            <p className="text-xs text-red-500 font-medium mt-1 flex items-center gap-1">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              {errors.brandTagline}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              Shown on the public Brand HQ profile. {form.brandTagline.length}/140
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
@@ -502,12 +651,14 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                       <label className="block cursor-pointer">
                         <div
                           className={`flex items-center gap-3 px-3.5 py-3 border-2 border-dashed rounded-xl transition-all ${
-                            form.cacDoc
+                            errors.cacDoc
+                              ? "border-red-500 bg-red-500/5"
+                              : form.cacDoc
                               ? "border-[#008236] bg-[#008236]/5"
                               : "border-border hover:border-[#008236]/40 hover:bg-[#FAF7F2]/50"
                           }`}
                         >
-                          <Upload className="w-4 h-4 text-[#008236] flex-shrink-0" />
+                          <Upload className={`w-4 h-4 flex-shrink-0 ${errors.cacDoc ? "text-red-500" : "text-[#008236]"}`} />
                           <span className="text-sm text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                             {form.cacDoc ? (
                               <span className="text-[#008236] font-medium flex items-center gap-1">
@@ -535,9 +686,16 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                           }}
                         />
                       </label>
-                      <p className="text-[10px] text-muted-foreground mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Supported formats: PDF, PNG, JPG, JPEG · Max file size: 5MB
-                      </p>
+                      {errors.cacDoc ? (
+                        <p className="text-xs text-red-500 font-medium mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {errors.cacDoc}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground mt-1.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          Supported formats: PDF, PNG, JPG, JPEG · Max file size: 5MB
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -561,8 +719,8 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                             <div className="relative flex-1">
                               <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                               <input
-                                className={`${inputCls} pl-8`}
-                                placeholder="Link to profile"
+                                className={`${inputCls} pl-8 ${errors.social ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
+                                placeholder="Link or @handle"
                                 value={acc.url}
                                 onChange={(e) => updateSocialAccount(index, "url", e.target.value)}
                               />
@@ -580,6 +738,13 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                           </div>
                         ))}
                       </div>
+
+                      {errors.social && (
+                        <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {errors.social}
+                        </p>
+                      )}
 
                       <button
                         type="button"
@@ -613,7 +778,7 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                       <label className={labelCls}>Create Password *</label>
                       <div className="relative">
                         <input
-                          className={inputCls}
+                          className={`${inputCls} ${errors.password ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                           type={showPass ? "text" : "password"}
                           placeholder="Create strong password"
                           value={form.password}
@@ -627,6 +792,12 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                           <Eye className="w-4 h-4" />
                         </button>
                       </div>
+                      {errors.password && (
+                        <p className="text-xs text-red-500 font-medium mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {errors.password}
+                        </p>
+                      )}
                       <PasswordStrength password={form.password} />
                     </div>
 
@@ -634,7 +805,7 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                       <label className={labelCls}>Confirm Password *</label>
                       <div className="relative">
                         <input
-                          className={`${inputCls} ${form.confirmPassword && !passwordsMatch ? "border-red-400" : ""}`}
+                          className={`${inputCls} ${errors.confirmPassword || (form.confirmPassword && !passwordsMatch) ? "border-red-400" : ""}`}
                           type={showConfirm ? "text" : "password"}
                           placeholder="Confirm password"
                           value={form.confirmPassword}
@@ -648,8 +819,11 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                           <Eye className="w-4 h-4" />
                         </button>
                       </div>
-                      {form.confirmPassword && !passwordsMatch && (
-                        <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
+                      {(errors.confirmPassword || (form.confirmPassword && !passwordsMatch)) && (
+                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {errors.confirmPassword || "Passwords do not match."}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -672,13 +846,8 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                   {currentStep < 3 ? (
                     <button
                       type="button"
-                      onClick={() => setCurrentStep((c) => c + 1)}
-                      disabled={currentStep === 1 ? !step1Valid : !step2Valid}
-                      className={`w-full sm:flex-1 py-3 px-5 rounded-xl font-bold text-sm sm:text-base transition-all cursor-pointer text-center flex items-center justify-center gap-2 min-h-[48px] active:scale-[0.98] ${
-                        (currentStep === 1 ? step1Valid : step2Valid)
-                          ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-sm hover:shadow"
-                          : "bg-muted text-muted-foreground cursor-not-allowed"
-                      }`}
+                      onClick={handleNextStep}
+                      className="w-full sm:flex-1 py-3 px-5 rounded-xl font-bold text-sm sm:text-base transition-all cursor-pointer text-center flex items-center justify-center gap-2 min-h-[48px] active:scale-[0.98] bg-[#008236] text-white hover:bg-[#006c2c] shadow-sm hover:shadow"
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
                       <span>Continue</span>
@@ -686,13 +855,10 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                     </button>
                   ) : (
                     <button
+                      type="button"
                       onClick={handleFormSubmit}
-                      disabled={!canSubmitVendor || loading}
-                      className={`w-full sm:flex-1 py-3 px-5 rounded-xl font-bold text-sm sm:text-base transition-all cursor-pointer text-center flex items-center justify-center gap-2 min-h-[48px] active:scale-[0.98] leading-tight ${
-                        canSubmitVendor && !loading
-                          ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg"
-                          : "bg-muted text-muted-foreground cursor-not-allowed"
-                      }`}
+                      disabled={loading}
+                      className="w-full sm:flex-1 py-3 px-5 rounded-xl font-bold text-sm sm:text-base transition-all cursor-pointer text-center flex items-center justify-center gap-2 min-h-[48px] active:scale-[0.98] leading-tight bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                     >
                       {loading ? (
@@ -714,9 +880,9 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                 href="#/terms"
                 onClick={(e) => {
                   e.preventDefault();
-                  toast.info("Terms of Service: All accounts undergo CAC verification. Credentials must be kept secure, and product catalogues must meet platform purity rules.");
+                  setView("terms");
                 }}
-                className="underline text-foreground hover:text-[#008236] transition-colors"
+                className="underline text-foreground hover:text-[#008236] transition-colors cursor-pointer"
               >
                 terms
               </a>{" "}
@@ -725,9 +891,9 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                 href="#/privacy"
                 onClick={(e) => {
                   e.preventDefault();
-                  toast.info("Privacy Policy: Skin scan data is encrypted and private-by-default. Photos are strictly used to run diagnostics and are never displayed publicly.");
+                  setView("privacy");
                 }}
-                className="underline text-foreground hover:text-[#008236] transition-colors"
+                className="underline text-foreground hover:text-[#008236] transition-colors cursor-pointer"
               >
                 privacy policies
               </a>
@@ -751,8 +917,18 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: keyof typeof form, v: string) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    if (errors[k]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[k];
+        return next;
+      });
+    }
+  };
 
   const passwordsMatch = form.password === form.confirmPassword;
   const passwordScore = [
@@ -763,14 +939,39 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
     /[^A-Za-z0-9]/.test(form.password),
   ].filter(Boolean).length;
 
-  const isCustomerValid = 
-    form.fullName.trim().length > 2 &&
-    form.email.includes("@") &&
-    passwordScore >= 3 &&
-    passwordsMatch;
+  const validateCustomerForm = () => {
+    const errs: Record<string, string> = {};
+    if (!form.fullName.trim() || form.fullName.trim().length < 3) {
+      errs.fullName = "Please enter your full name (minimum 3 characters).";
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!form.email.trim() || !emailRegex.test(form.email.trim())) {
+      errs.email = "Please enter a valid email address.";
+    }
+    const cleanedPhone = form.phone.replace(/\D/g, "");
+    if (!cleanedPhone || cleanedPhone.length < 10) {
+      errs.phone = "Please enter a valid phone number (at least 10 digits).";
+    }
+    if (!form.password || form.password.length < 8) {
+      errs.password = "Password must be at least 8 characters long.";
+    } else if (passwordScore < 3) {
+      errs.password = "Password is too weak. Include uppercase, lowercase, numbers, or symbols.";
+    }
+    if (!form.confirmPassword) {
+      errs.confirmPassword = "Please confirm your password.";
+    } else if (form.password !== form.confirmPassword) {
+      errs.confirmPassword = "Passwords do not match.";
+    }
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      toast.error(Object.values(errs)[0]);
+      return false;
+    }
+    return true;
+  };
 
   const handleFormSubmit = async () => {
-    if (!isCustomerValid) return;
+    if (!validateCustomerForm()) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -790,9 +991,15 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
       if (data.user?.identities?.length === 0) {
         throw new Error("An account already uses this email address. Sign in or reset your password.");
       }
-      sessionStorage.setItem("pending_verification_email", form.email);
-      toast.success("Account created. Check your email to verify it.");
-      setView("verifyemail");
+      if (data.session && data.user?.email_confirmed_at) {
+        toast.success("Account created. Your email is verified.");
+        setView(consumeCustomerScan() ? "skintest" : "userdashboard");
+      } else {
+        sessionStorage.setItem("pending_verification_email", form.email);
+        sessionStorage.setItem("pending_verification_kind", "customer");
+        toast.success("Account created. Check your email to verify it.");
+        setView("verifyemail");
+      }
     } catch (err: any) {
       toast.error(err.message || "Registration encountered an unexpected error.");
     } finally {
@@ -826,10 +1033,10 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
             </button>
 
             <p className="text-xs tracking-[0.2em] uppercase text-[#C86B3A] font-bold mb-1.5" style={{ fontFamily: "'DM Mono', monospace" }}>
-              Registration Portal
+              Individual Portal
             </p>
             <h1 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Customer Sign Up
+              Individual Sign Up
             </h1>
             <p className="text-muted-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Already have an account?{" "}
@@ -846,42 +1053,60 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
             <div>
               <label className={labelCls}>Full Name *</label>
               <input
-                className={inputCls}
+                className={`${inputCls} ${errors.fullName ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                 placeholder="Your legal name"
                 value={form.fullName}
                 onChange={(e) => set("fullName", e.target.value)}
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               />
+              {errors.fullName && (
+                <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {errors.fullName}
+                </p>
+              )}
             </div>
 
             <div>
               <label className={labelCls}>Email Address *</label>
               <input
-                className={inputCls}
+                className={`${inputCls} ${errors.email ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                 type="email"
                 placeholder="you@example.com"
                 value={form.email}
                 onChange={(e) => set("email", e.target.value)}
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               />
+              {errors.email && (
+                <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {errors.email}
+                </p>
+              )}
             </div>
 
             <div>
               <label className={labelCls}>Phone Number (WhatsApp) *</label>
               <input
-                className={inputCls}
+                className={`${inputCls} ${errors.phone ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                 placeholder="08012345678"
                 value={form.phone}
                 onChange={(e) => set("phone", e.target.value)}
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               />
+              {errors.phone && (
+                <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {errors.phone}
+                </p>
+              )}
             </div>
 
             <div>
               <label className={labelCls}>Create Password *</label>
               <div className="relative">
                 <input
-                  className={inputCls}
+                  className={`${inputCls} ${errors.password ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                   type={showPass ? "text" : "password"}
                   placeholder="Enter password"
                   value={form.password}
@@ -896,6 +1121,12 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
                   <Eye className="w-4 h-4" />
                 </button>
               </div>
+              {errors.password && (
+                <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {errors.password}
+                </p>
+              )}
               <PasswordStrength password={form.password} />
             </div>
 
@@ -904,7 +1135,7 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
               <div className="relative">
                 <input
                   className={`${inputCls} ${
-                    form.confirmPassword && !passwordsMatch ? "border-red-400" : ""
+                    errors.confirmPassword || (form.confirmPassword && !passwordsMatch) ? "border-red-400" : ""
                   }`}
                   type={showConfirm ? "text" : "password"}
                   placeholder="Confirm password"
@@ -920,28 +1151,28 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
                   <Eye className="w-4 h-4" />
                 </button>
               </div>
-              {form.confirmPassword && !passwordsMatch && (
-                <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
+              {(errors.confirmPassword || (form.confirmPassword && !passwordsMatch)) && (
+                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {errors.confirmPassword || "Passwords do not match."}
+                </p>
               )}
             </div>
 
             <button
+              type="button"
               onClick={handleFormSubmit}
-              disabled={!isCustomerValid || loading}
-              className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all mt-4 cursor-pointer flex items-center justify-center gap-1.5 ${
-                isCustomerValid && !loading
-                  ? "bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg"
-                  : "bg-muted text-muted-foreground cursor-not-allowed"
-              }`}
+              disabled={loading}
+              className="w-full py-3.5 rounded-xl font-bold text-sm transition-all mt-4 cursor-pointer flex items-center justify-center gap-1.5 bg-[#008236] text-white hover:bg-[#006c2c] shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               {loading ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-muted-foreground border-t-foreground rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
                   <span>Creating Account...</span>
                 </>
               ) : (
-                "Create Customer Account"
+                "Create Individual Account"
               )}
             </button>
           </div>
@@ -952,9 +1183,9 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
               href="#/terms"
               onClick={(e) => {
                 e.preventDefault();
-                toast.info("Terms of Service: Credentials must be kept secure, and routing rules apply to all customer routine scans.");
+                setView("terms");
               }}
-              className="underline text-foreground hover:text-[#008236] transition-colors"
+              className="underline text-foreground hover:text-[#008236] transition-colors cursor-pointer"
             >
               terms
             </a>{" "}
@@ -963,9 +1194,9 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
               href="#/privacy"
               onClick={(e) => {
                 e.preventDefault();
-                toast.info("Privacy Policy: Skin scan data is encrypted and private-by-default. Photos are strictly used to run diagnostics and are never displayed publicly.");
+                setView("privacy");
               }}
-              className="underline text-foreground hover:text-[#008236] transition-colors"
+              className="underline text-foreground hover:text-[#008236] transition-colors cursor-pointer"
             >
               privacy policies
             </a>
@@ -982,6 +1213,20 @@ export function EmailVerificationPendingView({ setView }: { setView: (v: View) =
   const email = sessionStorage.getItem("pending_verification_email") || "your email address";
   const [resending, setResending] = useState(false);
   const [resendWait, setResendWait] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.auth.getUser().then(async ({ data }) => {
+      const user = data.user;
+      if (cancelled || !user?.email_confirmed_at || !user.email || user.email.toLowerCase() !== email.toLowerCase()) return;
+      const role = await resolveAccountRole(user);
+      if (cancelled) return;
+      sessionStorage.removeItem("pending_verification_email");
+      sessionStorage.removeItem("pending_verification_kind");
+      setView(role === "brand" ? "branddashboard" : role === "vendor" ? "dashboard" : "userdashboard");
+    });
+    return () => { cancelled = true; };
+  }, [email]);
 
   useEffect(() => {
     if (!resendWait) return;
@@ -1472,7 +1717,7 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
 
 export function AccountChoiceView({ setView }: { setView: (v: View) => void }) {
   const options = [
-    { title: "For my skin", detail: "Create a customer account for analyses and product matches.", icon: User, view: "customersignup" as View },
+    { title: "For my skin", detail: "Create an individual account for analyses and product matches.", icon: User, view: "customersignup" as View },
     { title: "For my shop", detail: "Apply as a vendor and set up a skincare storefront.", icon: Store, view: "signup" as View },
     { title: "For my brand", detail: "Register a brand with branches and a central workspace.", icon: ShieldCheck, view: "brandsignup" as View },
   ];

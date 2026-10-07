@@ -1433,11 +1433,11 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 })}
               </div>
 
-              {/* Free tier summary strip */}
+              {/* Trial and unpaid vendor summary strip */}
               <div className="mt-6 px-5 py-4 bg-secondary/50 border border-border rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground bg-muted-foreground/10 px-2 py-0.5 rounded uppercase" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Free Tier</span>
-                  <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>— Sandbox vendors (no active recurring payments verified)</span>
+                  <span className="text-xs font-bold text-foreground bg-muted-foreground/10 px-2 py-0.5 rounded uppercase" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Trial / unpaid</span>
+                  <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Vendor accounts without a confirmed paid tier</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-32 bg-muted rounded-full h-1.5 overflow-hidden shrink-0">

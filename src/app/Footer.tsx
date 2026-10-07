@@ -158,13 +158,29 @@ export function Footer({ setView, view }: { setView: (v: View) => void; view: Vi
       </div>
 
       {/* Bottom bar */}
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <p
           className="text-xs text-emerald-100/60 text-center sm:text-left"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
           © {new Date().getFullYear()} Anovra Africa Ltd. All rights reserved.
         </p>
+        <div className="flex items-center gap-5">
+          <button
+            onClick={() => setView("terms")}
+            style={{ fontSize: "10px", lineHeight: "1.2" }}
+            className="!text-[10px] text-emerald-100/60 hover:text-white transition-colors underline-offset-4 hover:underline cursor-pointer font-medium tracking-wide"
+          >
+            Terms of Service
+          </button>
+          <button
+            onClick={() => setView("privacy")}
+            style={{ fontSize: "10px", lineHeight: "1.2" }}
+            className="!text-[10px] text-emerald-100/60 hover:text-white transition-colors underline-offset-4 hover:underline cursor-pointer font-medium tracking-wide"
+          >
+            Privacy Policy
+          </button>
+        </div>
       </div>
     </footer>
   );

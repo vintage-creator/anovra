@@ -7,7 +7,7 @@ import {
   Package, TrendingUp, Scan, Activity, Eye, Store, ExternalLink,
   Globe, Copy, Check, MessageCircle, Shield, Key, Users, Zap,
   ChevronRight, AlertTriangle, RefreshCw, CheckCircle, Lock, Plus,
-  LifeBuoy, BookOpen, Webhook, ArrowRight, Settings, Menu, X, LogOut, Pencil, Save
+  LifeBuoy, BookOpen, Webhook, ArrowRight, Settings, Menu, X, LogOut, Pencil, Save, Clock
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -47,7 +47,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [vendorPlan, setVendorPlan] = useState<VendorPlan>("free");
   const [trialActive, setTrialActive] = useState(true);
   const [trialEndsAt, setTrialEndsAt] = useState<Date | null>(null);
-  const [trialMsRemaining, setTrialMsRemaining] = useState(7 * 24 * 60 * 60 * 1000);
+  const [trialMsRemaining, setTrialMsRemaining] = useState(3 * 24 * 60 * 60 * 1000);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [upgradeTargetFeature, setUpgradeTargetFeature] = useState<string | null>(null);
   const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<"basic" | "premium" | "brand" | null>(null);
@@ -79,6 +79,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [storeSaved, setStoreSaved] = useState(false);
   const [isEditingStorefront, setIsEditingStorefront] = useState(false);
   const [isBranchAccount, setIsBranchAccount] = useState(false);
+  const [parentBrandName, setParentBrandName] = useState("");
+  const [parentAccessActive, setParentAccessActive] = useState(false);
+  const [branchStatus, setBranchStatus] = useState("active");
   const [showBrandUpgrade, setShowBrandUpgrade] = useState(false);
   const [upgradingBrand, setUpgradingBrand] = useState(false);
 
@@ -113,7 +116,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   ]);
 
   const planRank: Record<VendorPlan, number> = { free: 0, basic: 1, premium: 2, brand: 3 };
-  const hasFeatureAccess = (required: Exclude<VendorPlan, "free">) => trialActive || planRank[vendorPlan] >= planRank[required];
+  const hasFeatureAccess = (required: Exclude<VendorPlan, "free">) => isBranchAccount || trialActive || planRank[vendorPlan] >= planRank[required];
   const apiDocsKey = apiKey || `${apiKeyPrefix || "ak_live_new_key"} (generate a key to copy the full token)`;
   const apiBaseUrl = `${import.meta.env.VITE_SUPABASE_URL || "https://ejpdrcbgqelxlopivwld.supabase.co"}/functions/v1/vendor-api`;
   const isValidWebhookUrl = (value: string) => {
@@ -136,7 +139,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     minutes: Math.max(0, Math.floor((trialMsRemaining / (1000 * 60)) % 60)),
   };
   const trialCountdownLabel = `${trialTime.days}D ${trialTime.hours}H LEFT`;
-  const featureBadgeText = trialActive ? `Trial active · ${trialCountdownLabel}` : "Feature Active";
+  const featureBadgeText = isBranchAccount
+    ? parentAccessActive && branchStatus === "active" ? "Brand HQ covered" : "Brand HQ access unavailable"
+    : trialActive ? `Trial active · ${trialCountdownLabel}` : "Feature Active";
 
   useEffect(() => {
     if (sessionStorage.getItem("show_welcome") === "true") {
@@ -205,7 +210,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         try {
           const { data, error } = await supabase
             .from("profiles")
-            .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url, tagline, location, since, slug, account_type, parent_brand_id, branch_status")
+            .select("name, plan, is_verified, verification_status, business_name, custom_domain, white_label, webhook_url, tagline, location, since, slug, account_type, parent_brand_id, branch_status")
             .eq("id", effectiveVendorId)
             .maybeSingle();
           if (error) {
@@ -221,7 +226,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           // Fallback to base columns if query failed due to missing settings columns
           const { data: baseData } = await supabase
             .from("profiles")
-            .select("name, plan, is_verified, business_name, slug, account_type, parent_brand_id, branch_status")
+            .select("name, plan, is_verified, verification_status, business_name, slug, account_type, parent_brand_id, branch_status")
             .eq("id", effectiveVendorId)
             .maybeSingle();
           profile = baseData;
@@ -244,7 +249,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             const { data } = await supabase
               .from("profiles")
               .insert([fallbackProfile])
-              .select("name, plan, is_verified, business_name, custom_domain, white_label, webhook_url, tagline, location, since, slug, account_type, parent_brand_id, branch_status")
+              .select("name, plan, is_verified, verification_status, business_name, custom_domain, white_label, webhook_url, tagline, location, since, slug, account_type, parent_brand_id, branch_status")
               .maybeSingle();
             insertedData = data;
           } catch (e) {
@@ -252,7 +257,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             const { data } = await supabase
               .from("profiles")
               .insert([fallbackProfile])
-              .select("name, plan, is_verified, business_name, slug, account_type, parent_brand_id, branch_status")
+              .select("name, plan, is_verified, verification_status, business_name, slug, account_type, parent_brand_id, branch_status")
               .maybeSingle();
             insertedData = data;
           }
@@ -264,7 +269,30 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         if (profile) {
           const branchAccount = profile.account_type === "branch";
           setIsBranchAccount(branchAccount);
-          setIsVerified(profile.is_verified);
+          setBranchStatus(profile.branch_status || "active");
+          let accountVerified = Boolean(profile.is_verified) && (profile.verification_status ? profile.verification_status === "approved" : true);
+          if (branchAccount && profile.parent_brand_id) {
+            try {
+              const { data: parent } = await supabase
+                .from("profiles")
+                .select("business_name, name, is_verified, verification_status, plan, created_at")
+                .eq("id", profile.parent_brand_id)
+                .maybeSingle();
+              if (parent) {
+                setParentBrandName(parent.business_name || parent.name || "");
+                const parentVerified = Boolean(parent.is_verified) && parent.verification_status === "approved";
+                const parentTrialActive = parent.plan !== "free" || Date.now() <= new Date(parent.created_at || 0).getTime() + 3 * 24 * 60 * 60 * 1000;
+                accountVerified = accountVerified && parentVerified;
+                setParentAccessActive(parentVerified && parentTrialActive);
+              } else {
+                setParentAccessActive(false);
+              }
+            } catch (pErr) {
+              setParentAccessActive(false);
+              console.warn("Could not check parent brand verification:", pErr);
+            }
+          }
+          setIsVerified(accountVerified);
           setVendorPlan(profile.plan as any);
           if (isPlaceholderBusinessName(profile.business_name)) {
             setBrandName("");
@@ -287,18 +315,25 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             setWebhookSaved(isValidWebhookUrl(profile.webhook_url));
           }
 
-          // Enforce 7-day trial check
-          const createdDate = user.created_at ? new Date(user.created_at) : new Date();
-          const trialEndDate = new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-          const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
-          const planVal = (profile.plan || "free") as VendorPlan;
-          setTrialEndsAt(trialEndDate);
-          setTrialMsRemaining(Math.max(0, trialEndDate.getTime() - Date.now()));
-          setTrialActive(planVal === "free" && daysDiff <= 7);
-          if (planVal === "free" && daysDiff > 7) {
-            setTrialExpired(true);
-          } else {
+          // Trial access is based on the account creation date.
+          // Note: Branch accounts (sub-vendors under a brand) are managed and paid by Brand HQ; they do not have trials or payment expirations.
+          const isBranch = profile.account_type === "branch";
+          if (isBranch) {
+            setTrialActive(false);
             setTrialExpired(false);
+          } else {
+            const createdDate = user.created_at ? new Date(user.created_at) : new Date();
+            const trialEndDate = new Date(createdDate.getTime() + 3 * 24 * 60 * 60 * 1000);
+            const daysDiff = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
+            const planVal = (profile.plan || "free") as VendorPlan;
+            setTrialEndsAt(trialEndDate);
+            setTrialMsRemaining(Math.max(0, trialEndDate.getTime() - Date.now()));
+            setTrialActive(planVal === "free" && daysDiff <= 3);
+            if (planVal === "free" && daysDiff > 3) {
+              setTrialExpired(true);
+            } else {
+              setTrialExpired(false);
+            }
           }
 
         }
@@ -519,8 +554,13 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       toast.info("Generate a new API key first. Existing keys cannot be revealed again.");
       return;
     }
+    if (["shop", "test", "sidebar", "embed", "test-settings"].includes(key) && !isVerified) {
+      toast.error("Your store links are locked and cannot be copied until your account is CAC-verified by Anovra compliance.");
+      return;
+    }
     navigator.clipboard.writeText(text);
     setCopied(key);
+    toast.success("Copied to clipboard!");
     setTimeout(() => setCopied(null), 2000);
   }
 
@@ -871,7 +911,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             {/* Plan badge */}
             <div className="flex flex-wrap gap-1.5 mt-2">
               <span className="text-[9px] uppercase font-mono font-bold bg-[#008236]/10 text-[#008236] px-2 py-0.5 border border-[#008236]/20 rounded-full">
-                {trialActive ? `FREE TRIAL · ${trialCountdownLabel}` : vendorPlan === "free" ? "FREE PLAN" : `${vendorPlan.toUpperCase()} PLAN`}
+                {isBranchAccount ? "BRANCH ACCESS" : trialActive ? `FREE TRIAL · ${trialCountdownLabel}` : vendorPlan === "free" ? "TRIAL ENDED" : `${vendorPlan.toUpperCase()} PLAN`}
               </span>
               <span className={cn(
                 "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-0.5",
@@ -889,20 +929,29 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               </span>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(shopLink);
+                  if (!isVerified) {
+                    toast.error("Your store URL cannot be copied until your account is CAC-verified by Anovra compliance.");
+                    return;
+                  }
                   copy(shopLink, "sidebar");
-                  toast.success("Store URL copied!");
                 }}
-                className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-[#008236] transition-colors flex items-center gap-1 shrink-0"
-                title="Copy unique shop URL"
+                className={cn(
+                  "p-1 rounded transition-colors flex items-center gap-1 shrink-0 cursor-pointer",
+                  isVerified
+                    ? "hover:bg-secondary text-muted-foreground hover:text-[#008236]"
+                    : "text-amber-700 bg-amber-500/10 hover:bg-amber-500/20"
+                )}
+                title={isVerified ? "Copy unique shop URL" : "Store locked — verification pending"}
               >
                 {copied === "sidebar" ? (
                   <>
                     <Check className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
                     <span className="text-[9px] text-emerald-700 font-bold">Copied</span>
                   </>
-                ) : (
+                ) : isVerified ? (
                   <Copy className="w-3.5 h-3.5" />
+                ) : (
+                  <Lock className="w-3.5 h-3.5 text-amber-600" />
                 )}
               </button>
             </div>
@@ -955,8 +1004,8 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       )}
 
       {/* Right Viewport Content */}
-      <div className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 bg-background relative">
-        {trialExpired ? (
+      <div className="flex-1 min-w-0 max-w-full overflow-x-hidden p-3.5 sm:p-6 lg:p-8 bg-background relative">
+        {trialExpired && !isBranchAccount ? (
           <div className="max-w-2xl mx-auto py-16 text-center">
             <div className="bg-amber-50 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/30 rounded-3xl p-8 sm:p-12 shadow-md">
               <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center mx-auto mb-6">
@@ -1133,34 +1182,51 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
 
           {/* Shareable links */}
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-xs">
+          <div className="bg-card border border-border rounded-2xl p-4 sm:p-6 shadow-xs max-w-full min-w-0 overflow-hidden">
             <h3 className="text-base font-medium text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your shareable links</h3>
             <p className="text-xs text-muted-foreground mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Share these links with customers to start collecting skin analyses and generating orders.</p>
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-2 gap-4 min-w-0">
               {[
                 { label: "Shop Link", url: shopLink, key: "shop", desc: "Your digital storefront with products, catalogue, and skin test engine" },
                 { label: "Skin Test Link", url: testLink, key: "test", desc: "Sends customers directly to your branded, CAC-verified skin test" },
               ].map((l) => (
-                <div key={l.key} className="flex flex-col justify-between border border-border rounded-xl p-4 bg-muted/30 hover:bg-muted/50 transition-colors">
+                <div key={l.key} className="flex flex-col justify-between border border-border rounded-xl p-4 bg-muted/30 hover:bg-muted/50 transition-colors min-w-0 overflow-hidden">
                   <div>
                     <span className="inline-block text-[10px] uppercase font-bold text-accent tracking-wider bg-accent/15 px-2.5 py-0.5 rounded-full mb-2" style={{ fontFamily: "'DM Mono', monospace" }}>
                       {l.label}
                     </span>
                     <p className="text-xs text-muted-foreground leading-relaxed mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{l.desc}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-background border border-border/80 rounded-lg px-3 py-2 text-xs text-[#008236] font-mono truncate font-semibold">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex-1 min-w-0 bg-background border border-border/80 rounded-lg px-3 py-2 text-xs text-[#008236] font-mono truncate font-semibold" title={l.url}>
                       {l.url}
                     </div>
                     <button
-                      onClick={() => copy(l.url, l.key)}
-                      className="flex items-center gap-1.5 text-xs px-3.5 py-2 bg-background border border-border rounded-lg hover:bg-secondary hover:border-accent/40 transition-colors flex-shrink-0 font-medium cursor-pointer"
+                      onClick={() => {
+                        if (!isVerified || (isBranchAccount && (!parentAccessActive || branchStatus !== "active"))) {
+                          toast.error("This link is unavailable until your branch and Brand HQ have active, verified access.");
+                          return;
+                        }
+                        copy(l.url, l.key);
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg border transition-colors shrink-0 font-medium cursor-pointer",
+                        !isVerified
+                          ? "bg-amber-500/10 text-amber-800 border-amber-500/25 hover:bg-amber-500/20"
+                          : "bg-background border-border hover:bg-secondary hover:border-accent/40"
+                      )}
                       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                      title={!isVerified ? "Locked pending CAC verification" : "Copy link"}
                     >
                       {copied === l.key ? (
                         <>
                           <Check className="w-3.5 h-3.5 text-emerald-600" />
                           <span className="text-emerald-700 font-bold">Copied!</span>
+                        </>
+                      ) : !isVerified ? (
+                        <>
+                          <Lock className="w-3.5 h-3.5 text-amber-700" />
+                          <span className="text-amber-800 font-bold">Locked</span>
                         </>
                       ) : (
                         <>
@@ -1212,12 +1278,12 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
           </div>
 
           {/* Embed widget / Code Snippet Section */}
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-xs relative overflow-hidden">
+          <div className="bg-card border border-border rounded-2xl p-4 sm:p-6 shadow-xs relative overflow-hidden max-w-full min-w-0">
             {hasFeatureAccess("premium") ? (
-              <div>
-                <div className="flex items-center justify-between mb-2">
+              <div className="min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                   <h3 className="font-semibold text-foreground text-sm uppercase tracking-wider animate-fade-in" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Website Embed Widget</h3>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="text-[10px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1.5 self-start sm:self-auto">
                     <Check className="w-3 h-3 text-emerald-600" /> {featureBadgeText}
                   </span>
                 </div>
@@ -1248,7 +1314,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 </div>
 
                 {/* Syntax Highlighted Code Editor Box */}
-                <div className="bg-[#1A0A05] rounded-xl overflow-hidden border border-border/10 mb-4 font-mono text-xs select-all">
+                <div className="bg-[#1A0A05] rounded-xl overflow-hidden border border-border/10 mb-4 font-mono text-xs select-all max-w-full">
                   {/* Window title bar */}
                   <div className="flex items-center justify-between px-4 py-2 bg-secondary/5 border-b border-border/10 text-muted-foreground/60 select-none">
                     <div className="flex items-center gap-1.5">
@@ -1263,9 +1329,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   </div>
 
                   {/* Code text lines */}
-                  <div className="p-4.5 overflow-x-auto text-left leading-relaxed">
+                  <div className="p-3.5 sm:p-4.5 overflow-x-auto text-left leading-relaxed max-w-full">
                     {embedPlatform === "html" && (
-                      <pre className="text-gray-300">
+                      <pre className="text-gray-300 font-mono text-xs whitespace-pre">
                         <span className="text-cyan-400">&lt;script</span><br />
                         {"  "}<span className="text-amber-400">src</span>=<span className="text-emerald-400">"https://anovra.africa/skin-widget.js"</span><br />
                         {"  "}<span className="text-amber-400">data-vendor</span>=<span className="text-emerald-400">"{shopSlug}"</span><br />
@@ -1274,7 +1340,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       </pre>
                     )}
                     {embedPlatform === "shopify" && (
-                      <pre className="text-gray-300">
+                      <pre className="text-gray-300 font-mono text-xs whitespace-pre">
                         <span className="text-slate-500 font-medium font-sans">{`{% comment %} Paste inside layout/theme.liquid before </body> {% endcomment %}`}</span><br />
                         <span className="text-cyan-400">&lt;script</span><br />
                         {"  "}<span className="text-amber-400">src</span>=<span className="text-emerald-400">"https://anovra.africa/skin-widget.js"</span><br />
@@ -1284,7 +1350,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       </pre>
                     )}
                     {embedPlatform === "wordpress" && (
-                      <pre className="text-gray-300">
+                      <pre className="text-gray-300 font-mono text-xs whitespace-pre">
                         <span className="text-slate-500 font-medium font-sans">{`// Add at the bottom of active theme's functions.php`}</span><br />
                         <span className="text-purple-400">add_action</span>(<span className="text-emerald-400">'wp_footer'</span>, <span className="text-blue-400">function</span>() &#123;<br />
                         {"    "}<span className="text-blue-400">echo</span> <span className="text-emerald-400">{`'<script src="https://anovra.africa/skin-widget.js" data-vendor="${shopSlug}" async></script>'`}</span>;<br />
@@ -1296,6 +1362,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
                 <button
                   onClick={() => {
+                    if (!isVerified || (isBranchAccount && (!parentAccessActive || branchStatus !== "active"))) {
+                      toast.error("The embed is unavailable until your branch and Brand HQ have active, verified access.");
+                      return;
+                    }
                     const code = embedPlatform === "html"
                       ? `<script\n  src="https://anovra.africa/skin-widget.js"\n  data-vendor="${shopSlug}"\n  async>\n</script>`
                       : embedPlatform === "shopify"
@@ -1303,13 +1373,24 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       : `// Add at the bottom of active theme's functions.php\nadd_action('wp_footer', function() {\n    echo '<script src="https://anovra.africa/skin-widget.js" data-vendor="${shopSlug}" async></script>';\n});`;
                     copy(code, "embed");
                   }}
-                  className="flex items-center gap-1.5 text-xs px-4 py-2 bg-background border border-border rounded-lg hover:bg-secondary hover:border-accent/40 transition-colors cursor-pointer"
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs px-4 py-2 border rounded-lg transition-colors cursor-pointer",
+                    !isVerified
+                      ? "bg-amber-500/10 text-amber-800 border-amber-500/25 hover:bg-amber-500/20"
+                      : "bg-background border-border hover:bg-secondary hover:border-accent/40"
+                  )}
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  title={!isVerified ? "Locked pending CAC verification" : "Copy Code Snippet"}
                 >
                   {copied === "embed" ? (
                     <>
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
                       <span className="text-emerald-700 font-bold">Copied Snippet!</span>
+                    </>
+                  ) : !isVerified ? (
+                    <>
+                      <Lock className="w-3.5 h-3.5 text-amber-700" />
+                      <span className="text-amber-800 font-bold">Locked</span>
                     </>
                   ) : (
                     <>
@@ -1822,82 +1903,85 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             
             {/* Left Column */}
             <div className="space-y-6">
-              {/* Branding */}
-              <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="px-5 py-4 border-b border-border">
-                  <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Branding on results page</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Control how your brand appears to customers after their skin analysis.</p>
-                </div>
-                <div className="p-5 space-y-5">
-                  {/* Anovra branding toggle */}
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Show Anovra branding</p>
-                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>The "Powered by Anovra" badge appears on your results page. Included on all plans.</p>
+              {/* Branding (Hidden for sub-vendors) */}
+              {!isBranchAccount && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="px-5 py-4 border-b border-border">
+                      <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Branding on results page</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Control how your brand appears to customers after their skin analysis.</p>
                     </div>
-                    <button
-                      onClick={async () => {
-                        setWhiteLabelEnabled(false);
-                        await saveSettings({ white_label: false });
-                      }}
-                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${!whiteLabelEnabled ? "bg-[#008236]" : "bg-muted"}`}
-                    >
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${!whiteLabelEnabled ? "left-5" : "left-0.5"}`} />
-                    </button>
+                    <div className="p-5 space-y-5">
+                      {/* Anovra branding toggle */}
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Show Anovra branding</p>
+                          <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>The "Powered by Anovra" badge appears on your results page. Included on all plans.</p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            setWhiteLabelEnabled(false);
+                            await saveSettings({ white_label: false });
+                          }}
+                          className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${!whiteLabelEnabled ? "bg-[#008236]" : "bg-muted"}`}
+                        >
+                          <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${!whiteLabelEnabled ? "left-5" : "left-0.5"}`} />
+                        </button>
+                      </div>
+
+                      <div className="border-t border-border" />
+
+                      {/* White-label toggle */}
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>White-labelled results page</p>
+                            <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Vendor Pro</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Remove all Anovra branding. Customers see only your brand name and logo on results.</p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!hasFeatureAccess("premium")) {
+                              setUpgradeTargetFeature("White-labelled results page");
+                              setUpgradeTargetPlan("premium");
+                              setShowPremiumModal(true);
+                              toast.warning("White-labelling requires Vendor Pro or Premium Tier. Upgrade to unlock.");
+                              return;
+                            }
+                            const nextVal = !whiteLabelEnabled;
+                            setWhiteLabelEnabled(nextVal);
+                            await saveSettings({ white_label: nextVal });
+                          }}
+                          className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${whiteLabelEnabled ? "bg-[#008236]" : "bg-muted"}`}
+                        >
+                          <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${whiteLabelEnabled ? "left-5" : "left-0.5"}`} />
+                        </button>
+                      </div>
+
+                      {whiteLabelEnabled && (
+                        <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                          <div>
+                            <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Brand name shown on results</label>
+                            <input
+                              value={brandName}
+                              onChange={(e) => setBrandName(e.target.value)}
+                              onBlur={() => saveSettings({ business_name: brandName })}
+                              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
+                              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-lg">
+                            <CheckCircle className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                            <p className="text-xs text-green-700 dark:text-green-300" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Customers will see "<strong>{brandName}</strong> Skin Analysis" instead of Anovra branding.</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-
-                  <div className="border-t border-border" />
-
-                  {/* White-label toggle */}
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-sm font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>White-labelled results page</p>
-                        <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Vendor Pro</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Remove all Anovra branding. Customers see only your brand name and logo on results.</p>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        if (!hasFeatureAccess("premium")) {
-                          setUpgradeTargetFeature("White-labelled results page");
-                          setUpgradeTargetPlan("premium");
-                          setShowPremiumModal(true);
-                          toast.warning("White-labelling requires Vendor Pro or Premium Tier. Upgrade to unlock.");
-                          return;
-                        }
-                        const nextVal = !whiteLabelEnabled;
-                        setWhiteLabelEnabled(nextVal);
-                        await saveSettings({ white_label: nextVal });
-                      }}
-                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${whiteLabelEnabled ? "bg-[#008236]" : "bg-muted"}`}
-                    >
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${whiteLabelEnabled ? "left-5" : "left-0.5"}`} />
-                    </button>
-                  </div>
-
-                  {whiteLabelEnabled && (
-                    <div className="bg-muted/50 rounded-lg p-4 space-y-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Brand name shown on results</label>
-                        <input
-                          value={brandName}
-                          onChange={(e) => setBrandName(e.target.value)}
-                          onBlur={() => saveSettings({ business_name: brandName })}
-                          className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#008236] transition-colors"
-                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-lg">
-                        <CheckCircle className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-                        <p className="text-xs text-green-700 dark:text-green-300" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Customers will see "<strong>{brandName}</strong> Skin Analysis" instead of Anovra branding.</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              </div>
-            </div>
+              )}
+
               {/* Storefront Customization */}
               <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
                 <div>
@@ -1917,7 +2001,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       }}
                       disabled={isSavingStore}
                       className={cn(
-                        "inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors shrink-0",
+                        "inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors shrink-0 cursor-pointer",
                         isEditingStorefront
                           ? "bg-[#008236] text-white hover:bg-[#006c2c] disabled:opacity-60"
                           : "bg-secondary text-foreground border border-border hover:border-[#008236]/40 hover:text-[#008236]"
@@ -2020,246 +2104,314 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
             {/* Right Column */}
             <div className="space-y-6">
-              {/* Custom domain */}
-            <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="px-5 py-4 border-b border-border">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Custom domain for test link</h3>
-                    <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Brand</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Use your own domain (e.g. <code className="font-mono">skin.yourbrand.com</code>) instead of the default Anovra link.</p>
-                </div>
-                <div className="p-5 space-y-4">
+              {/* Custom domain (Hidden for sub-vendors) */}
+              {!isBranchAccount && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex flex-col justify-between">
                   <div>
-                    <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Custom domain</label>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        value={customDomain}
-                        onChange={(e) => { setCustomDomain(e.target.value); setDomainSaved(false); setDomainStatus("idle"); setDomainMessage(""); }}
-                        placeholder="skin.yourbrand.com"
-                        className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] transition-colors"
-                        style={{ fontFamily: "'DM Mono', monospace" }}
-                      />
-                      <button
-                        onClick={checkAndSaveCustomDomain}
-                        disabled={domainStatus === "checking"}
-                        className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
-                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                      >
-                        {domainStatus === "checking" ? "Checking..." : domainStatus === "verified" ? "Verified ✓" : domainStatus === "pending" ? "Needs DNS setup" : "Check setup"}
-                      </button>
-                    </div>
-                  </div>
-                  {domainMessage && (
-                    <div className={cn(
-                      "border rounded-lg p-3 text-xs leading-relaxed",
-                      domainStatus === "verified" ? "bg-green-50 border-green-200 text-green-800" :
-                      domainStatus === "invalid" ? "bg-red-50 border-red-200 text-red-700" :
-                      "bg-amber-50 border-amber-200 text-amber-800"
-                    )} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      <strong className="block mb-1">
-                        {domainStatus === "verified" ? "Domain verified" : domainStatus === "invalid" ? "Invalid domain" : "Valid domain, DNS setup needed"}
-                      </strong>
-                      {domainMessage}
-                    </div>
-                  )}
-                  {domainSaved && customDomain && (
-                    <div className="bg-slate-50 dark:bg-slate-900/60 border border-border rounded-xl p-4.5 space-y-3.5">
-                      <div>
-                        <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>DNS setup instructions</p>
-                        <p className="text-[10.5px] text-muted-foreground mt-1 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          Go to the website where you bought your domain, open DNS settings, add one record below, save it, then return here and click Check setup again.
-                        </p>
+                    <div className="px-5 py-4 border-b border-border">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Custom domain for test link</h3>
+                        <span className="text-xs bg-foreground text-primary-foreground px-2 py-0.5 rounded-full" style={{ fontFamily: "'DM Mono', monospace" }}>Brand</span>
                       </div>
-
-                      {isApexDomain && (
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          For easiest setup, use a subdomain like <strong className="font-mono">{suggestedSubdomain}</strong>. If you want to use <strong className="font-mono">{normalizeDomain(customDomain)}</strong> directly, use the A record option below.
+                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Use your own domain (e.g. <code className="font-mono">skin.yourbrand.com</code>) instead of the default Anovra link.</p>
+                    </div>
+                    <div className="p-5 space-y-4">
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'DM Mono', monospace" }}>Custom domain</label>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            value={customDomain}
+                            onChange={(e) => { setCustomDomain(e.target.value); setDomainSaved(false); setDomainStatus("idle"); setDomainMessage(""); }}
+                            placeholder="skin.yourbrand.com"
+                            className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#008236] transition-colors"
+                            style={{ fontFamily: "'DM Mono', monospace" }}
+                          />
+                          <button
+                            onClick={checkAndSaveCustomDomain}
+                            disabled={domainStatus === "checking"}
+                            className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
+                            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                          >
+                            {domainStatus === "checking" ? "Checking..." : domainStatus === "verified" ? "Verified ✓" : domainStatus === "pending" ? "Needs DNS setup" : "Check setup"}
+                          </button>
+                        </div>
+                      </div>
+                      {domainMessage && (
+                        <div className={cn(
+                          "border rounded-lg p-3 text-xs leading-relaxed",
+                          domainStatus === "verified" ? "bg-green-50 border-green-200 text-green-800" :
+                          domainStatus === "invalid" ? "bg-red-50 border-red-200 text-red-700" :
+                          "bg-amber-50 border-amber-200 text-amber-800"
+                        )} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          <strong className="block mb-1">
+                            {domainStatus === "verified" ? "Domain verified" : domainStatus === "invalid" ? "Invalid domain" : "Valid domain, DNS setup needed"}
+                          </strong>
+                          {domainMessage}
                         </div>
                       )}
-
-                      <div className="space-y-3">
-                        {/* Option 1: CNAME */}
-                        <div className={cn("border border-border/60 rounded-lg bg-background p-3", isApexDomain && "opacity-70")}>
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-[9.5px] font-bold text-[#008236] bg-[#008236]/10 px-2 py-0.5 rounded font-mono">{isApexDomain ? "OPTION 1: CNAME FOR SUBDOMAIN" : "OPTION 1: CNAME (Recommended)"}</span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 text-[10.5px] font-mono mt-2 pt-2 border-t border-border/30">
-                            <div>
-                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Type</span>
-                              <strong>CNAME</strong>
-                            </div>
-                            <div>
-                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Host/Name</span>
-                              <strong>{isApexDomain ? "skin" : dnsHostName}</strong>
-                            </div>
-                            <div>
-                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Target/Value</span>
-                              <strong className="break-all">anovra.africa</strong>
-                            </div>
-                          </div>
-                          {isApexDomain && (
-                            <p className="text-[10.5px] text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              This creates <strong className="font-mono">{suggestedSubdomain}</strong>. Update the field above to that subdomain before checking again.
+                      {domainSaved && customDomain && (
+                        <div className="bg-slate-50 dark:bg-slate-900/60 border border-border rounded-xl p-4.5 space-y-3.5">
+                          <div>
+                            <p className="text-xs font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>DNS setup instructions</p>
+                            <p className="text-[10.5px] text-muted-foreground mt-1 leading-normal" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              Go to the website where you bought your domain, open DNS settings, add one record below, save it, then return here and click Check setup again.
                             </p>
+                          </div>
+
+                          {isApexDomain && (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              For easiest setup, use a subdomain like <strong className="font-mono">{suggestedSubdomain}</strong>. If you want to use <strong className="font-mono">{normalizeDomain(customDomain)}</strong> directly, use the A record option below.
+                            </div>
                           )}
-                        </div>
 
-                        {/* Option 2: A Record */}
-                        <div className="border border-border/60 rounded-lg bg-background p-3">
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-[9.5px] font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded font-mono">OPTION 2: A RECORD (Alternative)</span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 text-[10.5px] font-mono mt-2 pt-2 border-t border-border/30">
-                            <div>
-                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Type</span>
-                              <strong>A</strong>
+                          <div className="space-y-3">
+                            {/* Option 1: CNAME */}
+                            <div className={cn("border border-border/60 rounded-lg bg-background p-3", isApexDomain && "opacity-70")}>
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-[9.5px] font-bold text-[#008236] bg-[#008236]/10 px-2 py-0.5 rounded font-mono">{isApexDomain ? "OPTION 1: CNAME FOR SUBDOMAIN" : "OPTION 1: CNAME (Recommended)"}</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2 text-[10.5px] font-mono mt-2 pt-2 border-t border-border/30">
+                                <div>
+                                  <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Type</span>
+                                  <strong>CNAME</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Host/Name</span>
+                                  <strong>{isApexDomain ? "skin" : dnsHostName}</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Target/Value</span>
+                                  <strong className="break-all">anovra.africa</strong>
+                                </div>
+                              </div>
+                              {isApexDomain && (
+                                <p className="text-[10.5px] text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                                  This creates <strong className="font-mono">{suggestedSubdomain}</strong>. Update the field above to that subdomain before checking again.
+                                </p>
+                              )}
                             </div>
-                            <div>
-                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Host/Name</span>
-                              <strong>{dnsHostName}</strong>
-                            </div>
-                            <div>
-                              <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Target/Value</span>
-                              <strong>198.54.115.240</strong>
+
+                            {/* Option 2: A Record */}
+                            <div className="border border-border/60 rounded-lg bg-background p-3">
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-[9.5px] font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded font-mono">OPTION 2: A RECORD (Alternative)</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2 text-[10.5px] font-mono mt-2 pt-2 border-t border-border/30">
+                                <div>
+                                  <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Type</span>
+                                  <strong>A</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Host/Name</span>
+                                  <strong>{dnsHostName}</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[8.5px] text-muted-foreground uppercase font-sans mb-0.5">Target/Value</span>
+                                  <strong>198.54.115.240</strong>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
+                      )}
+                      <div className="space-y-1.5 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <p className="flex items-center gap-1.5"><Globe className="w-3 h-3 flex-shrink-0" /> SSL certificate is automatically provisioned once DNS propagates.</p>
+                        <p className="flex items-center gap-1.5"><Shield className="w-3 h-3 flex-shrink-0" /> Verification typically takes 5–30 minutes.</p>
                       </div>
-                    </div>
-                  )}
-                  <div className="space-y-1.5 text-xs text-muted-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    <p className="flex items-center gap-1.5"><Globe className="w-3 h-3 flex-shrink-0" /> SSL certificate is automatically provisioned once DNS propagates.</p>
-                    <p className="flex items-center gap-1.5"><Shield className="w-3 h-3 flex-shrink-0" /> Verification typically takes 5–30 minutes.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-          {/* Shareable links */}
-          <div className="bg-card border border-border rounded-xl p-5 shadow-xs">
-            <h3 className="font-medium text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Shareable test link</h3>
-            <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Share this link on social media, WhatsApp, or your website to send customers directly to your skin test.</p>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-muted/50 rounded-lg p-3">
-              <p className="flex-1 text-sm font-mono text-foreground truncate">{testLink}</p>
-              <button onClick={() => copy(testLink, "test-settings")} className="flex items-center justify-center gap-1.5 text-xs px-4 py-2 bg-background border border-border rounded-lg hover:border-[#008236]/40 transition-colors shrink-0 font-medium cursor-pointer" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {copied === "test-settings" ? <><Check className="w-3.5 h-3.5 text-emerald-600" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy link</>}
-              </button>
-            </div>
-          </div>
-
-          {/* Billing & Subscription Card */}
-          <div className="bg-card border border-border rounded-xl p-5 sm:p-6 shadow-xs space-y-5 lg:col-span-2">
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-              <div>
-                <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
-                <p className="text-xs text-muted-foreground mt-1 max-w-3xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Start on Free, try all premium features for 7 days, then choose a paid tier to keep advanced tools such as white-labelled results, custom domains, webhooks, and priority WhatsApp support.
-                </p>
-              </div>
-              {vendorPlan === "free" && (
-                <div className={cn(
-                  "rounded-2xl border px-4 py-3 w-full xl:w-[360px] shadow-sm",
-                  trialActive
-                    ? "bg-gradient-to-br from-emerald-50 via-amber-50 to-sky-50 border-emerald-200"
-                    : "bg-red-50 border-red-200"
-                )}>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className={cn("text-[10px] font-bold uppercase tracking-wider font-mono", trialActive ? "text-emerald-700" : "text-red-700")}>
-                        {trialActive ? "Free access ends in" : "Free trial ended"}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {trialActive ? "Premium trial features turn off when this reaches zero." : "Your account remains on Free until you upgrade."}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-2xl sm:text-3xl font-bold text-foreground font-mono leading-none">
-                        {trialActive ? `${trialTime.days}d ${trialTime.hours}h` : "0d 0h"}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground font-mono mt-1">
-                        {trialActive ? `${trialTime.minutes} min left` : "expired"}
-                      </p>
                     </div>
                   </div>
                 </div>
               )}
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              {[
-                {
-                  key: "free",
-                  name: "Free Tier",
-                  price: "₦0/mo",
-                  desc: trialActive
-                    ? "7-day premium feature trial, storefront preview, product catalogue setup, scan testing, and basic workspace access."
-                    : "Basic workspace access after trial. Premium storefront, API, webhooks, and custom domain features require an upgrade.",
-                  isContact: false
-                },
-                { 
-                  key: "basic", 
-                  name: "Basic Plan", 
-                  price: "₦12,500/mo", 
-                  desc: "Up to 50 skin tests/month, 10 products in catalogue, Anovra branding, shareable link, basic analytics.",
-                  isContact: false
-                },
-                { 
-                  key: "premium", 
-                  name: "Vendor Pro", 
-                  price: "₦25,000/mo", 
-                  desc: "Unlimited tests, unlimited catalogue, white-labelled results page, website embed widget, full analytics, priority support.",
-                  isContact: false
-                },
-                { 
-                  key: "brand", 
-                  name: "Premium Tier",
-                  price: "₦45,000/mo",
-                  desc: "Everything in Pro, plus REST API access, custom domain for test link, SLA support, and onboarding.",
-                  isContact: false
-                },
-              ].map((p) => {
-                const isActive = vendorPlan === p.key;
-                return (
-                  <div key={p.name} className={cn("border rounded-xl p-4 min-h-[190px] flex flex-col justify-between space-y-4 bg-muted/5", isActive ? "border-[#008236] ring-1 ring-[#008236]/10 bg-emerald-50/30" : "border-border")}>
-                    <div>
-                      <p className="text-sm font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</p>
-                      <p className="text-xl font-light text-foreground font-mono mt-1.5">{p.price}</p>
-                      <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
-                    </div>
-                    {isActive ? (
-                      <span className="w-full text-center py-1.5 text-[10px] bg-green-50 text-green-700 font-bold rounded-lg border border-green-200">
-                        Current plan
-                      </span>
-                    ) : p.key === "free" ? (
-                      <span className="w-full text-center py-1.5 text-[10px] bg-secondary text-muted-foreground font-bold rounded-lg border border-border">
-                        Included
-                      </span>
-                    ) : p.isContact ? (
-                      <a
-                        href="mailto:sales@anovra.africa?subject=Anovra Premium Tier Inquiry"
-                        className="w-full text-center py-1.5 text-[10px] bg-secondary text-foreground hover:bg-muted font-bold rounded-lg transition-colors block decoration-none"
-                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                      >
-                        Contact Sales
-                      </a>
-                    ) : (
-                      <button
-                        onClick={() => payWithPaystack(p.key as any)}
-                        className="w-full text-center py-1.5 text-[10px] bg-[#008236] text-white hover:bg-[#006c2c] font-bold rounded-lg transition-colors cursor-pointer"
-                        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                      >
-                        Subscribe with Paystack
-                      </button>
+              {/* Shareable test link */}
+              <div className="bg-card border border-border rounded-xl p-5 shadow-xs">
+                <h3 className="font-medium text-foreground mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Shareable test link</h3>
+                <p className="text-xs text-muted-foreground mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Share this link on social media, WhatsApp, or your website to send customers directly to your skin test.</p>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-muted/50 rounded-lg p-3 min-w-0">
+                  <p className="flex-1 min-w-0 text-sm font-mono text-foreground truncate">{testLink}</p>
+                  <button
+                    onClick={() => {
+                      if (!isVerified) {
+                        toast.error("Skin test link cannot be copied until your account is CAC-verified.");
+                        return;
+                      }
+                      copy(testLink, "test-settings");
+                    }}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 text-xs px-4 py-2 border rounded-lg transition-colors shrink-0 font-medium cursor-pointer",
+                      !isVerified
+                        ? "bg-amber-500/10 text-amber-800 border-amber-500/25 hover:bg-amber-500/20"
+                        : "bg-background border-border hover:border-[#008236]/40"
                     )}
-                  </div>
-                );
-              })}
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    title={!isVerified ? "Locked pending CAC verification" : "Copy link"}
+                  >
+                    {copied === "test-settings" ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" /> Copied!
+                      </>
+                    ) : !isVerified ? (
+                      <>
+                        <Lock className="w-3.5 h-3.5 text-amber-700" /> Locked
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" /> Copy link
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* Billing & Subscription Card */}
+          {isBranchAccount ? (
+            <div className="bg-card border border-emerald-200 dark:border-emerald-900/40 rounded-xl p-5 sm:p-6 shadow-xs space-y-4 lg:col-span-2 bg-gradient-to-br from-emerald-50/40 via-background to-background">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold", parentAccessActive && isVerified && branchStatus === "active" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900")}>
+                      <CheckCircle className="w-3.5 h-3.5" /> {parentAccessActive && isVerified && branchStatus === "active" ? "License Covered" : "Access Pending"}
+                    </span>
+                    <span className="text-xs text-muted-foreground font-mono">Branch Account</span>
+                  </div>
+                  <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Subscription Covered by Brand HQ
+                  </h3>
+                </div>
+                <div className={cn("px-3.5 py-1.5 border rounded-lg text-xs font-medium shrink-0 self-start sm:self-auto flex items-center gap-1.5", parentAccessActive && isVerified && branchStatus === "active" ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-amber-50 border-amber-200 text-amber-900")}>
+                  <ShieldCheck className="w-4 h-4" /> {parentAccessActive && isVerified && branchStatus === "active" ? "Active & Fully Licensed" : "Branch access unavailable"}
+                </div>
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Branches do not need a separate subscription. Storefront and skin test access depend on your parent Brand HQ's active trial or paid plan, CAC approval, and this branch's status.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <div className="p-3 bg-muted/40 rounded-lg border border-border/60">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Parent Brand</p>
+                  <p className="text-xs font-semibold text-foreground mt-1 truncate">{parentBrandName || "Brand HQ"}</p>
+                </div>
+                <div className="p-3 bg-muted/40 rounded-lg border border-border/60">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Branch Status</p>
+                  <p className="text-xs font-semibold text-foreground mt-1 capitalize">{branchStatus} branch</p>
+                </div>
+                <div className="p-3 bg-muted/40 rounded-lg border border-border/60">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">Payment Status</p>
+                  <p className="text-xs font-semibold text-foreground mt-1">{parentAccessActive ? "Covered by Brand HQ" : "Contact Brand HQ"}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-xl p-5 sm:p-6 shadow-xs space-y-5 lg:col-span-2">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-3xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Try all features for 3 days, then choose a paid tier to keep your storefront, skin test link, analytics, and advanced tools active.
+                  </p>
+                </div>
+                {vendorPlan === "free" && (
+                  <div className={cn(
+                    "rounded-2xl border px-4 py-3 w-full xl:w-[360px] shadow-sm",
+                    trialActive
+                      ? "bg-gradient-to-br from-emerald-50 via-amber-50 to-sky-50 border-emerald-200"
+                      : "bg-red-50 border-red-200"
+                  )}>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className={cn("text-[10px] font-bold uppercase tracking-wider font-mono", trialActive ? "text-emerald-700" : "text-red-700")}>
+                          {trialActive ? "Trial access ends in" : "Trial ended"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {trialActive ? "Trial features turn off when this reaches zero." : "Your storefront and scan link need a paid plan to resume."}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-2xl sm:text-3xl font-bold text-foreground font-mono leading-none">
+                          {trialActive ? `${trialTime.days}d ${trialTime.hours}h` : "0d 0h"}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground font-mono mt-1">
+                          {trialActive ? `${trialTime.minutes} min left` : "expired"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                {[
+                  {
+                    key: "free",
+                    name: "Trial access",
+                    price: "3 days",
+                    desc: trialActive
+                      ? "Full feature trial, storefront preview, catalogue setup, scan testing, and workspace access."
+                      : "Trial ended. Choose a paid plan to resume storefront and scan features.",
+                    isContact: false
+                  },
+                  {
+                    key: "basic",
+                    name: "Basic Plan",
+                    price: "₦12,500/mo",
+                    desc: "Up to 50 skin tests/month, 10 products in catalogue, Anovra branding, shareable link, basic analytics.",
+                    isContact: false
+                  },
+                  {
+                    key: "premium",
+                    name: "Vendor Pro",
+                    price: "₦25,000/mo",
+                    desc: "Unlimited tests, unlimited catalogue, white-labelled results page, website embed widget, full analytics, priority support.",
+                    isContact: false
+                  },
+                  {
+                    key: "brand",
+                    name: "Premium Tier",
+                    price: "₦45,000/mo",
+                    desc: "Everything in Pro, plus REST API access, custom domain for test link, SLA support, and onboarding.",
+                    isContact: false
+                  },
+                ].map((p) => {
+                  const isActive = vendorPlan === p.key && (p.key !== "free" || trialActive);
+                  return (
+                    <div key={p.name} className={cn("border rounded-xl p-4 min-h-[190px] flex flex-col justify-between space-y-4 bg-muted/5", isActive ? "border-[#008236] ring-1 ring-[#008236]/10 bg-emerald-50/30" : "border-border")}>
+                      <div>
+                        <p className="text-sm font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.name}</p>
+                        <p className="text-xl font-light text-foreground font-mono mt-1.5">{p.price}</p>
+                        <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{p.desc}</p>
+                      </div>
+                      {isActive ? (
+                        <span className="w-full text-center py-1.5 text-[10px] bg-green-50 text-green-700 font-bold rounded-lg border border-green-200">
+                          Current plan
+                        </span>
+                      ) : p.key === "free" ? (
+                        <span className="w-full text-center py-1.5 text-[10px] bg-secondary text-muted-foreground font-bold rounded-lg border border-border">
+                          {trialActive ? "Trial active" : "Trial ended"}
+                        </span>
+                      ) : p.isContact ? (
+                        <a
+                          href="mailto:sales@anovra.africa?subject=Anovra Premium Tier Inquiry"
+                          className="w-full text-center py-1.5 text-[10px] bg-secondary text-foreground hover:bg-muted font-bold rounded-lg transition-colors block decoration-none"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          Contact Sales
+                        </a>
+                      ) : (
+                        <button
+                          onClick={() => payWithPaystack(p.key as any)}
+                          className="w-full text-center py-1.5 text-[10px] bg-[#008236] text-white hover:bg-[#006c2c] font-bold rounded-lg transition-colors cursor-pointer"
+                          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                        >
+                          Subscribe with Paystack
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {!isBranchAccount && <AccountDeletionSection kind="vendor" setView={setView} />}
         </div>
       )}

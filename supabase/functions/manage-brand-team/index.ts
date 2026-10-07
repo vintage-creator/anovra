@@ -48,12 +48,14 @@ serve(async (request) => {
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: auth, error: authError } = await db.auth.getUser(token);
     if (authError || !auth.user) return reply({ error: "Your session has expired. Please sign in again." }, 401);
-    const { data: owner } = await db.from("profiles").select("id, account_type, business_name, name, verification_status")
+    const { data: owner } = await db.from("profiles").select("id, account_type, business_name, name, verification_status, plan, created_at")
       .eq("id", auth.user.id).maybeSingle();
     if (owner?.account_type !== "brand" || ["suspended", "banned"].includes(owner.verification_status))
       return reply({ error: "Only an active Brand HQ owner can manage branch team access." }, 403);
     const body = await request.json().catch(() => ({}));
     const action = String(body.action || "list");
+    if (action !== "list" && owner.plan === "free" && Date.now() > new Date(owner.created_at || 0).getTime() + 3 * 24 * 60 * 60 * 1000)
+      return reply({ error: "Your 3-day Brand HQ trial has ended. Contact Anovra to manage team access." }, 403);
     const { data: branches, error: branchError } = await db.from("brand_branches")
       .select("branch_id, branch_name, status").eq("brand_id", owner.id);
     if (branchError) throw branchError;

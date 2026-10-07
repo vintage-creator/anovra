@@ -68,10 +68,16 @@ serve(async (request) => {
       if (auth.user.is_anonymous || !auth.user.email_confirmed_at)
         return reply({ error: "Verify your email before starting your skin test." }, 403);
       const { data: account, error: accountError } = await db.from("profiles")
-        .select("verification_status").eq("id", auth.user.id).maybeSingle();
+        .select("verification_status, plan, created_at, customer_plan_expires_at").eq("id", auth.user.id).maybeSingle();
       if (accountError) throw accountError;
       if (["suspended", "banned"].includes(account?.verification_status || ""))
         return reply({ error: "This account cannot start a skin test. Contact Anovra support." }, 403);
+      const customerTrialEnd = new Date(account?.created_at || auth.user.created_at).getTime() + 3 * 24 * 60 * 60 * 1000;
+      if ((!account?.plan || account.plan === "free") && Date.now() > customerTrialEnd)
+        return reply({ error: "Your 3-day trial has ended. Choose a plan in Billing & Plans to start another analysis." }, 403);
+      if (account?.plan !== "free" && account?.customer_plan_expires_at
+        && Date.now() > new Date(account.customer_plan_expires_at).getTime())
+        return reply({ error: "Your paid access has ended. Renew your plan in Billing & Plans to start another analysis." }, 403);
     }
     const clientAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       request.headers.get("cf-connecting-ip") || "unknown";
@@ -98,7 +104,7 @@ serve(async (request) => {
           return reply({ error: "This storefront is unavailable." }, 403);
         planOwner = parent;
       }
-      const trialEnd = new Date(planOwner.created_at || 0).getTime() + 7 * 24 * 60 * 60 * 1000;
+      const trialEnd = new Date(planOwner.created_at || 0).getTime() + 3 * 24 * 60 * 60 * 1000;
       if ((!planOwner.plan || planOwner.plan === "free") && Date.now() > trialEnd)
         return reply({ error: "This partner's trial has ended. The skin test is unavailable until they subscribe." }, 403);
       const { data: products, error: productError } = await db.from("products").select("*")
@@ -123,7 +129,7 @@ serve(async (request) => {
         const parentById = new Map((parents || []).map((parent) => [parent.id, parent]));
         const allowedVendors = new Map((vendors || []).filter((vendor) => {
           const owner = vendor.parent_brand_id ? parentById.get(vendor.parent_brand_id) : vendor;
-          const trialEnd = new Date(owner?.created_at || 0).getTime() + 7 * 24 * 60 * 60 * 1000;
+          const trialEnd = new Date(owner?.created_at || 0).getTime() + 3 * 24 * 60 * 60 * 1000;
           return vendor.is_verified && vendor.verification_status === "approved"
             && (vendor.account_type !== "branch" || vendor.branch_status === "active")
             && owner?.is_verified && owner.verification_status === "approved"
