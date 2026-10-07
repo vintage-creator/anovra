@@ -531,7 +531,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       }
       const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
       if (!paystackPublicKey) {
-        toast.error("Customer checkout is temporarily unavailable.");
+        toast.error("Checkout is temporarily unavailable.");
         return;
       }
       const { data: checkout, error: readinessError } = await supabase.functions.invoke("verify-customer-payment", { method: "GET" });
@@ -592,7 +592,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
       handler.openIframe();
     } catch (err: any) {
       console.error("Paystack launch error:", err);
-      toast.error(String(err?.message || "Could not open customer checkout. Please try again.").replace(/[<>]/g, "").slice(0, 180));
+      toast.error(String(err?.message || "Could not open checkout. Please try again.").replace(/[<>]/g, "").slice(0, 180));
     }
   };
 
@@ -1869,7 +1869,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
               <div>
                 <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Profile details</h3>
-                <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Update your individual profile details used across your skin portal.</p>
+                <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Update the details used across your skin portal.</p>
               </div>
               <span className="inline-flex items-center gap-1.5 text-xs bg-accent/10 text-accent border border-accent/20 px-2.5 py-1 rounded-full font-semibold self-start" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 <User className="w-3.5 h-3.5" />
@@ -1943,7 +1943,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
           <div className="order-6 bg-card border border-border rounded-2xl p-5 sm:p-6">
             <div className="mb-5">
               <h3 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Security</h3>
-              <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Change your password for this individual account.</p>
+              <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Change your account password.</p>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <label className="block">
@@ -1988,7 +1988,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
                   </span>
                   <h3 className="text-2xl font-light text-foreground mt-3" style={{ fontFamily: "'Fraunces', serif" }}>3-day free trial</h3>
                   <p className="text-sm text-muted-foreground mt-1 max-w-2xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Full individual dashboard access is active during your trial. When it ends, advanced tools require a paid plan.
+                    Full dashboard access is active during your trial. When it ends, advanced tools require a paid plan.
                   </p>
                 </div>
                 <div className="grid grid-cols-3 gap-3 min-w-[260px]">

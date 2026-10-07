@@ -975,7 +975,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
                       ? `Vendor Preview · ${vendorDisplayName || "Storefront"}`
                       : hasVendorBrand
                         ? `${vendorDisplayName} skin test`
-                        : "Customer skin test"}
+                        : "Skin test"}
                 </span>
                 <span className="block text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {currentUserRole === "brand" ? "Customer scan preview" : hasVendorBrand ? "Powered by Anovra" : "Skin analysis"}

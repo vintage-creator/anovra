@@ -455,10 +455,10 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
             </button>
 
             <p className="text-xs tracking-[0.2em] uppercase text-[#008236] font-bold mb-1.5" style={{ fontFamily: "'DM Mono', monospace" }}>
-              {accountKind === "brand" ? "Brand Registration" : "Vendor Registration"}
+              {accountKind === "brand" ? "For established brands" : "For skincare businesses"}
             </p>
             <h1 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              {accountKind === "brand" ? "Register your brand" : "Open your vendor storefront"}
+              {accountKind === "brand" ? "Register your brand" : "Open your storefront"}
             </h1>
             <p className="text-muted-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Already have an account?{" "}
@@ -867,7 +867,7 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
                           <span>Submitting…</span>
                         </>
                       ) : (
-                        <span>{accountKind === "brand" ? "Submit Brand Application" : "Submit Vendor Application"}</span>
+                        <span>Submit application</span>
                       )}
                     </button>
                   )}
@@ -1033,10 +1033,10 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
             </button>
 
             <p className="text-xs tracking-[0.2em] uppercase text-[#C86B3A] font-bold mb-1.5" style={{ fontFamily: "'DM Mono', monospace" }}>
-              Individual Portal
+              For your skin
             </p>
             <h1 className="text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
-              Individual Sign Up
+              Create an account
             </h1>
             <p className="text-muted-foreground text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Already have an account?{" "}
@@ -1172,7 +1172,7 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
                   <span>Creating Account...</span>
                 </>
               ) : (
-                "Create Individual Account"
+                "Sign up"
               )}
             </button>
           </div>
@@ -1717,7 +1717,7 @@ export function SignInView({ setView }: { setView: (v: View) => void }) {
 
 export function AccountChoiceView({ setView }: { setView: (v: View) => void }) {
   const options = [
-    { title: "For my skin", detail: "Create an individual account for analyses and product matches.", icon: User, view: "customersignup" as View },
+    { title: "For my skin", detail: "Save analyses and discover product matches.", icon: User, view: "customersignup" as View },
     { title: "For my shop", detail: "Apply as a vendor and set up a skincare storefront.", icon: Store, view: "signup" as View },
     { title: "For my brand", detail: "Register a brand with branches and a central workspace.", icon: ShieldCheck, view: "brandsignup" as View },
   ];

@@ -636,11 +636,11 @@ export default function App() {
         if (!user) {
           if (view === "skintest") {
             rememberCustomerScan();
-            toast.error("Sign in or create a customer account to start your skin test.");
+            toast.error("Sign in or create an individual account to start your skin test.");
             setViewState("customerlogin");
             window.location.hash = "#/customerlogin";
           } else if (view === "userdashboard") {
-            toast.error("Sign in to open your customer dashboard.");
+            toast.error("Sign in to open your dashboard.");
             setViewState("customerlogin");
             window.location.hash = "#/customerlogin";
           } else if (view === "teamdashboard") {
@@ -772,7 +772,7 @@ export default function App() {
         // 1. Customer views (userdashboard) -> Only customer accounts
         if (view === "userdashboard") {
           if (userRole !== "customer" || isAdmin || isStaff) {
-            toast.error("Customer profile required for customer dashboard. Redirecting to your account dashboard.");
+            toast.error("This page needs an individual account. Opening your workspace instead.");
             redirectLoggedInUserToDashboard();
             return;
           }

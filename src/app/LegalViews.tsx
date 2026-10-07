@@ -131,7 +131,7 @@ export function TermsView({ setView }: { setView: (v: View) => void }) {
           <ul className="list-disc pl-5 space-y-1.5">
             <li>Your facial photographs are private-by-default and are never showcased in public galleries, marketing materials, or vendor storefronts without explicit written authorization.</li>
             <li>We do not sell, license, or broker facial biometric data to third-party ad networks, data brokers, or external entities.</li>
-            <li>You may delete your skin scan photos and stored analysis results at any time directly through your Individual Dashboard or by contacting data privacy support.</li>
+            <li>You may delete your skin scan photos and stored analysis results at any time through your dashboard or by contacting data privacy support.</li>
           </ul>
         </div>
       ),
@@ -714,7 +714,7 @@ export function PrivacyView({ setView }: { setView: (v: View) => void }) {
             <strong className="text-foreground">Right to Erasure & Deletion:</strong>
           </p>
           <ul className="list-disc pl-5 space-y-1.5">
-            <li>You may clear your active skin scan data from your account anytime via your Individual Dashboard.</li>
+            <li>You may clear your active skin scan data from your account through your dashboard.</li>
             <li>You may request complete, permanent purging of your account, order logs, and photos by submitting a deletion request to <a href="mailto:privacy@anovra.africa" className="text-[#008236] underline">privacy@anovra.africa</a>. Requests are processed within 14 business days.</li>
             <li>When data is deleted, it is permanently wiped from active production databases and scheduled for purging from disaster recovery backups in line with industry rotation cycles.</li>
           </ul>
