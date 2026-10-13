@@ -7,7 +7,7 @@ import {
   Package, TrendingUp, Scan, Activity, Eye, Store, ExternalLink,
   Globe, Copy, Check, MessageCircle, Shield, Key, Users, Zap,
   ChevronRight, AlertTriangle, RefreshCw, CheckCircle, Lock, Plus,
-  LifeBuoy, BookOpen, Webhook, ArrowRight, Settings, Menu, X, LogOut, Pencil, Save, Clock
+  LifeBuoy, BookOpen, Webhook, ArrowRight, Settings, Menu, X, LogOut, Pencil, Save, Clock, Sparkles
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -117,6 +117,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
 
   const planRank: Record<VendorPlan, number> = { free: 0, basic: 1, premium: 2, brand: 3 };
   const hasFeatureAccess = (required: Exclude<VendorPlan, "free">) => isBranchAccount || trialActive || planRank[vendorPlan] >= planRank[required];
+  const hasPaidPlanAccess = (required: Exclude<VendorPlan, "free">) => isBranchAccount || planRank[vendorPlan] >= planRank[required];
   const apiDocsKey = apiKey || `${apiKeyPrefix || "ak_live_new_key"} (generate a key to copy the full token)`;
   const apiBaseUrl = `${import.meta.env.VITE_SUPABASE_URL || "https://ejpdrcbgqelxlopivwld.supabase.co"}/functions/v1/vendor-api`;
   const isValidWebhookUrl = (value: string) => {
@@ -565,7 +566,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   }
 
   const generateApiKey = async () => {
-    if (!hasFeatureAccess("brand")) {
+    if (!hasPaidPlanAccess("brand")) {
       setUpgradeTargetFeature("Developer REST API Access");
       setUpgradeTargetPlan("brand");
       setShowPremiumModal(true);
@@ -630,7 +631,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   };
 
   const checkAndSaveCustomDomain = async () => {
-    if (!hasFeatureAccess("brand")) {
+    if (!hasPaidPlanAccess("brand")) {
       setUpgradeTargetFeature("Custom domain mapping");
       setUpgradeTargetPlan("brand");
       setShowPremiumModal(true);
@@ -720,11 +721,20 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
       const amount = prices[planKey] * 100; // in kobo
 
       if (!(window as any).PaystackPop) {
-        toast.error("Payment gateway loading. Please try again in a moment.");
+        toast.loading("Loading Paystack checkout...", { duration: 1500 });
+        const script = document.createElement("script");
+        script.src = "https://js.paystack.co/v1/inline.js";
+        script.onload = () => {
+          payWithPaystack(planKey);
+        };
+        script.onerror = () => {
+          toast.error("Could not load Paystack checkout. Please check your internet connection.");
+        };
+        document.body.appendChild(script);
         return;
       }
 
-      const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+      const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_live_c200939ad943bf0e7578a0b07ff9d41cf7feb8a9";
       if (!paystackPublicKey) {
         toast.error("Paystack public key is not configured.");
         return;
@@ -1108,6 +1118,50 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               </div>
             </div>
           )}
+
+          {/* Free Trial Status & Immediate Upgrade Banner */}
+          {!isBranchAccount && vendorPlan === "free" && (
+            <div className={cn(
+              "p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border shadow-xs animate-fade-in",
+              trialActive
+                ? "bg-gradient-to-r from-emerald-500/10 via-amber-500/10 to-emerald-500/5 border-emerald-500/25"
+                : "bg-red-500/10 border-red-500/20"
+            )}>
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                  trialActive ? "bg-emerald-500/20 text-[#008236]" : "bg-red-500/20 text-red-600"
+                )}>
+                  {trialActive ? <Sparkles className="w-5 h-5 text-[#008236]" /> : <AlertTriangle className="w-5 h-5 text-red-600" />}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {trialActive ? `Free Trial Active (${trialTime.days}d ${trialTime.hours}h remaining)` : "Free Trial Expired"}
+                    </p>
+                    <span className="text-[10px] bg-[#008236] text-white px-2 py-0.5 rounded-full font-mono font-bold">Upgrade Anytime</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {trialActive
+                      ? "Upgrade anytime to keep permanent access and unlock paid features like white-labelling and custom domains."
+                      : "Your trial has concluded. Upgrade to a paid plan to restore full storefront and skin scan features."}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setUpgradeTargetFeature(undefined);
+                  setUpgradeTargetPlan(undefined);
+                  setShowPremiumModal(true);
+                }}
+                className="text-xs font-bold text-white bg-[#008236] hover:bg-[#006c2c] px-4 py-2.5 rounded-xl transition-colors shrink-0 shadow-xs cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                Upgrade to Paid Plan →
+              </button>
+            </div>
+          )}
+
           {/* Setup Profile Warning Banner */}
           {(!tagline || tagline === "Science-backed skincare for African skin" || !location || location === "Lagos, Nigeria") && (
             <div className="bg-[#008236]/10 border border-[#008236]/15 p-4 rounded-2xl flex items-center justify-between gap-4 flex-wrap animate-fade-in">
@@ -1920,8 +1974,20 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         </div>
                         <button
                           onClick={async () => {
-                            setWhiteLabelEnabled(false);
-                            await saveSettings({ white_label: false });
+                            if (!whiteLabelEnabled) {
+                              if (!hasPaidPlanAccess("premium")) {
+                                setUpgradeTargetFeature("Remove Anovra Branding");
+                                setUpgradeTargetPlan("premium");
+                                setShowPremiumModal(true);
+                                toast.warning("Removing Anovra branding requires a paid Vendor Pro plan. Upgrade anytime to unlock.");
+                                return;
+                              }
+                              setWhiteLabelEnabled(true);
+                              await saveSettings({ white_label: true });
+                            } else {
+                              setWhiteLabelEnabled(false);
+                              await saveSettings({ white_label: false });
+                            }
                           }}
                           className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${!whiteLabelEnabled ? "bg-[#008236]" : "bg-muted"}`}
                         >
@@ -1942,11 +2008,11 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                         </div>
                         <button
                           onClick={async () => {
-                            if (!hasFeatureAccess("premium")) {
+                            if (!hasPaidPlanAccess("premium")) {
                               setUpgradeTargetFeature("White-labelled results page");
                               setUpgradeTargetPlan("premium");
                               setShowPremiumModal(true);
-                              toast.warning("White-labelling requires Vendor Pro or Premium Tier. Upgrade to unlock.");
+                              toast.warning("White-labelling requires a paid Vendor Pro plan. Upgrade anytime to unlock.");
                               return;
                             }
                             const nextVal = !whiteLabelEnabled;
@@ -2132,7 +2198,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                             className="px-4 py-2 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors shrink-0 cursor-pointer"
                             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                           >
-                            {domainStatus === "checking" ? "Checking..." : domainStatus === "verified" ? "Verified ✓" : domainStatus === "pending" ? "Needs DNS setup" : "Check setup"}
+                            {domainStatus === "checking" ? "Checking..." : !hasPaidPlanAccess("brand") ? "Unlock with Brand Plan" : domainStatus === "verified" ? "Verified ✓" : domainStatus === "pending" ? "Needs DNS setup" : "Check setup"}
                           </button>
                         </div>
                       </div>
@@ -2308,7 +2374,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 <div>
                   <h3 className="font-medium text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Billing & Subscriptions</h3>
                   <p className="text-xs text-muted-foreground mt-1 max-w-3xl" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    Try all features for 3 days, then choose a paid tier to keep your storefront, skin test link, analytics, and advanced tools active.
+                    You are currently on a 3-day free trial. Upgrade anytime to keep permanent access and unlock paid features.
                   </p>
                 </div>
                 {vendorPlan === "free" && (
@@ -2321,10 +2387,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <p className={cn("text-[10px] font-bold uppercase tracking-wider font-mono", trialActive ? "text-emerald-700" : "text-red-700")}>
-                          {trialActive ? "Trial access ends in" : "Trial ended"}
+                          {trialActive ? "3-Day Free Trial Active" : "Trial ended"}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          {trialActive ? "Trial features turn off when this reaches zero." : "Your storefront and scan link need a paid plan to resume."}
+                          {trialActive ? "Upgrade anytime to secure your plan permanently." : "Your storefront and scan link need a paid plan to resume."}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
@@ -2400,10 +2466,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                       ) : (
                         <button
                           onClick={() => payWithPaystack(p.key as any)}
-                          className="w-full text-center py-1.5 text-[10px] bg-[#008236] text-white hover:bg-[#006c2c] font-bold rounded-lg transition-colors cursor-pointer"
+                          className="w-full text-center py-1.5 text-[10px] bg-[#008236] text-white hover:bg-[#006c2c] font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
                           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                         >
-                          Subscribe with Paystack
+                          {trialActive ? `Upgrade to ${p.name}` : "Subscribe with Paystack"}
                         </button>
                       )}
                     </div>
