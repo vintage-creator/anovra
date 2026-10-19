@@ -25,14 +25,27 @@ type VendorPlan = "free" | "basic" | "premium" | "brand";
 
 export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [tab, setTab] = useState<DashTab>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.hash.includes("?") ? window.location.hash.split("?")[1] : window.location.search);
+      const tabParam = urlParams.get("tab");
+      const validTabs = ["overview", "catalog", "analytics", "settings", "api", "support"];
+      if (tabParam && validTabs.includes(tabParam)) {
+        return tabParam as DashTab;
+      }
+    } catch {}
+
     const saved = sessionStorage.getItem("active_vendor_tab");
     return saved && ["overview", "catalog", "analytics", "settings", "api", "support"].includes(saved)
-      ? saved as DashTab : "overview";
+      ? (saved as DashTab) : "overview";
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     sessionStorage.setItem("active_vendor_tab", tab);
+    try {
+      const currentHash = window.location.hash.split("?")[0] || "#/dashboard";
+      window.history.replaceState(null, "", `${currentHash}?tab=${tab}`);
+    } catch {}
   }, [tab]);
   const [analyticsRange, setAnalyticsRange] = useState<"7d" | "30d" | "90d">("7d");
   const [copied, setCopied] = useState<string | null>(null);

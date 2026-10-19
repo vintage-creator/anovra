@@ -313,8 +313,9 @@ export default function App() {
       "userdashboard", "terms", "privacy"
     ];
     
-    if (validViews.includes(hash as View)) {
-      return hash as View;
+    const cleanHash = hash.split("?")[0].split("#")[0];
+    if (validViews.includes(cleanHash as View)) {
+      return cleanHash as View;
     }
 
     const termsSections = [

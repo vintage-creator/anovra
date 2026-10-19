@@ -88,7 +88,28 @@ async function getFunctionErrorMessage(error: any, fallback: string) {
 }
 
 export function BrandDashboardView({ setView }: { setView: (v: View) => void }) {
-  const [tab, setTab] = useState<BrandTab>("overview");
+  const [tab, setTab] = useState<BrandTab>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.hash.includes("?") ? window.location.hash.split("?")[1] : window.location.search);
+      const tabParam = urlParams.get("tab");
+      const validTabs: BrandTab[] = ["overview", "branches", "products", "team", "activity", "account"];
+      if (tabParam && validTabs.includes(tabParam as BrandTab)) {
+        return tabParam as BrandTab;
+      }
+    } catch {}
+
+    const saved = sessionStorage.getItem("active_brand_tab");
+    const validTabs: BrandTab[] = ["overview", "branches", "products", "team", "activity", "account"];
+    return saved && validTabs.includes(saved as BrandTab) ? (saved as BrandTab) : "overview";
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem("active_brand_tab", tab);
+    try {
+      const currentHash = window.location.hash.split("?")[0] || "#/branddashboard";
+      window.history.replaceState(null, "", `${currentHash}?tab=${tab}`);
+    } catch {}
+  }, [tab]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);

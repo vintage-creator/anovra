@@ -84,7 +84,19 @@ const isValidEmail = (value: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
 
 export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
-  const [tab, setTab] = useState<UserTab>(() => (sessionStorage.getItem("active_user_tab") as UserTab) || "overview");
+  const [tab, setTab] = useState<UserTab>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.hash.includes("?") ? window.location.hash.split("?")[1] : window.location.search);
+      const tabParam = urlParams.get("tab");
+      const validTabs: UserTab[] = ["overview", "history", "recommendations", "ingredients", "progress", "routine", "family", "settings"];
+      if (tabParam && validTabs.includes(tabParam as UserTab)) {
+        return tabParam as UserTab;
+      }
+    } catch {}
+    const saved = sessionStorage.getItem("active_user_tab");
+    const validTabs: UserTab[] = ["overview", "history", "recommendations", "ingredients", "progress", "routine", "family", "settings"];
+    return saved && validTabs.includes(saved as UserTab) ? (saved as UserTab) : "overview";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [shareFallback, setShareFallback] = useState<string | null>(null);
@@ -92,6 +104,10 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
 
   useEffect(() => {
     sessionStorage.setItem("active_user_tab", tab);
+    try {
+      const currentHash = window.location.hash.split("?")[0] || "#/userdashboard";
+      window.history.replaceState(null, "", `${currentHash}?tab=${tab}`);
+    } catch {}
   }, [tab]);
 
   const [showAddFamily, setShowAddFamily] = useState(false);
