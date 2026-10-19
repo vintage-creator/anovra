@@ -319,15 +319,23 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
       // 1. Upload CAC Document to Supabase Storage if vendor or brand
       let documentUrl = "";
       if ((selectedRole === "vendor" || selectedRole === "brand") && cacDocFile) {
+        if (cacDocFile.size > 5 * 1024 * 1024) {
+          toast.error("CAC document exceeds 5MB. Please choose a smaller PDF or image.");
+          setLoading(false);
+          return;
+        }
+
         try {
-          const fileExt = cacDocFile.name.split('.').pop();
+          const fileExt = cacDocFile.name.split('.').pop()?.toLowerCase() || 'jpg';
           const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
           const filePath = `${fileName}`;
+          const contentType = cacDocFile.type || (fileExt === "pdf" ? "application/pdf" : "image/jpeg");
           
           const { error: uploadError } = await supabase.storage
             .from("vendor-documents")
             .upload(filePath, cacDocFile, {
               cacheControl: '3600',
+              contentType,
               upsert: true
             });
             
@@ -337,12 +345,16 @@ export function SignUpView({ setView, accountKind }: { setView: (v: View) => voi
               .getPublicUrl(filePath);
             documentUrl = publicUrl;
           } else {
-            console.warn("Supabase Storage bucket upload failed, using filename fallback:", uploadError);
-            documentUrl = cacDocFile.name;
+            console.error("Supabase Storage bucket upload failed:", uploadError);
+            toast.error("Failed to upload CAC document: " + (uploadError.message || "Storage error") + ". Please try again.");
+            setLoading(false);
+            return;
           }
-        } catch (storageErr) {
-          console.warn("Storage upload exception, using filename fallback:", storageErr);
-          documentUrl = cacDocFile.name;
+        } catch (storageErr: any) {
+          console.error("Storage upload exception:", storageErr);
+          toast.error("Could not upload CAC document. Please check your connection or choose a different file.");
+          setLoading(false);
+          return;
         }
       }
 

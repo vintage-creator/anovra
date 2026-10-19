@@ -710,7 +710,17 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
         const trimmed = String(v.cac_document_url).trim();
         if (!trimmed) return null;
         if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
-        return `https://ejpdrcbgqelxlopivwld.supabase.co/storage/v1/object/public/vendor-documents/${encodeURIComponent(trimmed)}`;
+        return null;
+      })(),
+      cacDocumentName: (() => {
+        if (!v.cac_document_url) return null;
+        const trimmed = String(v.cac_document_url).trim();
+        return trimmed || null;
+      })(),
+      cacUploadFailed: (() => {
+        if (!v.cac_document_url) return false;
+        const trimmed = String(v.cac_document_url).trim();
+        return !trimmed.startsWith("http://") && !trimmed.startsWith("https://");
       })(),
       paymentReference: latestPayment?.reference,
       email: v.email || "",
@@ -2124,6 +2134,15 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                                 <FileText className="w-3 h-3" />
                                 View CAC document
                               </a>
+                            ) : v.cacUploadFailed ? (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium"
+                                title={`Document '${v.cacDocumentName}' failed to upload during vendor registration and is not present in storage.`}
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                              >
+                                <AlertTriangle className="w-3 h-3" />
+                                Upload incomplete ({v.cacDocumentName})
+                              </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                                 <AlertTriangle className="w-3 h-3" />
@@ -2276,6 +2295,14 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               <FileText className="w-3.5 h-3.5" />
                               View Certificate
                             </a>
+                          ) : v.cacUploadFailed ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-amber-600 font-semibold"
+                              title={`Document '${v.cacDocumentName}' failed to upload during registration and is missing from storage.`}
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              Upload incomplete ({v.cacDocumentName})
+                            </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
                               <AlertTriangle className="w-3.5 h-3.5" />
