@@ -165,7 +165,16 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
             This brand page and its branch network are currently undergoing CAC compliance review with Anovra. The public directory will become accessible once verification is approved.
           </p>
           <div className="mt-6 flex flex-col sm:flex-row gap-2 justify-center">
-            <button onClick={() => setView("shop")} className="inline-flex items-center justify-center gap-2 bg-accent text-white px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer">
+            <button
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem("active_shop_slug");
+                  window.location.hash = "#/shop";
+                } catch {}
+                setView("shop");
+              }}
+              className="inline-flex items-center justify-center gap-2 bg-accent text-white px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
+            >
               Browse verified shops
             </button>
             <button onClick={() => setView("signin")} className="inline-flex items-center justify-center gap-2 bg-muted text-foreground px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-secondary cursor-pointer">
@@ -188,7 +197,16 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
           <p className="text-sm text-muted-foreground mt-2">
             This brand page is not available. Check the link or return to the product shop.
           </p>
-          <button onClick={() => setView("shop")} className="mt-6 inline-flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-xl text-sm font-semibold">
+          <button
+            onClick={() => {
+              try {
+                sessionStorage.removeItem("active_shop_slug");
+                window.location.hash = "#/shop";
+              } catch {}
+              setView("shop");
+            }}
+            className="mt-6 inline-flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
+          >
             Open product shop
           </button>
         </div>
@@ -214,7 +232,16 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
           <button onClick={() => setView("landing")} className="flex items-center">
             <img src="/logo.png" alt="Anovra" className="h-10 sm:h-12 w-auto object-contain" />
           </button>
-          <button onClick={() => setView("shop")} className="inline-flex items-center gap-2 text-sm font-semibold text-foreground hover:text-accent">
+          <button
+            onClick={() => {
+              try {
+                sessionStorage.removeItem("active_shop_slug");
+                window.location.hash = "#/shop";
+              } catch {}
+              setView("shop");
+            }}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-foreground hover:text-accent cursor-pointer"
+          >
             <Store className="w-4 h-4" />
             Product shop
           </button>

@@ -51,7 +51,15 @@ export function Footer({ setView, view }: { setView: (v: View) => void; view: Vi
             ].map((l) => (
               <li key={l.label}>
                 <button
-                  onClick={() => setView(l.view)}
+                  onClick={() => {
+                    if (l.view === "shop") {
+                      try {
+                        sessionStorage.removeItem("active_shop_slug");
+                        window.location.hash = "#/shop";
+                      } catch {}
+                    }
+                    setView(l.view);
+                  }}
                   className="text-sm text-emerald-100/80 hover:text-white transition-all duration-150 text-left flex items-center gap-1.5 group cursor-pointer"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >

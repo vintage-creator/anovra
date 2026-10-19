@@ -1019,6 +1019,7 @@ export function UserDashboardView({ setView }: { setView: (v: View) => void }) {
             <button
               onClick={() => {
                 sessionStorage.removeItem("active_shop_slug");
+                window.location.hash = "#/shop";
                 setSidebarOpen(false);
                 setView("shop");
               }}

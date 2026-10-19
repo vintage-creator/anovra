@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Award, Building2, Check, CheckCircle, CheckCircle2, ChevronRight, ExternalLink,
   Globe, Lock, MapPin, MessageCircle, Package, Scan, Search, Shield, ShieldCheck,
-  Star, Store, X, Zap, AlertCircle,
+  Star, Store, X, Zap, AlertCircle, ArrowLeft, Clock, ShieldAlert, ShoppingBag,
 } from "lucide-react";
 import type { View } from "./types";
 import { supabase } from "./utils/supabase";
@@ -25,19 +25,33 @@ const isPlaceholderName = (value?: string | null) =>
   !value || ["my brand", "israel abazie", "my skincare brand"].includes(value.trim().toLowerCase());
 
 const getShopSlugFromUrl = () => {
-  const hashSlug = window.location.hash.includes("/shop/")
-    ? window.location.hash.split("/shop/")[1]?.split("?")[0]
-    : "";
+  const hash = window.location.hash || "";
+  if (hash.includes("/shop/")) {
+    const slug = hash.split("/shop/")[1]?.split("?")[0]?.trim();
+    if (slug) return slug;
+  }
+  if (hash === "#/shop" || hash === "#shop" || !hash) {
+    try {
+      sessionStorage.removeItem("active_shop_slug");
+    } catch {}
+    return "";
+  }
   const storedSlug = sessionStorage.getItem("active_shop_slug") || "";
-  return hashSlug || storedSlug || "";
+  const previewMode = sessionStorage.getItem("shop_preview_mode") === "true";
+  if (previewMode && storedSlug) {
+    return storedSlug;
+  }
+  return "";
 };
 
 // ---- SHOP VIEW ----
 
 export function ShopView({ setView }: { setView: (v: View) => void }) {
-  const [activeSlug] = useState(getShopSlugFromUrl);
+  const [activeSlug, setActiveSlug] = useState(getShopSlugFromUrl);
   const isMarketplace = !activeSlug;
-  const [isPreviewMode] = useState(() => sessionStorage.getItem("shop_preview_mode") === "true");
+  const [isPreviewMode, setIsPreviewMode] = useState(() => sessionStorage.getItem("shop_preview_mode") === "true");
+  const [isPendingReview, setIsPendingReview] = useState(false);
+  const [isOwnerPreview, setIsOwnerPreview] = useState(false);
   const [vendor, setVendor] = useState<any>(() => {
     const snapshot = sessionStorage.getItem("active_shop_snapshot");
     if (snapshot) {
@@ -152,18 +166,56 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
         }
         if (!targetProfile && !isMarketplace) {
           setProfileNotFound(true);
+          setIsPendingReview(false);
+          setIsOwnerPreview(false);
           setVendorProfileId(null);
           setProductsList([]);
           setGenerating(false);
           return;
         }
-        const canPreviewOwnStore = Boolean(isPreviewMode && user && targetProfile?.id === user.id);
+
+        const canPreviewOwnStore = Boolean(
+          user && targetProfile && (
+            targetProfile.id === user.id ||
+            targetProfile.parent_brand_id === user.id ||
+            isPreviewMode
+          )
+        );
+
         const isApprovedForPublic = Boolean(targetProfile?.is_verified) && (targetProfile?.verification_status || "pending") === "approved";
+        let parentBrandOk = true;
+        if (targetProfile?.account_type === "branch" && targetProfile.parent_brand_id) {
+          const parentProfile = profiles?.find((profile) => profile.id === targetProfile.parent_brand_id);
+          if (!parentProfile?.is_verified || (parentProfile?.verification_status || "pending") !== "approved") {
+            parentBrandOk = false;
+          }
+        }
+
+        const isFullyApproved = isApprovedForPublic && parentBrandOk;
+
+        if (targetProfile && !isFullyApproved) {
+          if (canPreviewOwnStore) {
+            setIsOwnerPreview(true);
+            setIsPendingReview(false);
+            setProfileNotFound(false);
+          } else {
+            setIsPendingReview(true);
+            setIsOwnerPreview(false);
+            setProfileNotFound(false);
+            setVendorProfileId(null);
+            setProductsList([]);
+            setGenerating(false);
+            return;
+          }
+        } else {
+          setIsOwnerPreview(false);
+          setIsPendingReview(false);
+          setProfileNotFound(false);
+        }
+
         if (
           !canPreviewOwnStore && targetProfile && (
-            !isApprovedForPublic
-            || !hasActiveAccess(targetProfile)
-            || (targetProfile.account_type === "branch" && targetProfile.branch_status !== "active")
+            (targetProfile.account_type === "branch" && targetProfile.branch_status !== "active")
             || ["suspended", "banned"].includes(targetProfile.verification_status)
           )
         ) {
@@ -173,16 +225,7 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
           setGenerating(false);
           return;
         }
-        if (!canPreviewOwnStore && targetProfile?.account_type === "branch" && targetProfile.parent_brand_id) {
-          const parentProfile = profiles?.find((profile) => profile.id === targetProfile.parent_brand_id);
-          if (!parentProfile?.is_verified || (parentProfile?.verification_status || "pending") !== "approved" || !hasActiveAccess(parentProfile)) {
-            setProfileNotFound(true);
-            setVendorProfileId(null);
-            setProductsList([]);
-            setGenerating(false);
-            return;
-          }
-        }
+
         setProfileNotFound(false);
         setVendorProfileId(targetProfile?.id || null);
 
@@ -524,24 +567,116 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      setView("landing");
+    }
+  };
+
+  const openMarketplace = () => {
+    try {
+      sessionStorage.removeItem("active_shop_slug");
+      sessionStorage.removeItem("shop_preview_mode");
+      window.location.hash = "#/shop";
+    } catch {}
+    setActiveSlug("");
+    setProfileNotFound(false);
+    setIsPendingReview(false);
+    setGenerating(true);
+  };
+
   if (profileNotFound) {
     return (
       <div className="min-h-screen bg-[#FAF7F2] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-5 border border-destructive/20">
-          <AlertCircle className="w-8 h-8 text-destructive" />
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-5 text-amber-700 shadow-xs">
+          <Store className="w-8 h-8" />
         </div>
-        <h2 className="text-2xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-800 text-[11px] font-mono uppercase font-bold mb-3">
+          <span>Storefront Unavailable</span>
+        </div>
+        <h2 className="text-2xl sm:text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
           Storefront Not Found
         </h2>
-        <p className="text-sm text-muted-foreground max-w-sm mb-6 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          The requested storefront does not exist or has not configured their setup.
+        <p className="text-sm text-muted-foreground max-w-md mb-8 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          The requested storefront link <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-foreground">{activeSlug || "shop"}</span> could not be found or has not been published yet.
         </p>
+
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-md justify-center">
+          <button
+            onClick={handleGoBack}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-border bg-card hover:bg-muted text-foreground text-sm font-semibold transition-colors cursor-pointer shadow-xs"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Go to previous page</span>
+          </button>
+
+          <button
+            onClick={openMarketplace}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white text-sm font-semibold transition-colors cursor-pointer shadow-xs"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>Browse Product Shop</span>
+          </button>
+        </div>
+
         <button
           onClick={() => setView("landing")}
-          className="px-5 py-2.5 bg-[#008236] text-white rounded-lg text-sm font-medium hover:bg-[#006c2c] transition-colors cursor-pointer shadow-xs"
+          className="mt-6 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer underline underline-offset-4"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
-          Go back home
+          Return to home
+        </button>
+      </div>
+    );
+  }
+
+  if (isPendingReview) {
+    return (
+      <div className="min-h-screen bg-[#FAF7F2] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-5 text-amber-700 shadow-xs">
+          <Clock className="w-8 h-8" />
+        </div>
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-900 text-[11px] font-mono uppercase font-bold mb-3">
+          <ShieldAlert className="w-3.5 h-3.5" />
+          <span>Verification In Progress</span>
+        </div>
+        <h2 className="text-2xl sm:text-3xl font-light text-foreground mb-2" style={{ fontFamily: "'Fraunces', serif" }}>
+          Storefront Under Compliance Review
+        </h2>
+        <p className="text-sm text-muted-foreground max-w-md mb-8 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          This vendor or branch is currently undergoing CAC and product regulatory verification with Anovra. Public shopping links will go live once verification is complete.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-md justify-center">
+          <button
+            onClick={handleGoBack}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-border bg-card hover:bg-muted text-foreground text-sm font-semibold transition-colors cursor-pointer shadow-xs"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Go to previous page</span>
+          </button>
+
+          <button
+            onClick={openMarketplace}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white text-sm font-semibold transition-colors cursor-pointer shadow-xs"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>Browse Product Shop</span>
+          </button>
+        </div>
+
+        <button
+          onClick={() => setView("landing")}
+          className="mt-6 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer underline underline-offset-4"
+          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+        >
+          Return to home
         </button>
       </div>
     );
@@ -569,14 +704,16 @@ export function ShopView({ setView }: { setView: (v: View) => void }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
 
-      {/* Preview bar, only shown inside the vendor dashboard preview. */}
-      {isPreviewMode && (
+      {/* Preview bar, shown inside vendor dashboard preview or owner preview. */}
+      {(isPreviewMode || isOwnerPreview) && (
         <div className="sticky top-0 z-30 bg-foreground text-primary-foreground py-2 px-4 border-b border-white/10 shadow-md">
           <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2.5">
-              <Store className="w-4 h-4 text-green-400" />
+              <span className="font-bold uppercase tracking-wider font-mono text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded-full">
+                Owner Preview Mode
+              </span>
               <span className="text-xs font-mono opacity-80">
-                Preview: {shopUrl}
+                {isOwnerPreview ? "Pending CAC review. Visible only to you until approved." : `Preview: ${shopUrl}`}
               </span>
             </div>
             <div className="flex items-center gap-2">
