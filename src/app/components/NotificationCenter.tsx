@@ -7,14 +7,13 @@ import {
   Check,
   CheckCheck,
   CheckCircle2,
-  ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Clock,
-  ExternalLink,
+  CreditCard,
+  HeartPulse,
   Info,
-  Package,
-  ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Store,
   Trash2,
   X,
@@ -59,7 +58,8 @@ export function NotificationCenter({
   customNotifications = [],
 }: NotificationCenterProps) {
   const [open, setOpen] = useState(false);
-  const [activeNotification, setActiveNotification] = useState<NotificationItem | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   const [readIds, setReadIds] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem("anovra_read_notifications");
@@ -167,7 +167,7 @@ export function NotificationCenter({
           title: "Brand HQ Workspace Active",
           summary: "You are currently enjoying full enterprise access during your trial period.",
           details:
-            "You can register unlimited regional branch outlets, invite team delegates, upload product catalogs, and generate tailored branch storefront URLs and QR codes.",
+            "You can register regional branch outlets, invite team delegates, upload product catalogs, and generate tailored branch storefront URLs and QR codes.",
           category: "trial",
           severity: "info",
           timestamp: "Active",
@@ -184,7 +184,7 @@ export function NotificationCenter({
           "Anovra allows skincare brands to map state distributors and physical branch stores. Each branch gets its own localized product shop and tailored skin test link attributed directly to their location.",
         category: "onboarding",
         severity: "info",
-        timestamp: "Tip",
+        timestamp: "Setup",
         actionLabel: "Go to Branches",
         actionView: "branddashboard",
       });
@@ -272,8 +272,8 @@ export function NotificationCenter({
       return next;
     });
 
-    if (activeNotification?.id === id) {
-      setActiveNotification(null);
+    if (expandedId === id) {
+      setExpandedId(null);
     }
   };
 
@@ -287,7 +287,7 @@ export function NotificationCenter({
       } catch {}
       return next;
     });
-    setActiveNotification(null);
+    setExpandedId(null);
   };
 
   const handleMarkAllRead = (e?: React.MouseEvent) => {
@@ -302,8 +302,8 @@ export function NotificationCenter({
     });
   };
 
-  const handleOpenNotificationDetails = (item: NotificationItem) => {
-    // Mark as read
+  const handleToggleExpand = (item: NotificationItem) => {
+    // Mark as read when opened
     setReadIds((prev) => {
       const next = new Set(prev);
       next.add(item.id);
@@ -312,11 +312,12 @@ export function NotificationCenter({
       } catch {}
       return next;
     });
-    setActiveNotification(item);
+
+    setExpandedId((prev) => (prev === item.id ? null : item.id));
   };
 
-  const handleExecuteAction = (item: NotificationItem) => {
-    setActiveNotification(null);
+  const handleExecuteAction = (item: NotificationItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setOpen(false);
 
     if (item.actionCallback) {
@@ -340,106 +341,121 @@ export function NotificationCenter({
       return severity === "success" ? <ShieldCheck className="w-4 h-4 text-emerald-600" /> : <Clock className="w-4 h-4 text-amber-600" />;
     }
     if (category === "trial") {
-      return severity === "error" ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <Sparkles className="w-4 h-4 text-amber-600" />;
+      return severity === "error" ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CreditCard className="w-4 h-4 text-amber-600" />;
     }
     if (category === "routine") {
-      return <Sparkles className="w-4 h-4 text-[#008236]" />;
+      return <HeartPulse className="w-4 h-4 text-[#008236]" />;
     }
-    if (category === "onboarding" || category === "activity") {
+    if (category === "onboarding") {
+      return <Building2 className="w-4 h-4 text-blue-600" />;
+    }
+    if (category === "activity") {
       return <Store className="w-4 h-4 text-blue-600" />;
+    }
+    if (category === "system") {
+      return <CheckCircle2 className="w-4 h-4 text-emerald-600" />;
     }
     return <Info className="w-4 h-4 text-muted-foreground" />;
   };
 
   return (
-    <>
-      <DropdownMenu open={open} onOpenChange={setOpen}>
-        <DropdownMenuTrigger asChild>
-          <button
-            className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-border bg-card hover:bg-muted text-foreground flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
-            aria-label={`Notifications (${unreadCount} unread)`}
-            title={`Notifications (${unreadCount} unread)`}
-          >
-            <Bell className="w-4 h-4 text-foreground" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold font-mono flex items-center justify-center shadow-xs ring-2 ring-background animate-in zoom-in duration-200">
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </span>
-            )}
-          </button>
-        </DropdownMenuTrigger>
-
-        <DropdownMenuContent
-          align="end"
-          sideOffset={8}
-          className="w-[min(92vw,400px)] p-0 rounded-2xl border border-border bg-card shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200"
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-border bg-card hover:bg-muted text-foreground flex items-center justify-center transition-colors cursor-pointer shadow-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-[#008236]"
+          aria-label={`Notifications (${unreadCount} unread)`}
+          title={`Notifications (${unreadCount} unread)`}
         >
-          {/* Header Bar */}
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/30">
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-foreground" />
-              <span className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Notifications
-              </span>
-              {unreadCount > 0 ? (
-                <span className="text-[10px] font-bold font-mono uppercase bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded-full">
-                  {unreadCount} New
-                </span>
-              ) : (
-                <span className="text-[10px] font-mono text-muted-foreground">Caught up</span>
-              )}
-            </div>
+          <Bell className="w-4 h-4 text-foreground" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#008236] text-white text-[10px] font-bold font-mono flex items-center justify-center shadow-xs ring-2 ring-background animate-in zoom-in duration-200">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </button>
+      </DropdownMenuTrigger>
 
-            {visibleNotifications.length > 0 && (
-              <div className="flex items-center gap-1">
-                {unreadCount > 0 && (
-                  <button
-                    onClick={handleMarkAllRead}
-                    className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs inline-flex items-center gap-1 cursor-pointer"
-                    title="Mark all as read"
-                  >
-                    <CheckCheck className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-[11px] hidden sm:inline">Mark read</span>
-                  </button>
-                )}
-                <button
-                  onClick={handleClearAll}
-                  className="p-1 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 transition-colors text-xs inline-flex items-center gap-1 cursor-pointer"
-                  title="Clear all notifications"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span className="text-[11px] hidden sm:inline">Clear all</span>
-                </button>
-              </div>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={8}
+        className="w-[min(94vw,420px)] p-0 rounded-2xl border border-border bg-card shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150"
+      >
+        {/* Header Bar */}
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/40">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-foreground" />
+            <span className="text-sm font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Notifications
+            </span>
+            {unreadCount > 0 ? (
+              <span className="text-[10px] font-bold font-mono uppercase bg-[#008236]/15 text-[#008236] border border-[#008236]/30 px-2 py-0.5 rounded-full">
+                {unreadCount} unread
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono text-muted-foreground">All caught up</span>
             )}
           </div>
 
-          {/* Notification Items List */}
-          <div className="p-3 space-y-2 max-h-[65vh] overflow-y-auto divide-y divide-border/40">
-            {visibleNotifications.length === 0 ? (
-              <div className="py-10 text-center px-4">
-                <div className="w-12 h-12 rounded-2xl bg-muted/50 border border-border flex items-center justify-center mx-auto mb-3 text-muted-foreground">
-                  <Check className="w-5 h-5 text-emerald-600" />
-                </div>
-                <p className="text-xs font-semibold text-foreground">All caught up</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  You have cleared all active notifications.
-                </p>
+          {visibleNotifications.length > 0 && (
+            <div className="flex items-center gap-1">
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="px-2 py-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs inline-flex items-center gap-1 cursor-pointer"
+                  title="Mark all as read"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  <span className="text-[11px] hidden sm:inline">Mark read</span>
+                </button>
+              )}
+              <button
+                onClick={handleClearAll}
+                className="px-2 py-1 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 transition-colors text-xs inline-flex items-center gap-1 cursor-pointer"
+                title="Clear all notifications"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="text-[11px] hidden sm:inline">Clear all</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Notification Items List */}
+        <div className="p-2 space-y-1.5 max-h-[68vh] overflow-y-auto divide-y divide-border/30">
+          {visibleNotifications.length === 0 ? (
+            <div className="py-12 text-center px-4">
+              <div className="w-10 h-10 rounded-xl bg-muted border border-border flex items-center justify-center mx-auto mb-2.5 text-muted-foreground">
+                <Check className="w-5 h-5 text-emerald-600" />
               </div>
-            ) : (
-              visibleNotifications.map((item) => {
-                const isRead = readIds.has(item.id);
-                return (
+              <p className="text-xs font-semibold text-foreground">No active notifications</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                You're completely caught up. New updates will appear here.
+              </p>
+            </div>
+          ) : (
+            visibleNotifications.map((item) => {
+              const isRead = readIds.has(item.id);
+              const isExpanded = expandedId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className={cn(
+                    "rounded-xl transition-all pt-1.5 first:pt-0 overflow-hidden",
+                    isRead ? "bg-card" : "bg-muted/30"
+                  )}
+                >
+                  {/* Collapsed / Header Row */}
                   <div
-                    key={item.id}
-                    onClick={() => handleOpenNotificationDetails(item)}
+                    onClick={() => handleToggleExpand(item)}
                     className={cn(
-                      "group relative p-3 rounded-xl transition-all cursor-pointer pt-3 first:pt-0",
-                      isRead ? "bg-card hover:bg-muted/40" : "bg-muted/30 hover:bg-muted/60 border border-border/60 shadow-2xs"
+                      "p-3 rounded-xl border border-transparent hover:border-border/60 transition-all cursor-pointer relative",
+                      isExpanded ? "bg-muted/50 border-border/80" : "hover:bg-muted/40",
+                      !isRead && !isExpanded && "border-border/40 shadow-2xs"
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      {/* Category Icon Badge */}
+                      {/* Icon */}
                       <div
                         className={cn(
                           "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 border",
@@ -452,128 +468,85 @@ export function NotificationCenter({
                         {getCategoryIcon(item.category, item.severity)}
                       </div>
 
-                      {/* Content */}
+                      {/* Main Summary */}
                       <div className="flex-1 min-w-0 pr-6">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className={cn("text-xs font-semibold text-foreground truncate", !isRead && "font-bold")}>
+                          <p className={cn("text-xs text-foreground truncate", !isRead ? "font-bold" : "font-semibold")}>
                             {item.title}
                           </p>
                           {!isRead && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#008236] shrink-0" />
                           )}
                         </div>
 
-                        <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
-                          {item.summary}
-                        </p>
+                        {!isExpanded && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                            {item.summary}
+                          </p>
+                        )}
 
-                        <div className="mt-2 flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold">
+                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-mono text-muted-foreground uppercase font-medium">
                             {item.timestamp}
                           </span>
-                          <span className="text-[11px] font-semibold text-accent inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
-                            Details <ChevronRight className="w-3 h-3" />
+                          <span className="text-[11px] font-semibold text-foreground/80 inline-flex items-center gap-0.5 hover:text-foreground">
+                            {isExpanded ? (
+                              <>Collapse <ChevronUp className="w-3 h-3 ml-0.5" /></>
+                            ) : (
+                              <>Read details <ChevronDown className="w-3 h-3 ml-0.5" /></>
+                            )}
                           </span>
                         </div>
                       </div>
 
-                      {/* Dismiss Single Notification Button */}
+                      {/* Dismiss One */}
                       <button
                         onClick={(e) => handleDismissOne(item.id, e)}
-                        className="absolute top-2.5 right-2 p-1 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors opacity-70 hover:opacity-100 cursor-pointer"
+                        className="absolute top-2.5 right-2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                         title="Dismiss notification"
                         aria-label="Dismiss notification"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
+
+                    {/* Inline Expanded Details */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-border/60 animate-in fade-in duration-150">
+                        <div className="rounded-lg bg-card/80 border border-border/80 p-3 mb-3">
+                          <p className="text-xs text-foreground/90 leading-relaxed whitespace-pre-line">
+                            {item.details}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            onClick={(e) => handleDismissOne(item.id, e)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 text-[11px] font-medium transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Dismiss</span>
+                          </button>
+
+                          {item.actionLabel && (
+                            <button
+                              onClick={(e) => handleExecuteAction(item, e)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#008236] hover:bg-[#006c2c] text-white text-[11px] font-bold transition-colors cursor-pointer shadow-xs"
+                            >
+                              <span>{item.actionLabel}</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                );
-              })
-            )}
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {/* Full Notification Detail Modal */}
-      {activeNotification && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setActiveNotification(null)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close Button */}
-            <button
-              onClick={() => setActiveNotification(null)}
-              className="absolute top-4 right-4 p-1.5 rounded-xl bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              aria-label="Close details"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            {/* Modal Header */}
-            <div className="flex items-start gap-3.5 mb-4 pr-8">
-              <div
-                className={cn(
-                  "w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border",
-                  activeNotification.severity === "success" && "bg-emerald-500/15 border-emerald-500/30 text-emerald-700",
-                  activeNotification.severity === "warning" && "bg-amber-500/15 border-amber-500/30 text-amber-700",
-                  activeNotification.severity === "error" && "bg-rose-500/15 border-rose-500/30 text-rose-700",
-                  activeNotification.severity === "info" && "bg-blue-500/15 border-blue-500/30 text-blue-700"
-                )}
-              >
-                {getCategoryIcon(activeNotification.category, activeNotification.severity)}
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-muted border border-border text-foreground">
-                    {activeNotification.category}
-                  </span>
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {activeNotification.timestamp}
-                  </span>
                 </div>
-                <h3 className="text-lg font-bold text-foreground leading-snug">
-                  {activeNotification.title}
-                </h3>
-              </div>
-            </div>
-
-            {/* Modal Body / Detailed Content */}
-            <div className="rounded-xl bg-muted/30 border border-border/80 p-4 mb-5">
-              <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line">
-                {activeNotification.details}
-              </p>
-            </div>
-
-            {/* Modal Action Buttons */}
-            <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2 border-t border-border">
-              <button
-                onClick={() => handleDismissOne(activeNotification.id)}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted text-xs font-semibold transition-colors cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Dismiss notification</span>
-              </button>
-
-              {activeNotification.actionLabel && (
-                <button
-                  onClick={() => handleExecuteAction(activeNotification)}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
-                >
-                  <span>{activeNotification.actionLabel}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
+              );
+            })
+          )}
         </div>
-      )}
-    </>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

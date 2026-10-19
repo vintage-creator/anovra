@@ -7,7 +7,7 @@ import {
   Package, TrendingUp, Scan, Activity, Eye, Store, ExternalLink,
   Globe, Copy, Check, MessageCircle, Shield, Key, Users, Zap,
   ChevronRight, AlertTriangle, RefreshCw, CheckCircle, Lock, Plus,
-  LifeBuoy, BookOpen, Webhook, ArrowRight, Settings, Menu, X, LogOut, Pencil, Save, Clock, Sparkles
+  LifeBuoy, BookOpen, Webhook, ArrowRight, Settings, Menu, X, LogOut, Pencil, Save, Clock,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -1136,7 +1136,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                   "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
                   trialActive ? "bg-emerald-500/20 text-[#008236]" : "bg-red-500/20 text-red-600"
                 )}>
-                  {trialActive ? <Sparkles className="w-5 h-5 text-[#008236]" /> : <AlertTriangle className="w-5 h-5 text-red-600" />}
+                  {trialActive ? <Clock className="w-5 h-5 text-[#008236]" /> : <AlertTriangle className="w-5 h-5 text-red-600" />}
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
