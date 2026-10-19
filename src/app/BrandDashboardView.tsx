@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ElementType } from "react";
 import {
-  Activity, AlertCircle, Archive, ArrowRight, ArrowUpRight, BarChart2, Building2, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, CreditCard, Edit,
+  Activity, AlertCircle, Archive, ArrowRight, ArrowUpRight, BarChart2, Bell, Building2, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, CreditCard, Edit,
   ExternalLink, Eye, Filter, GripVertical, HelpCircle, Image as ImageIcon, Info, LayoutDashboard, LayoutGrid, Link as LinkIcon, List, Loader2,
-  Lock, LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, Scan, Search, Settings, ShieldCheck,
+  Lock, LogOut, Mail, MapPin, Menu, Package, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, Scan, Search, Settings, ShieldAlert, ShieldCheck,
   Tag, Trash2, Upload, Users, X,
 } from "lucide-react";
 import type { View } from "./types";
@@ -92,6 +92,15 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState("");
+  const [authUser, setAuthUser] = useState<any>(null);
+  const [cacBannerDismissed, setCacBannerDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem("cac_banner_dismissed") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [brandProfile, setBrandProfile] = useState<any>(null);
   const brandTrialExpired = brandProfile?.plan === "free"
     && Date.now() > new Date(brandProfile.created_at || 0).getTime() + 3 * 24 * 60 * 60 * 1000;
@@ -154,6 +163,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
         setView("signin");
         return;
       }
+      setAuthUser(user);
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
@@ -654,6 +664,117 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
         showShopLink={false}
         onMenuClick={() => setMobileMenuOpen(true)}
         menuLabel="Menu"
+        actions={
+          <DropdownMenu open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-border bg-card hover:bg-muted text-foreground flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Notifications"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {!isBrandVerified && (
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-background animate-pulse" />
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              className="w-[min(92vw,380px)] p-0 rounded-2xl border border-border bg-card shadow-2xl overflow-hidden"
+            >
+              <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-foreground" />
+                  <span className="text-sm font-semibold text-foreground">Notifications</span>
+                </div>
+                {!isBrandVerified ? (
+                  <span className="text-[10px] font-bold font-mono uppercase bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded-full">
+                    1 Pending
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono text-muted-foreground">All caught up</span>
+                )}
+              </div>
+              <div className="p-3 space-y-2 max-h-[70vh] overflow-y-auto">
+                {!isBrandVerified ? (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 mt-0.5">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-foreground">CAC Verification Pending</p>
+                        <span className="text-[9px] font-mono uppercase font-bold text-amber-700 bg-amber-200/80 px-1.5 py-0.5 rounded">
+                          In Review
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                        Your CAC documentation is currently under review by Anovra compliance. Public storefront and scan links remain locked until verified.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setNotificationsOpen(false);
+                          setView("contact");
+                        }}
+                        className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        Contact Compliance <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground">Account Verified</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Your brand identity and CAC credentials are fully verified. Public profile and branch links are active.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {brandTrialExpired ? (
+                  <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/25 flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-700 dark:text-orange-300 flex items-center justify-center shrink-0 mt-0.5">
+                      <AlertCircle className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground">Trial Expired</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Your 3-day Brand HQ trial has ended. Contact Anovra to activate your annual subscription.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setNotificationsOpen(false);
+                          setView("contact");
+                        }}
+                        className="mt-2 text-[11px] font-semibold text-orange-700 dark:text-orange-300 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        Upgrade Plan <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-muted/40 border border-border flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center shrink-0 mt-0.5">
+                      <Info className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground">Brand HQ Trial Active</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        You have full access to branch setup, team collaboration, and product indexing.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
@@ -668,34 +789,37 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
           />
           <div
             className={cn(
-              "absolute left-0 top-0 bottom-0 w-[min(86vw,320px)] bg-card border-r border-border shadow-2xl p-4 transform-gpu transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+              "absolute left-0 top-0 bottom-0 w-[min(86vw,320px)] bg-card border-r border-border shadow-2xl p-4 flex flex-col transform-gpu transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
               mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
             )}
           >
-            <div className="flex items-center justify-between mb-4">
-              <img src="/logo.png" alt="Anovra" className="h-11 w-auto object-contain" />
+            <div className="flex items-center justify-between mb-3 shrink-0">
+              <img src="/logo.png" alt="Anovra" className="h-10 w-auto object-contain" />
               <button
                 onClick={() => setMobileMenuOpen(false)}
-                className="w-9 h-9 rounded-xl bg-muted text-foreground flex items-center justify-center"
+                className="w-9 h-9 rounded-xl bg-muted text-foreground flex items-center justify-center hover:bg-secondary transition-colors cursor-pointer"
                 aria-label="Close brand menu"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <BrandSidebar
-              brandName={brandProfile?.business_name || brandProfile?.name}
-              brandLogo={brandProfile?.logo_url}
-              navItems={navItems}
-              tab={tab}
-              copied={copied}
-              brandUrl={brandUrl}
-              isBrandVerified={isBrandVerified}
-              copy={copy}
-              setTab={selectTab}
-              signOut={signOut}
-              onEditBrandIdentity={openEditBrandIdentity}
-              setView={setView}
-            />
+            <div className="flex-1 min-h-0 overflow-y-auto pr-0.5 pb-2">
+              <BrandSidebar
+                brandName={brandProfile?.business_name || brandProfile?.name}
+                brandLogo={brandProfile?.logo_url}
+                brandSlug={brandSlug}
+                navItems={navItems}
+                tab={tab}
+                copied={copied}
+                brandUrl={brandUrl}
+                isBrandVerified={isBrandVerified}
+                copy={copy}
+                setTab={selectTab}
+                signOut={signOut}
+                onEditBrandIdentity={openEditBrandIdentity}
+                setView={setView}
+              />
+            </div>
           </div>
         </div>
 
@@ -704,6 +828,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
             <BrandSidebar
               brandName={brandProfile?.business_name || brandProfile?.name}
               brandLogo={brandProfile?.logo_url}
+              brandSlug={brandSlug}
               navItems={navItems}
               tab={tab}
               copied={copied}
@@ -729,9 +854,9 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
               <button type="button" onClick={() => setView("contact")} className="shrink-0 rounded-md bg-[#8b431b] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6e3515]">Contact Anovra</button>
             </section>}
 
-            {!isBrandVerified && (
-              <section className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50/70 p-4 sm:p-5 text-amber-900 sm:flex-row sm:items-center sm:justify-between shadow-xs" role="status">
-                <div className="flex items-start gap-3">
+            {!isBrandVerified && !cacBannerDismissed && (
+              <section className="relative flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50/80 p-4 sm:p-5 text-amber-900 sm:flex-row sm:items-center sm:justify-between shadow-xs" role="status">
+                <div className="flex items-start gap-3 pr-8 sm:pr-0">
                   <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0 text-amber-800">
                     <Clock className="h-5 w-5" />
                   </div>
@@ -743,17 +868,33 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-amber-800 leading-relaxed max-w-2xl">
-                      Your CAC documents and brand credentials are currently under review by Anovra compliance. Public links (brand profile, branch stores, and skin tests) remain locked and cannot be copied until approved.
+                      Your CAC documents and brand credentials are currently under review by Anovra compliance. Public links (brand profile, branch stores, and skin tests) remain locked and cannot be copied until approved. You can check notifications anytime via the bell icon above.
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setView("contact")}
-                  className="shrink-0 rounded-xl bg-amber-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-900 transition-colors self-start sm:self-auto cursor-pointer"
-                >
-                  Contact Compliance
-                </button>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setView("contact")}
+                    className="shrink-0 rounded-xl bg-amber-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-900 transition-colors cursor-pointer"
+                  >
+                    Contact Compliance
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCacBannerDismissed(true);
+                      try {
+                        sessionStorage.setItem("cac_banner_dismissed", "true");
+                      } catch {}
+                    }}
+                    className="p-1.5 rounded-lg text-amber-700 hover:text-amber-950 hover:bg-amber-100 transition-colors cursor-pointer absolute top-3 right-3 sm:static"
+                    title="Dismiss notification"
+                    aria-label="Dismiss CAC verification banner"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </section>
             )}
             {tab === "overview" && (
@@ -1024,11 +1165,174 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
             {tab === "team" && <BrandTeamSection branches={enrichedBranches} />}
 
             {tab === "account" && (
-              <div className="space-y-5">
+              <div className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-semibold text-foreground">Brand account</h1>
-                  <p className="mt-1 text-sm text-muted-foreground">Manage your Brand HQ account and organisation access.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Manage your Brand HQ account details, compliance status, and organisation access.</p>
                 </div>
+
+                <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-xs space-y-6">
+                  {/* Brand Profile Overview */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-border">
+                    <div className="flex items-center gap-4">
+                      {brandProfile?.logo_url ? (
+                        <div className="w-16 h-16 rounded-2xl bg-white p-2 border border-border shadow-xs flex items-center justify-center shrink-0 overflow-hidden">
+                          <img src={brandProfile.logo_url} alt={brandProfile?.business_name || "Brand"} className="w-full h-full object-contain" />
+                        </div>
+                      ) : (
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-700 to-stone-900 text-amber-100 flex items-center justify-center shrink-0 font-bold text-2xl shadow-xs">
+                          {(brandProfile?.business_name || brandProfile?.name || "B")[0]}
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h2 className="text-lg font-bold text-foreground">{brandProfile?.business_name || brandProfile?.name || "Brand HQ"}</h2>
+                          {isBrandVerified ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 rounded-full">
+                              <ShieldCheck className="w-3.5 h-3.5" /> CAC Verified
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-full">
+                              <Clock className="w-3.5 h-3.5 text-amber-700" /> Pending Review
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {brandProfile?.tagline || "Verified skincare & wellness enterprise"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openEditBrandIdentity}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-colors cursor-pointer self-start sm:self-auto"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      <span>Edit Brand Details</span>
+                    </button>
+                  </div>
+
+                  {/* Account Information Details Grid */}
+                  <div>
+                    <h3 className="text-xs uppercase font-mono font-bold tracking-wider text-muted-foreground mb-3">
+                      Account & Organisation Information
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="p-4 rounded-xl bg-muted/30 border border-border/80">
+                        <span className="text-[10px] uppercase font-mono font-bold text-muted-foreground block mb-1">
+                          Registered Email
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-medium text-foreground truncate select-all">
+                            {authUser?.email || brandProfile?.email || "—"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-muted/30 border border-border/80">
+                        <span className="text-[10px] uppercase font-mono font-bold text-muted-foreground block mb-1">
+                          Account Role
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-semibold text-foreground">
+                            Brand HQ Administrator
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-muted/30 border border-border/80">
+                        <span className="text-[10px] uppercase font-mono font-bold text-muted-foreground block mb-1">
+                          Member Since / Created
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-medium text-foreground">
+                            {brandProfile?.created_at || authUser?.created_at
+                              ? new Date(brandProfile?.created_at || authUser?.created_at).toLocaleDateString("en-GB", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "—"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-muted/30 border border-border/80">
+                        <span className="text-[10px] uppercase font-mono font-bold text-muted-foreground block mb-1">
+                          CAC Registration Number
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-mono font-medium text-foreground">
+                            {brandProfile?.cac_number || brandProfile?.cac || authUser?.user_metadata?.cac_number || "Submitted / On file"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-muted/30 border border-border/80">
+                        <span className="text-[10px] uppercase font-mono font-bold text-muted-foreground block mb-1">
+                          Headquarters Location
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-medium text-foreground">
+                            {brandProfile?.location || "Nigeria"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-muted/30 border border-border/80">
+                        <span className="text-[10px] uppercase font-mono font-bold text-muted-foreground block mb-1">
+                          Active Branches
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-medium text-foreground">
+                            {branches.length} {branches.length === 1 ? "branch" : "branches"} registered
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Verification Status Card */}
+                  <div className={cn(
+                    "p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+                    isBrandVerified ? "bg-emerald-500/10 border-emerald-500/25" : "bg-amber-500/10 border-amber-500/25"
+                  )}>
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5",
+                        isBrandVerified ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                      )}>
+                        {isBrandVerified ? <ShieldCheck className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          {isBrandVerified ? "CAC Verification Approved" : "CAC Verification Pending Compliance Review"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed max-w-2xl">
+                          {isBrandVerified
+                            ? "Your enterprise credentials and business registry are verified. All public storefront and scan features are active across all branches."
+                            : "Your documentation is being reviewed by Anovra compliance. You can still preview your public brand page and configure your branches while in review."}
+                        </p>
+                      </div>
+                    </div>
+                    {!isBrandVerified && (
+                      <button
+                        type="button"
+                        onClick={() => setView("contact")}
+                        className="shrink-0 rounded-xl bg-amber-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-900 transition-colors cursor-pointer self-start sm:self-auto"
+                      >
+                        Contact Compliance
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <AccountDeletionSection kind="brand" setView={setView} />
               </div>
             )}
@@ -1307,6 +1611,7 @@ function LinkCopyCard({
 function BrandSidebar({
   brandName,
   brandLogo,
+  brandSlug,
   navItems,
   tab,
   copied,
@@ -1320,6 +1625,7 @@ function BrandSidebar({
 }: {
   brandName?: string;
   brandLogo?: string | null;
+  brandSlug?: string;
   navItems: { id: BrandTab; label: string; icon: ElementType }[];
   tab: BrandTab;
   copied: string;
@@ -1332,7 +1638,7 @@ function BrandSidebar({
   setView?: (v: View) => void;
 }) {
   return (
-    <div className="h-full flex flex-col justify-between">
+    <div className="min-h-full flex flex-col justify-between">
       <div className="space-y-3">
         <div className="px-3 py-3 border-b border-border mb-3">
           <div className="flex items-center gap-2.5">
@@ -1424,7 +1730,16 @@ function BrandSidebar({
               <span>Analyse Skin (Test)</span>
             </button>
             <button
-              onClick={() => setView("brand")}
+              onClick={() => {
+                if (brandSlug) {
+                  try {
+                    sessionStorage.setItem("active_brand_slug", brandSlug);
+                    localStorage.setItem("anovra_brand_slug", brandSlug);
+                    window.location.hash = `#/brand/${brandSlug}`;
+                  } catch {}
+                }
+                setView("brand");
+              }}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium cursor-pointer"
             >
               <ExternalLink className="w-4 h-4" />

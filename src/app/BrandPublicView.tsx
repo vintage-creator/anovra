@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight, Building2, CheckCircle, Loader2, MapPin, Package, Scan, Search, ShieldCheck, Store,
+  ArrowRight, Building2, CheckCircle, Clock, Loader2, MapPin, Package, Scan, Search, ShieldCheck, Store,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -32,28 +32,66 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
   const [products, setProducts] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [notFound, setNotFound] = useState(false);
+  const [isPendingVerification, setIsPendingVerification] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   useEffect(() => {
     const loadBrand = async () => {
       setLoading(true);
       try {
-        if (activeSlug) sessionStorage.setItem("active_brand_slug", activeSlug);
+        const slugToLoad = activeSlug || sessionStorage.getItem("active_brand_slug") || "";
+        if (slugToLoad) sessionStorage.setItem("active_brand_slug", slugToLoad);
 
+        // 1. Try public verified directory RPC first
         const { data, error } = await supabase.rpc("get_public_brand_directory", {
-          brand_slug: activeSlug,
+          brand_slug: slugToLoad,
         });
-        if (error) throw error;
 
         const target = data?.brand;
-        if (!target) {
-          setNotFound(true);
+        if (target) {
+          setBrand(target);
+          const activeBranches = data?.branches || [];
+          setBranches(activeBranches);
+          setProducts(activeBranches.flatMap((branch: any) => branch.products || []));
           return;
         }
 
-        setBrand(target);
-        const activeBranches = data?.branches || [];
-        setBranches(activeBranches);
-        setProducts(activeBranches.flatMap((branch: any) => branch.products || []));
+        // 2. If not found in public directory, check if this brand exists but is pending CAC verification
+        const { data: { user } } = await supabase.auth.getUser();
+        let query = supabase
+          .from("profiles")
+          .select("id, name, business_name, tagline, location, slug, logo_url, is_verified, verification_status")
+          .eq("account_type", "brand");
+
+        if (slugToLoad) {
+          query = query.or(`slug.eq.${slugToLoad},business_name.ilike.%${slugToLoad.replace(/-/g, " ")}%`);
+        } else if (user) {
+          query = query.eq("id", user.id);
+        }
+
+        const { data: pendingBrand } = await query.maybeSingle();
+
+        if (pendingBrand) {
+          const isOwner = user && user.id === pendingBrand.id;
+          if (isOwner) {
+            // Allow the authenticated brand owner to preview their own brand directory
+            setBrand({ ...pendingBrand, isPreview: true });
+            setIsPreviewMode(true);
+            const { data: ownerBranches } = await supabase
+              .from("brand_branches")
+              .select("id, branch_id, branch_name, branch_slug, location, created_at")
+              .eq("brand_id", pendingBrand.id);
+            setBranches(ownerBranches || []);
+            return;
+          } else {
+            // Public visitor accessing an unverified brand
+            setBrand(pendingBrand);
+            setIsPendingVerification(true);
+            return;
+          }
+        }
+
+        setNotFound(true);
       } catch (error) {
         console.error("Brand page load failed:", error);
         setNotFound(true);
@@ -109,6 +147,36 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
     );
   }
 
+  if (isPendingVerification) {
+    const pendingBrandName = brand?.business_name || brand?.name || titleFromSlug(activeSlug);
+    return (
+      <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-card border border-border rounded-2xl p-8 text-center shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-700 flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
+            <Clock className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] uppercase font-bold font-mono bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-full border border-amber-200">
+            Verification Pending
+          </span>
+          <h1 className="text-2xl font-light text-foreground mt-3" style={{ fontFamily: "'Fraunces', serif" }}>
+            {pendingBrandName} is Under Review
+          </h1>
+          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+            This brand page and its branch network are currently undergoing CAC compliance review with Anovra. The public directory will become accessible once verification is approved.
+          </p>
+          <div className="mt-6 flex flex-col sm:flex-row gap-2 justify-center">
+            <button onClick={() => setView("shop")} className="inline-flex items-center justify-center gap-2 bg-accent text-white px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer">
+              Browse verified shops
+            </button>
+            <button onClick={() => setView("signin")} className="inline-flex items-center justify-center gap-2 bg-muted text-foreground px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-secondary cursor-pointer">
+              Brand Sign In
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (notFound) {
     return (
       <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center px-4">
@@ -133,6 +201,14 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
 
   return (
     <div className="min-h-screen bg-[#FAF7F2]">
+      {isPreviewMode && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 text-center text-xs text-amber-900 font-medium flex items-center justify-center gap-2 flex-wrap">
+          <span className="font-bold uppercase tracking-wider font-mono text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded-full">
+            Owner Preview Mode
+          </span>
+          <span>Your brand page is pending CAC verification. This preview is visible only to you until approved.</span>
+        </div>
+      )}
       <header className="sticky top-0 z-40 bg-[#FAF7F2]/92 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
           <button onClick={() => setView("landing")} className="flex items-center">

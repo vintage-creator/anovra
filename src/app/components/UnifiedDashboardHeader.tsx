@@ -22,6 +22,7 @@ interface UnifiedDashboardHeaderProps {
   menuLabel?: string;
   onProfileClick?: () => void;
   profileName?: string;
+  actions?: React.ReactNode;
 }
 
 export function UnifiedDashboardHeader({
@@ -38,6 +39,7 @@ export function UnifiedDashboardHeader({
   menuLabel = "Menu",
   onProfileClick,
   profileName,
+  actions,
 }: UnifiedDashboardHeaderProps) {
   const [copied, setCopied] = useState(false);
   const [brandSlug, setBrandSlug] = useState("your-brand");
@@ -217,6 +219,9 @@ export function UnifiedDashboardHeader({
                 {avatarInitials}
               </button>
             )}
+
+            {/* Custom Header Actions (e.g. Notifications Bell) */}
+            {actions}
 
             {/* Mobile/Tablet Hamburger Menu Button - ALWAYS PINNED ON THE RIGHT */}
             {onMenuClick && (
