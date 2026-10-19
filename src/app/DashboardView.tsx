@@ -8,6 +8,7 @@ import {
   Globe, Copy, Check, MessageCircle, Shield, Key, Users, Zap,
   ChevronRight, AlertTriangle, RefreshCw, CheckCircle, Lock, Plus,
   LifeBuoy, BookOpen, Webhook, ArrowRight, Settings, Menu, X, LogOut, Pencil, Save, Clock,
+  CheckCircle2, Loader2, Info,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -65,6 +66,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [upgradeTargetFeature, setUpgradeTargetFeature] = useState<string | null>(null);
   const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<"basic" | "premium" | "brand" | null>(null);
+  const [showVerifyPaymentModal, setShowVerifyPaymentModal] = useState(false);
+  const [verifyReferenceInput, setVerifyReferenceInput] = useState("");
+  const [verifyPlanInput, setVerifyPlanInput] = useState<"basic" | "premium" | "brand">("basic");
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [isSubmittingOnboarding, setIsSubmittingOnboarding] = useState(false);
@@ -743,6 +748,41 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
     }
   };
 
+  const handleVerifyVendorPayment = async (referenceToVerify?: string, planToVerify?: "basic" | "premium" | "brand") => {
+    const ref = (referenceToVerify || verifyReferenceInput).trim();
+    const targetPlan = planToVerify || verifyPlanInput || "basic";
+    if (!ref) {
+      toast.error("Please enter your transaction reference.");
+      return;
+    }
+    setIsVerifyingPayment(true);
+    const tid = toast.loading("Checking transaction with Paystack...");
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-vendor-payment", {
+        body: { plan: targetPlan, reference: ref },
+      });
+      toast.dismiss(tid);
+      if (error || !data?.success) {
+        if (data?.pending) {
+          toast.info(data.message || "Your transfer is still clearing with the bank. Please retry in 1–2 minutes.", { duration: 6000 });
+        } else {
+          toast.error(data?.error || "Could not verify transaction. Please check the reference or contact support.");
+        }
+        return;
+      }
+      setVendorPlan(data.plan || targetPlan);
+      setShowVerifyPaymentModal(false);
+      setShowPremiumModal(false);
+      sessionStorage.removeItem("anovra_pending_vendor_payment");
+      toast.success(data.message || `Successfully activated ${targetPlan.toUpperCase()} plan!`);
+    } catch (err: any) {
+      toast.dismiss(tid);
+      toast.error(err?.message || "Failed to verify transaction.");
+    } finally {
+      setIsVerifyingPayment(false);
+    }
+  };
+
   const payWithPaystack = async (planKey: "basic" | "premium" | "brand") => {
     if (teamRole !== "Vendor") {
       toast.error("Only the Brand Owner can manage plan subscriptions and billing.");
@@ -783,14 +823,52 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         return;
       }
 
+      const txRef = `ANV-${planKey.toUpperCase()}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      sessionStorage.setItem("anovra_pending_vendor_payment", JSON.stringify({
+        reference: txRef,
+        plan: planKey,
+        amount: prices[planKey],
+        timestamp: Date.now(),
+      }));
+      setVerifyReferenceInput(txRef);
+      setVerifyPlanInput(planKey);
+
       const handler = (window as any).PaystackPop.setup({
         key: paystackPublicKey,
         email: email,
         amount: amount,
         currency: "NGN",
-        callback: function(response: any) {
-          const tid = toast.loading("Verifying payment transaction...");
+        ref: txRef,
+        callback: async function(response: any) {
+          const tid = toast.loading("Verifying payment transaction with Paystack...");
+          const resolvedRef = response?.reference || response?.trxref || txRef;
           
+          try {
+            const { data, error } = await supabase.functions.invoke("verify-vendor-payment", {
+              body: { plan: planKey, reference: resolvedRef },
+            });
+            if (data?.success) {
+              toast.dismiss(tid);
+              setVendorPlan(planKey);
+              sessionStorage.removeItem("anovra_pending_vendor_payment");
+              toast.success(`Subscription successfully updated to ${planKey.toUpperCase()} plan!`);
+              await sendEmailNotification("payment_success_receipt", {
+                name: user.user_metadata?.full_name || brandName || "Partner",
+                email: user.email,
+                plan: planKey.toUpperCase(),
+                amount: `₦${prices[planKey].toLocaleString()}`,
+              });
+              await sendEmailNotification("admin_payment_success", {
+                message: `New ${planKey.toUpperCase()} subscription payment received.`,
+                metadata: { vendor_id: user.id, email: user.email, amount: prices[planKey], reference: resolvedRef },
+              });
+              return;
+            }
+          } catch (fnErr) {
+            console.warn("verify-vendor-payment invocation error, falling back to direct db update:", fnErr);
+          }
+
+          // Fallback direct database update if function is offline
           supabase
             .from("profiles")
             .update({ plan: planKey })
@@ -800,7 +878,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
               if (error) {
                 toast.error("Payment successful, but failed to update subscription. Please contact support.");
               } else {
-                const { error: paymentError } = await supabase
+                await supabase
                   .from("payments")
                   .insert([{
                     vendor_id: user.id,
@@ -809,12 +887,9 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     plan: planKey,
                     status: "success",
                     provider: "paystack",
-                    reference: response?.reference || response?.trxref || `paystack-${Date.now()}`,
+                    reference: resolvedRef,
                   }]);
-                if (paymentError) {
-                  console.warn("Payment was successful but could not be recorded for admin analytics:", paymentError.message);
-                  toast.warning("Subscription updated. Admin payment tracking needs a schema update.");
-                }
+                sessionStorage.removeItem("anovra_pending_vendor_payment");
                 await sendEmailNotification("payment_success_receipt", {
                   name: user.user_metadata?.full_name || brandName || "Partner",
                   email: user.email,
@@ -823,7 +898,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 });
                 await sendEmailNotification("admin_payment_success", {
                   message: `New ${planKey.toUpperCase()} subscription payment received.`,
-                  metadata: { vendor_id: user.id, email: user.email, amount: prices[planKey], reference: response?.reference || response?.trxref },
+                  metadata: { vendor_id: user.id, email: user.email, amount: prices[planKey], reference: resolvedRef },
                 });
                 setVendorPlan(planKey);
                 toast.success(`Subscription successfully updated to ${planKey.toUpperCase()} plan!`);
@@ -831,10 +906,10 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             });
         },
         onClose: function() {
-          toast.error("Transaction cancelled.");
+          toast.info("If you sent a bank transfer, settlement can take 1–3 minutes. Click 'Verify Bank Transfer' anytime to activate your plan.", { duration: 8000 });
           sendEmailNotification("admin_payment_failed", {
-            message: "A vendor closed or failed to complete Paystack checkout.",
-            metadata: { vendor_id: user.id, email: user.email, plan: planKey, amount: prices[planKey] },
+            message: "A vendor closed or encountered delay in Paystack checkout.",
+            metadata: { vendor_id: user.id, email: user.email, plan: planKey, amount: prices[planKey], reference: txRef },
           });
         }
       });
@@ -1751,6 +1826,114 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 </button>
               </div>
             </div>
+
+            {/* Paystack Test Key Notice if in test mode */}
+            {(import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_").startsWith("pk_test_") && (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-bold">Sandbox Test Mode Active:</span> In test mode, select <strong>Card</strong> (with test OTP) for instant upgrade simulation. Real bank transfers from mobile banking apps cannot credit test sandboxes and require a Live Paystack key (<code className="font-mono text-[10px] bg-amber-500/20 px-1 py-0.5 rounded">pk_live_...</code>).
+                </div>
+              </div>
+            )}
+
+            {/* Verify Transfer Footer Link */}
+            <div className="pt-4 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>Already sent money via Bank Transfer or closed checkout while waiting?</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const stored = sessionStorage.getItem("anovra_pending_vendor_payment");
+                  if (stored) {
+                    try {
+                      const p = JSON.parse(stored);
+                      if (p.reference) setVerifyReferenceInput(p.reference);
+                      if (p.plan) setVerifyPlanInput(p.plan);
+                    } catch {}
+                  }
+                  setShowVerifyPaymentModal(true);
+                }}
+                className="font-bold text-[#008236] hover:underline cursor-pointer flex items-center gap-1 text-xs shrink-0"
+              >
+                Verify Transfer Status &rarr;
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Verify Bank Transfer Modal */}
+      {showVerifyPaymentModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-card rounded-2xl max-w-md w-full p-6 border border-border shadow-2xl relative">
+            <button
+              onClick={() => setShowVerifyPaymentModal(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground p-1 hover:bg-secondary rounded-full cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-[#008236] flex items-center justify-center">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Verify Payment Status</h4>
+                <p className="text-xs text-muted-foreground">Confirm your bank transfer or Paystack payment</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-foreground mb-1">Target Plan</label>
+                <select
+                  value={verifyPlanInput}
+                  onChange={(e) => setVerifyPlanInput(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-xs focus:ring-2 focus:ring-[#008236]"
+                >
+                  <option value="basic">Basic (₦12,500/mo)</option>
+                  <option value="premium">Vendor Pro (₦25,000/mo)</option>
+                  <option value="brand">Brand Enterprise (₦45,000/mo)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-foreground mb-1">Transaction Reference</label>
+                <input
+                  type="text"
+                  value={verifyReferenceInput}
+                  onChange={(e) => setVerifyReferenceInput(e.target.value)}
+                  placeholder="e.g. ANV-BASIC-179240... or Paystack reference"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-xs font-mono focus:ring-2 focus:ring-[#008236]"
+                />
+                <p className="text-[10.5px] text-muted-foreground mt-1">
+                  Found on your Paystack debit receipt email or checkout session.
+                </p>
+              </div>
+
+              <div className="p-3 bg-muted/20 border border-border rounded-xl text-[11px] text-muted-foreground leading-relaxed">
+                💡 Bank transfers in Nigeria settle via NIBSS and may take 1–3 minutes to reflect on Paystack. If you recently sent funds, verify again shortly.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowVerifyPaymentModal(false)}
+                  className="px-3.5 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isVerifyingPayment}
+                  onClick={() => handleVerifyVendorPayment()}
+                  className="px-4 py-2 rounded-lg bg-[#008236] hover:bg-[#006c2c] text-white text-xs font-bold flex items-center gap-2 cursor-pointer disabled:opacity-50 shadow-xs"
+                >
+                  {isVerifyingPayment && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Verify & Activate Plan
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2521,6 +2704,33 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Verify Bank Transfer Action Banner */}
+              <div className="mt-4 p-4 rounded-xl border border-dashed border-border/80 bg-muted/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Made a payment or bank transfer?</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    If you transferred via your banking app and closed the window or experienced clearing delay, verify your transaction status here to activate your plan immediately.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const stored = sessionStorage.getItem("anovra_pending_vendor_payment");
+                    if (stored) {
+                      try {
+                        const parsed = JSON.parse(stored);
+                        if (parsed.reference) setVerifyReferenceInput(parsed.reference);
+                        if (parsed.plan) setVerifyPlanInput(parsed.plan);
+                      } catch {}
+                    }
+                    setShowVerifyPaymentModal(true);
+                  }}
+                  className="shrink-0 px-3.5 py-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-xs font-bold transition-colors cursor-pointer border border-border"
+                >
+                  Verify Bank Transfer
+                </button>
               </div>
             </div>
           )}
