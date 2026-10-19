@@ -218,6 +218,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
   });
 
   const [currentUserRole, setCurrentUserRole] = useState<"customer" | "vendor" | "brand" | "admin" | "guest">("guest");
+  const [currentUserName, setCurrentUserName] = useState<string>("");
 
   useEffect(() => {
     const detectUserRole = async () => {
@@ -227,16 +228,21 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
           setCurrentUserRole("guest");
           return;
         }
+        const metaName = user.user_metadata?.full_name || user.user_metadata?.name || "";
         const metaRole = user.app_metadata?.role || user.user_metadata?.role;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("account_type, full_name, business_name")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const resolvedName = profile?.full_name || profile?.business_name || metaName || "";
+        if (resolvedName) setCurrentUserName(resolvedName);
+
         if (metaRole === "admin") {
           setCurrentUserRole("admin");
           return;
         }
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("account_type")
-          .eq("id", user.id)
-          .maybeSingle();
 
         if (profile?.account_type === "brand") setCurrentUserRole("brand");
         else if (profile?.account_type === "vendor" || profile?.account_type === "branch") setCurrentUserRole("vendor");
@@ -891,6 +897,7 @@ export function SkinTestView({ setView }: { setView?: (v: View) => void }) {
     setDownloadingReport(true);
     try {
       pdfModuleRef.current.downloadSkinReportPdf({
+        userName: currentUserName || undefined,
         area: selectedArea,
         scanId,
         skinType: scanResult.skinType,

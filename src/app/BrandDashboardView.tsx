@@ -178,6 +178,12 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
     phone: "",
     password: "",
   });
+  const [branchErrors, setBranchErrors] = useState<{
+    branchName?: string;
+    branchEmail?: string;
+    location?: string;
+    phone?: string;
+  }>({});
   const blankProductForm: ProductFormState = {
     id: "",
     branchId: "",
@@ -452,18 +458,49 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
     const branchEmail = form.branchEmail.trim().toLowerCase();
     const location = form.location.trim();
     const phone = form.phone.trim();
-    if (branchName.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(branchEmail)) {
-      toast.error("Enter a branch name and valid branch email address.");
+
+    const errors: { branchName?: string; branchEmail?: string; location?: string; phone?: string } = {};
+
+    if (!branchName) {
+      errors.branchName = "Branch name is required";
+    } else if (branchName.length < 2) {
+      errors.branchName = "Branch name must be at least 2 characters";
+    } else if (branchName.toLowerCase() === String(brandProfile?.business_name || "").trim().toLowerCase()) {
+      errors.branchName = "Use a distinct branch name (e.g. brand name followed by city/outlet)";
+    }
+
+    if (!branchEmail) {
+      errors.branchEmail = "Branch email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(branchEmail)) {
+      errors.branchEmail = "Enter a valid email address (e.g. abuja@brand.com)";
+    }
+
+    if (!location) {
+      errors.location = "Branch location is required";
+    } else if (location.length < 3) {
+      errors.location = "Enter a valid city or location (min 3 characters)";
+    }
+
+    if (!phone) {
+      errors.phone = "Branch phone number is required";
+    } else if (phone.replace(/\D/g, "").length < 10) {
+      errors.phone = "Enter a valid phone number (at least 10 digits)";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setBranchErrors(errors);
+      const labels: Record<string, string> = {
+        branchName: "Branch Name",
+        branchEmail: "Branch Email",
+        location: "Branch Location",
+        phone: "Branch Phone",
+      };
+      const missingLabels = Object.keys(errors).map((k) => labels[k] || k);
+      toast.error(`Please fill in required fields: ${missingLabels.join(", ")}`);
       return;
     }
-    if (branchName.toLowerCase() === String(brandProfile?.business_name || "").trim().toLowerCase()) {
-      toast.error("Use a distinct branch name, such as the brand name followed by its city or outlet.");
-      return;
-    }
-    if (location.length < 3 || phone.replace(/\D/g, "").length < 10) {
-      toast.error("Enter the branch location and a valid branch contact number.");
-      return;
-    }
+
+    setBranchErrors({});
     setCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke("manage-brand-branch", {
@@ -935,6 +972,7 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                       onClick={() => {
                         setShowCreateBranch((value) => !value);
                         setEditingBranch(null);
+                        setBranchErrors({});
                       }}
                       className="inline-flex items-center justify-center gap-2 bg-accent text-white px-4 py-3 rounded-xl text-sm font-semibold self-start xl:self-auto"
                     >
@@ -968,11 +1006,54 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                     </div>
                   </div>
                   <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    <Input label="Branch name *" value={form.branchName} onChange={(value) => setForm((prev) => ({ ...prev, branchName: value }))} placeholder="Tulip Abuja" />
-                    <Input label="Branch email *" value={form.branchEmail} onChange={(value) => setForm((prev) => ({ ...prev, branchEmail: value }))} placeholder="abuja@brand.com" />
-                    <Input label="Branch location *" value={form.location} onChange={(value) => setForm((prev) => ({ ...prev, location: value }))} placeholder="Start typing a city" list="branch-location-options" />
-                    <Input label="Branch phone *" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))} placeholder="+234..." />
-                    <Input label="Temporary password" value={form.password} onChange={(value) => setForm((prev) => ({ ...prev, password: value }))} placeholder="Auto-generate if blank" />
+                    <Input
+                      label="Branch name *"
+                      value={form.branchName}
+                      error={branchErrors.branchName}
+                      onChange={(value) => {
+                        setForm((prev) => ({ ...prev, branchName: value }));
+                        if (branchErrors.branchName) setBranchErrors((prev) => ({ ...prev, branchName: undefined }));
+                      }}
+                      placeholder="Tulip Abuja"
+                    />
+                    <Input
+                      label="Branch email *"
+                      value={form.branchEmail}
+                      error={branchErrors.branchEmail}
+                      onChange={(value) => {
+                        setForm((prev) => ({ ...prev, branchEmail: value }));
+                        if (branchErrors.branchEmail) setBranchErrors((prev) => ({ ...prev, branchEmail: undefined }));
+                      }}
+                      placeholder="abuja@brand.com"
+                    />
+                    <Input
+                      label="Branch location *"
+                      value={form.location}
+                      error={branchErrors.location}
+                      onChange={(value) => {
+                        setForm((prev) => ({ ...prev, location: value }));
+                        if (branchErrors.location) setBranchErrors((prev) => ({ ...prev, location: undefined }));
+                      }}
+                      placeholder="Start typing a city"
+                      list="branch-location-options"
+                    />
+                    <Input
+                      label="Branch phone *"
+                      value={form.phone}
+                      error={branchErrors.phone}
+                      onChange={(value) => {
+                        const cleanPhone = value.replace(/[^\d+ -]/g, "");
+                        setForm((prev) => ({ ...prev, phone: cleanPhone }));
+                        if (branchErrors.phone) setBranchErrors((prev) => ({ ...prev, phone: undefined }));
+                      }}
+                      placeholder="+234..."
+                    />
+                    <Input
+                      label="Temporary password"
+                      value={form.password}
+                      onChange={(value) => setForm((prev) => ({ ...prev, password: value }))}
+                      placeholder="Auto-generate if blank"
+                    />
                     <div className="rounded-xl bg-muted/40 border border-border p-3 flex items-start gap-3">
                       <Mail className="w-4 h-4 text-accent mt-0.5 shrink-0" />
                       <p className="text-xs text-muted-foreground">
@@ -1771,7 +1852,21 @@ function BrandSidebar({
   );
 }
 
-function Input({ label, value, onChange, placeholder, list }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; list?: string }) {
+function Input({
+  label,
+  value,
+  onChange,
+  placeholder,
+  list,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  list?: string;
+  error?: string;
+}) {
   return (
     <label className="block">
       <span className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-1 font-mono">{label}</span>
@@ -1780,8 +1875,11 @@ function Input({ label, value, onChange, placeholder, list }: { label: string; v
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         list={list}
-        className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-accent"
+        className={`w-full bg-input-background border rounded-xl px-3 py-2.5 text-sm outline-none transition-colors ${
+          error ? "border-rose-500 focus:border-rose-500 ring-1 ring-rose-500/20" : "border-border focus:border-accent"
+        }`}
       />
+      {error && <p className="text-xs text-rose-500 font-medium mt-1">{error}</p>}
       {list && <datalist id={list}>{NIGERIA_LOCATIONS.map((location) => <option key={location} value={location} />)}</datalist>}
     </label>
   );

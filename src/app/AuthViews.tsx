@@ -1088,10 +1088,12 @@ export function CustomerSignUpView({ setView }: { setView: (v: View) => void }) 
             <div>
               <label className={labelCls}>Phone Number (WhatsApp) *</label>
               <input
+                type="tel"
+                inputMode="numeric"
                 className={`${inputCls} ${errors.phone ? "border-red-500 ring-1 ring-red-500/30" : ""}`}
                 placeholder="08012345678"
                 value={form.phone}
-                onChange={(e) => set("phone", e.target.value)}
+                onChange={(e) => set("phone", e.target.value.replace(/\D/g, "").slice(0, 15))}
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               />
               {errors.phone && (

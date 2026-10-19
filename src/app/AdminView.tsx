@@ -705,7 +705,13 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
       status: status,
       mrr: vendorMrr,
       cacNumber: v.cac_number,
-      cacDocumentUrl: v.cac_document_url,
+      cacDocumentUrl: (() => {
+        if (!v.cac_document_url) return null;
+        const trimmed = String(v.cac_document_url).trim();
+        if (!trimmed) return null;
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+        return `https://ejpdrcbgqelxlopivwld.supabase.co/storage/v1/object/public/vendor-documents/${encodeURIComponent(trimmed)}`;
+      })(),
       paymentReference: latestPayment?.reference,
       email: v.email || "",
       accountType: v.account_type || "vendor",
@@ -2111,7 +2117,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               <a
                                 href={v.cacDocumentUrl}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-[10px] text-accent hover:underline font-medium"
                                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                               >
@@ -2264,7 +2270,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                             <a
                               href={v.cacDocumentUrl}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 text-accent hover:underline font-semibold"
                             >
                               <FileText className="w-3.5 h-3.5" />

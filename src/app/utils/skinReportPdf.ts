@@ -9,6 +9,7 @@ type Treatment = {
 type Product = { name: string; brand: string; price: string; score: number; matchReasons: string[]; vendorSlug: string; id: string };
 
 export function downloadSkinReportPdf(report: {
+  userName?: string;
   area: string;
   scanId: string;
   skinType?: string;
@@ -67,6 +68,9 @@ export function downloadSkinReportPdf(report: {
     line("ANOVRA", { size: 18, bold: true, colour: [7, 83, 46], gap: 6 });
   }
   line("Personalised skin report", { size: 19, bold: true, colour: [7, 83, 46], gap: 4 });
+  if (report.userName) {
+    line(`Prepared for: ${report.userName}`, { size: 11, bold: true, colour: [35, 48, 39], gap: 3 });
+  }
   line("Prepared by Anovra AI skin analysis", { size: 9, colour: [92, 107, 96], gap: 3 });
   line(`Area: ${report.area}    Date: ${new Date().toLocaleDateString("en-GB")}${report.scanId ? `    Scan ID: ${report.scanId}` : ""}`, { size: 9, colour: [92, 107, 96], gap: 5 });
   if (report.skinType) line(`Skin type: ${report.skinType}`, { bold: true });
@@ -142,7 +146,7 @@ export function downloadSkinReportPdf(report: {
     pdf.line(left, 281, right, 281);
     pdf.setFontSize(8);
     pdf.setTextColor(92, 107, 96);
-    pdf.text(`Anovra  |  Private skin report  |  ${page} of ${pages}`, left, 287);
+    pdf.text(`Anovra  |  Private skin report${report.userName ? `  |  ${report.userName}` : ""}  |  ${page} of ${pages}`, left, 287);
   }
   pdf.save(`anovra-skin-report-${report.scanId || new Date().toISOString().slice(0, 10)}.pdf`);
 }
