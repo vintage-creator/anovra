@@ -1023,7 +1023,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
                 <Lock className="w-8 h-8 text-amber-700 dark:text-amber-400" />
               </div>
               <h2 className="text-3xl font-light text-foreground mb-3" style={{ fontFamily: "'Fraunces', serif" }}>
-                Your 7-Day Free Trial Has Expired
+                Your 3-Day Free Trial Has Expired
               </h2>
               <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 Your free trial of Anovra Skincare Partner has ended. To continue managing your safety-screened catalogue, custom domains, integrations, and live customer scans, please select a plan below.
