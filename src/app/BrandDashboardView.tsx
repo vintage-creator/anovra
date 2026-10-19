@@ -113,6 +113,35 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
   const [payments, setPayments] = useState<any[]>([]);
   const [savingProduct, setSavingProduct] = useState(false);
   const [savingBranchId, setSavingBranchId] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newPassword.trim();
+    if (trimmed.length < 8) {
+      toast.error("Password must be at least 8 characters long.");
+      return;
+    }
+    if (trimmed !== confirmPassword.trim()) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: trimmed });
+      if (error) throw error;
+      toast.success("Password changed successfully!");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update password.");
+    } finally {
+      setSavingPassword(false);
+    }
+  };
   const [deletingProductId, setDeletingProductId] = useState("");
   const [productImageFile, setProductImageFile] = useState<File | null>(null);
   const [selectedBranchId, setSelectedBranchId] = useState("");
@@ -1229,6 +1258,70 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
                       </button>
                     )}
                   </div>
+                </div>
+
+                {/* Security & Password Change */}
+                <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-xs">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0 border border-border">
+                      <Lock className="w-5 h-5 text-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Security & Password
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        Update your Brand HQ account password anytime. Must be at least 8 characters long.
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleUpdatePassword} className="max-w-xl space-y-4 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-wider">
+                          New Password
+                        </label>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="At least 8 characters"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-muted-foreground mb-1.5 uppercase tracking-wider">
+                          Confirm New Password
+                        </label>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Re-enter password"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-[#008236] focus:ring-1 focus:ring-[#008236]/30 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      >
+                        {showPassword ? "Hide password" : "Show password"}
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={savingPassword || !newPassword || !confirmPassword}
+                        className="px-5 py-2.5 rounded-xl bg-[#008236] hover:bg-[#006c2c] disabled:opacity-50 text-white text-xs font-bold transition-all cursor-pointer shadow-xs inline-flex items-center gap-2"
+                      >
+                        {savingPassword ? "Updating..." : "Update Password"}
+                      </button>
+                    </div>
+                  </form>
                 </div>
 
                 <AccountDeletionSection kind="brand" setView={setView} />
