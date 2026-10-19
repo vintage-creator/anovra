@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   Store, Building2, AlertCircle, CreditCard, Calendar, Ban, Search, RefreshCw,
-  Users, Package, Shield, BarChart2, CheckCircle, X, Check, Eye,
+  Users, Package, Shield, BarChart2, CheckCircle, XCircle, X, Check, Eye,
   ChevronDown, ChevronUp, AlertTriangle, Info, Activity, TrendingUp,
   ExternalLink, Upload, Download, MapPin, Scan, FileText, Star, Edit, Trash2, LogOut, Menu, ArrowUp, Copy,
   Mail, Phone, ArrowRight,
@@ -140,6 +140,39 @@ function mapTeamMember(row: any): TeamMember {
   };
 }
 
+const DECLINE_REASONS = [
+  {
+    code: "cac_incomplete",
+    label: "CAC document upload incomplete / corrupted (re-upload required)",
+    defaultMessage: "Your uploaded CAC document was incomplete or could not be opened. Please log in to your account and re-upload a clear copy of your CAC certificate (JPEG, PNG, or PDF under 5MB) so our compliance team can verify your business.",
+  },
+  {
+    code: "cac_missing",
+    label: "CAC certificate or document missing",
+    defaultMessage: "No CAC registration document was attached to your verification application. Please sign in to your workspace and upload a valid CAC certificate.",
+  },
+  {
+    code: "cac_unverified",
+    label: "CAC registration number unverified / invalid",
+    defaultMessage: "The CAC registration number provided could not be validated against official corporate affairs commission records. Please review and update your CAC number in your profile.",
+  },
+  {
+    code: "name_mismatch",
+    label: "Business name does not match CAC documentation",
+    defaultMessage: "The registered business name does not match the company name specified on the CAC documentation provided. Please update your registered business name or submit updated documentation.",
+  },
+  {
+    code: "ineligible_business",
+    label: "Ineligible business or prohibited products",
+    defaultMessage: "Based on our compliance guidelines, your business category or listed products do not meet Anovra's partner onboarding criteria at this time.",
+  },
+  {
+    code: "other",
+    label: "Other reason (custom note)",
+    defaultMessage: "",
+  },
+];
+
 export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [tab, setTab] = useState<AdminTab>(() => (sessionStorage.getItem("active_admin_tab") as AdminTab) || "overview");
 
@@ -199,6 +232,21 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [moderationReasonDetails, setModerationReasonDetails] = useState("");
   const [moderationInternalNotes, setModerationInternalNotes] = useState("");
   const [isModerating, setIsModerating] = useState(false);
+
+  // Vendor verification decline modal states
+  const [declineModal, setDeclineModal] = useState<{
+    vendorId: string;
+    vendorName: string;
+    ownerName: string;
+    email: string;
+    cacNumber?: string;
+    cacDocumentUrl?: string | null;
+    cacUploadFailed?: boolean;
+    cacDocumentName?: string | null;
+  } | null>(null);
+  const [declineReasonCode, setDeclineReasonCode] = useState("cac_incomplete");
+  const [declineMessage, setDeclineMessage] = useState("");
+  const [isDeclining, setIsDeclining] = useState(false);
 
   // Add ingredient form states
   const [ingName, setIngName] = useState("");
@@ -920,15 +968,126 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const setVendorAction = async (vendorId: string, action: "active") => {
     const tid = toast.loading(`Updating vendor status...`);
     try {
-      const { error } = await supabase.from("profiles").update({ is_verified: true, verification_status: "approved" }).eq("id", vendorId);
+      const { error } = await supabase.from("profiles").update({
+        is_verified: true,
+        verification_status: "approved",
+        moderation_reason_code: null,
+        moderation_reason_details: null,
+      }).eq("id", vendorId);
       if (error) throw error;
-      setVendorsList((prev) => prev.map((v) => (v.id === vendorId ? { ...v, is_verified: true, verification_status: "approved" } : v)));
+      setVendorsList((prev) => prev.map((v) => (v.id === vendorId ? {
+        ...v,
+        is_verified: true,
+        verification_status: "approved",
+        moderation_reason_code: null,
+        moderation_reason_details: null,
+      } : v)));
       toast.success("Partner account approved.");
       setVendorStatuses((s) => ({ ...s, [vendorId]: action }));
       setOpenDropdown(null);
+
+      const vendorObj = vendorsList.find((v) => v.id === vendorId);
+      if (vendorObj?.email) {
+        sendEmailNotification("vendor_approved", {
+          email: vendorObj.email,
+          name: vendorObj.name || vendorObj.business_name,
+          brand: vendorObj.business_name || vendorObj.name,
+        }).catch(() => {});
+      }
+      dispatchVendorWebhook(vendorId, "vendor.verified", { status: "approved" }).catch(() => {});
     } catch (err: any) {
       toast.error(err.message || "Failed to update vendor status.");
     } finally {
+      toast.dismiss(tid);
+    }
+  };
+
+  function openDeclineModal(v: typeof dynamicVendors[0]) {
+    if (!isPlatformAdmin) {
+      toast.error("Only an administrator can decline or update partner verification.");
+      return;
+    }
+    setOpenDropdown(null);
+    const initialCode = v.cacUploadFailed
+      ? "cac_incomplete"
+      : !v.cacDocumentUrl
+        ? "cac_missing"
+        : "cac_incomplete";
+    const defaultMsg = DECLINE_REASONS.find((r) => r.code === initialCode)?.defaultMessage || "";
+    setDeclineReasonCode(initialCode);
+    setDeclineMessage(defaultMsg);
+    setDeclineModal({
+      vendorId: v.id,
+      vendorName: v.name,
+      ownerName: v.owner,
+      email: v.email,
+      cacNumber: v.cacNumber,
+      cacDocumentUrl: v.cacDocumentUrl,
+      cacUploadFailed: v.cacUploadFailed,
+      cacDocumentName: v.cacDocumentName,
+    });
+  }
+
+  function handleDeclineReasonChange(newCode: string) {
+    setDeclineReasonCode(newCode);
+    const found = DECLINE_REASONS.find((r) => r.code === newCode);
+    if (found) {
+      setDeclineMessage(found.defaultMessage);
+    }
+  }
+
+  const submitDeclineVendor = async () => {
+    if (!declineModal) return;
+    if (!declineReasonCode) {
+      toast.error("Please choose a reason for declining.");
+      return;
+    }
+    if (!declineMessage.trim()) {
+      toast.error("Please provide an explanatory message for the vendor.");
+      return;
+    }
+    setIsDeclining(true);
+    const tid = toast.loading("Updating partner status...");
+    try {
+      const { error } = await supabase.from("profiles").update({
+        is_verified: false,
+        verification_status: "rejected",
+        moderation_reason_code: declineReasonCode,
+        moderation_reason_details: declineMessage.trim(),
+        moderated_at: new Date().toISOString(),
+      }).eq("id", declineModal.vendorId);
+      if (error) throw error;
+
+      setVendorsList((prev) => prev.map((v) => (v.id === declineModal.vendorId ? {
+        ...v,
+        is_verified: false,
+        verification_status: "rejected",
+        moderation_reason_code: declineReasonCode,
+        moderation_reason_details: declineMessage.trim(),
+      } : v)));
+      setVendorStatuses((s) => ({ ...s, [declineModal.vendorId]: "rejected" }));
+
+      const reasonLabel = DECLINE_REASONS.find((r) => r.code === declineReasonCode)?.label || declineReasonCode;
+      if (declineModal.email) {
+        sendEmailNotification("vendor_rejected", {
+          email: declineModal.email,
+          name: declineModal.ownerName,
+          brand: declineModal.vendorName,
+          reason: reasonLabel,
+          message: declineMessage.trim(),
+        }).catch((e) => console.warn("Vendor rejection email warning:", e));
+      }
+      dispatchVendorWebhook(declineModal.vendorId, "vendor.rejected", {
+        reason_code: declineReasonCode,
+        reason_details: declineMessage.trim(),
+      }).catch(() => {});
+
+      toast.success("Partner verification declined. Feedback recorded & notification sent.");
+      setDeclineModal(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update vendor status.");
+    } finally {
+      setIsDeclining(false);
       toast.dismiss(tid);
     }
   };
@@ -2138,7 +2297,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                   Vendor accounts
                 </h2>
                 <p className="text-sm text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {totalVendors} vendors · {dynamicVendors.filter((v) => getVendorStatus(v) === "active").length} active · {dynamicVendors.filter((v) => getVendorStatus(v) === "pending" || getVendorStatus(v) === "flagged").length} pending approval
+                  {totalVendors} vendors · {dynamicVendors.filter((v) => getVendorStatus(v) === "active").length} active · {dynamicVendors.filter((v) => getVendorStatus(v) === "pending" || getVendorStatus(v) === "flagged").length} pending approval · {dynamicVendors.filter((v) => getVendorStatus(v) === "rejected" || getVendorStatus(v) === "declined").length} declined
                 </p>
               </div>
               <div className="relative">
@@ -2176,6 +2335,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
                     const statusBadge = () => {
                       if (status === "pending") return <span className="flex items-center gap-1 text-xs text-muted-foreground font-medium"><AlertCircle className="w-3 h-3" />Pending</span>;
+                      if (status === "rejected" || status === "declined") return <span className="flex items-center gap-1 text-xs text-rose-600 font-medium"><XCircle className="w-3 h-3" />Declined</span>;
                       if (status === "suspended") return <span className="flex items-center gap-1 text-xs text-orange-600 font-medium"><AlertTriangle className="w-3 h-3" />Suspended</span>;
                       if (status === "banned") return <span className="flex items-center gap-1 text-xs text-red-600 font-medium"><Ban className="w-3 h-3" />Banned</span>;
                       if (status === "removed") return <span className="flex items-center gap-1 text-xs text-red-400 font-medium"><X className="w-3 h-3" />Removed</span>;
@@ -2242,14 +2402,45 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                           {!isPlatformAdmin ? (
                             <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2.5 py-1">Read-only</span>
                           ) : !isApproved && status === "pending" ? (
-                            <button
-                              onClick={() => setVendorAction(v.id, "active")}
-                              className="flex items-center gap-1 text-xs bg-accent text-white px-2.5 py-1 rounded-full hover:bg-accent/90 transition-colors font-medium whitespace-nowrap"
-                              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                            >
-                              <Check className="w-3 h-3" />
-                              Approve
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => setVendorAction(v.id, "active")}
+                                className="flex items-center gap-1 text-xs bg-accent text-white px-2.5 py-1 rounded-full hover:bg-accent/90 transition-colors font-medium whitespace-nowrap shadow-xs cursor-pointer"
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                                title="Approve partner account"
+                              >
+                                <Check className="w-3 h-3" />
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => openDeclineModal(v)}
+                                className="flex items-center gap-1 text-xs bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/50 px-2.5 py-1 rounded-full transition-colors font-medium whitespace-nowrap cursor-pointer"
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                                title="Decline verification or request document re-upload"
+                              >
+                                <X className="w-3 h-3" />
+                                Decline
+                              </button>
+                            </div>
+                          ) : status === "rejected" || status === "declined" ? (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => setVendorAction(v.id, "active")}
+                                className="flex items-center gap-1 text-xs border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400 px-2.5 py-1 rounded-full transition-colors font-medium whitespace-nowrap cursor-pointer"
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                                title="Re-evaluate and approve partner"
+                              >
+                                <Check className="w-3 h-3" />
+                                Re-approve
+                              </button>
+                              <button
+                                onClick={() => openDeclineModal(v)}
+                                className="text-[11px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded hover:bg-muted transition-colors cursor-pointer"
+                                title="Update decline reason or message"
+                              >
+                                Reason
+                              </button>
+                            </div>
                           ) : status === "suspended" || status === "banned" ? (
                             <button onClick={() => openModeration(v.id, v.name, status === "banned" ? "unban" : "reactivate")} className="inline-flex items-center gap-1 rounded-md border border-emerald-300 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                               <CheckCircle className="w-3.5 h-3.5" />{status === "banned" ? "Unban" : "Reactivate"}
@@ -2296,6 +2487,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
 
                   const statusBadge = () => {
                     if (status === "pending") return <span className="inline-flex items-center gap-1 text-[11px] bg-secondary text-muted-foreground font-semibold px-2 py-0.5 rounded-full border border-border"><AlertCircle className="w-3 h-3" />Pending</span>;
+                    if (status === "rejected" || status === "declined") return <span className="inline-flex items-center gap-1 text-[11px] bg-rose-500/10 text-rose-600 font-semibold px-2 py-0.5 rounded-full border border-rose-500/20"><XCircle className="w-3 h-3" />Declined</span>;
                     if (status === "suspended") return <span className="inline-flex items-center gap-1 text-[11px] bg-orange-500/10 text-orange-600 font-semibold px-2 py-0.5 rounded-full border border-orange-500/20"><AlertTriangle className="w-3 h-3" />Suspended</span>;
                     if (status === "banned") return <span className="inline-flex items-center gap-1 text-[11px] bg-red-500/10 text-red-600 font-semibold px-2 py-0.5 rounded-full border border-red-500/20"><Ban className="w-3 h-3" />Banned</span>;
                     if (status === "removed") return <span className="inline-flex items-center gap-1 text-[11px] bg-red-500/5 text-red-400 font-semibold px-2 py-0.5 rounded-full border border-red-500/10"><X className="w-3 h-3" />Removed</span>;
@@ -2370,13 +2562,38 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                           {!isPlatformAdmin ? (
                             <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2.5 py-1">Read-only access</span>
                           ) : !isApproved && status === "pending" ? (
-                            <button
-                              onClick={() => setVendorAction(v.id, "active")}
-                              className="flex items-center gap-1 text-[11px] bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-accent/90 transition-colors font-semibold"
-                              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                            >
-                              <Check className="w-3 h-3" /> Approve Account
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => setVendorAction(v.id, "active")}
+                                className="flex items-center gap-1 text-[11px] bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-accent/90 transition-colors font-semibold"
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                              >
+                                <Check className="w-3 h-3" /> Approve
+                              </button>
+                              <button
+                                onClick={() => openDeclineModal(v)}
+                                className="flex items-center gap-1 text-[11px] bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/50 px-2.5 py-1.5 rounded-lg transition-colors font-semibold"
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                              >
+                                <X className="w-3 h-3" /> Decline
+                              </button>
+                            </div>
+                          ) : status === "rejected" || status === "declined" ? (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => setVendorAction(v.id, "active")}
+                                className="flex items-center gap-1 text-[11px] border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400 px-3 py-1.5 rounded-lg transition-colors font-semibold"
+                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                              >
+                                <Check className="w-3 h-3" /> Re-approve
+                              </button>
+                              <button
+                                onClick={() => openDeclineModal(v)}
+                                className="text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded bg-secondary transition-colors"
+                              >
+                                Reason
+                              </button>
+                            </div>
                           ) : status === "suspended" || status === "banned" ? (
                             <button onClick={() => openModeration(v.id, v.name, status === "banned" ? "unban" : "reactivate")} className="inline-flex items-center gap-1 rounded-md border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                               <CheckCircle className="w-3.5 h-3.5" />{status === "banned" ? "Unban account" : "Reactivate account"}
@@ -4000,6 +4217,133 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             <div className="px-6 py-4 bg-secondary/40 border-t border-border flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
               <button type="button" onClick={() => setModerationModal(null)} disabled={isModerating} className="px-4 py-2.5 rounded-lg border border-border text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">Cancel</button>
               <button type="button" onClick={submitModeration} disabled={isModerating} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50", moderationModal.action === "ban" ? "bg-red-700 hover:bg-red-800" : moderationModal.action === "suspend" ? "bg-amber-700 hover:bg-amber-800" : "bg-emerald-700 hover:bg-emerald-800")}>{isModerating ? "Updating access..." : moderationModal.action === "reactivate" ? "Reactivate account" : moderationModal.action === "unban" ? "Unban account" : moderationModal.action === "ban" ? "Ban account" : "Suspend account"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VENDOR DECLINE / RE-UPLOAD REQUEST MODAL */}
+      {declineModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="bg-card border border-border w-full max-w-lg rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b border-border flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/50">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Fraunces', serif" }}>
+                    Decline Partner Verification
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {declineModal.vendorName} · {declineModal.ownerName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeclineModal(null)}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Partner summary banner */}
+              <div className="rounded-lg border border-border bg-secondary/50 p-3 text-xs space-y-1.5">
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>Registered Email:</span>
+                  <span className="font-mono text-foreground font-medium">{declineModal.email || "No email"}</span>
+                </div>
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>CAC Number:</span>
+                  <span className="font-mono text-foreground font-medium">{declineModal.cacNumber || "None specified"}</span>
+                </div>
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>CAC Document:</span>
+                  <span className="font-medium">
+                    {declineModal.cacUploadFailed ? (
+                      <span className="text-amber-600 font-semibold">Upload failed / incomplete ({declineModal.cacDocumentName})</span>
+                    ) : declineModal.cacDocumentUrl ? (
+                      <a href={declineModal.cacDocumentUrl} target="_blank" rel="noreferrer" className="text-accent underline font-semibold">View uploaded file</a>
+                    ) : (
+                      <span className="text-red-500 font-semibold">No document attached</span>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* Reason selector */}
+              <div>
+                <label htmlFor="decline-reason-select" className="block text-xs font-semibold text-foreground mb-1.5">
+                  Decline / Re-upload Reason
+                </label>
+                <select
+                  id="decline-reason-select"
+                  value={declineReasonCode}
+                  onChange={(e) => handleDeclineReasonChange(e.target.value)}
+                  className="w-full bg-input-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/25"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  {DECLINE_REASONS.map((r) => (
+                    <option key={r.code} value={r.code}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Explanatory Message */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="decline-message-input" className="block text-xs font-semibold text-foreground">
+                    Explanatory Note to Partner
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">Sent via email & displayed in dashboard</span>
+                </div>
+                <textarea
+                  id="decline-message-input"
+                  rows={4}
+                  value={declineMessage}
+                  onChange={(e) => setDeclineMessage(e.target.value)}
+                  maxLength={1000}
+                  placeholder="Explain why verification was declined and provide clear guidance on how to fix or re-upload..."
+                  className="w-full resize-none bg-input-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/25"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1 text-right">
+                  {declineMessage.length}/1000 characters
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  Declining updates their status to <strong>Declined</strong> and sends them an automated email. The partner's storefront remains locked until a new valid CAC document is uploaded and approved.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-secondary/40 border-t border-border flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeclineModal(null)}
+                disabled={isDeclining}
+                className="px-4 py-2 rounded-lg border border-border text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitDeclineVendor}
+                disabled={isDeclining}
+                className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                {isDeclining ? "Updating Status..." : "Decline & Notify Partner"}
+              </button>
             </div>
           </div>
         </div>

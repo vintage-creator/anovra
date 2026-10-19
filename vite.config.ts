@@ -16,10 +16,28 @@ function figmaAssetResolver() {
   }
 }
 
+function versionTrackerPlugin() {
+  return {
+    name: 'version-tracker-plugin',
+    generateBundle() {
+      const buildVersion = Date.now().toString();
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({
+          version: buildVersion,
+          builtAt: new Date().toISOString(),
+        }, null, 2),
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: '/',
   plugins: [
     figmaAssetResolver(),
+    versionTrackerPlugin(),
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
     react(),

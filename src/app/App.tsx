@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { type View, cn } from "./types";
 import { Toaster } from "./components/ui/sonner";
+import { AppUpdateBanner } from "./components/AppUpdateBanner";
 import { toast } from "sonner";
 import { LandingView } from "./LandingView";
 import { ShopView } from "./ShopView";
@@ -903,6 +904,7 @@ export default function App() {
       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
     >
       <Toaster position="top-right" closeButton richColors />
+      <AppUpdateBanner />
       {!hideNav && <Nav view={view} setView={setView} startSkinTest={startSkinTest} />}
       <div className="flex-1">
         {view === "landing" && <LandingView setView={setView} startSkinTest={startSkinTest} />}

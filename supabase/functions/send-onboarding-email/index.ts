@@ -33,6 +33,8 @@ const subjects: Record<string, string> = {
   admin_onboarding_request: "Admin alert: onboarding request submitted",
   customer_scan_completed: "Your skin scan report is ready",
   customer_review_request: "How was your Anovra product experience?",
+  vendor_approved: "Your Anovra partner verification has been approved",
+  vendor_rejected: "Action required: Anovra partner verification update",
 };
 
 function bodyFor(template: string, payload: any) {
@@ -91,6 +93,38 @@ function bodyFor(template: string, payload: any) {
   }
   if (template === "customer_review_request") {
     return emailShell({ eyebrow: "Review request", title: subjects[template], body: `<p style="margin:0 0 14px;">Hi ${name},</p><p style="margin:0 0 14px;">If the product recommendation helped, please leave a storefront review so other customers can shop with more confidence.</p>${button("Leave a review", link)}` });
+  }
+  if (template === "vendor_approved") {
+    return emailShell({
+      eyebrow: "Partner Verification",
+      title: subjects[template],
+      preview: "Your business has been verified by Anovra.",
+      body: `
+        <p style="margin:0 0 14px;">Hi ${name},</p>
+        <p style="margin:0 0 14px;">Congratulations! Your partner account for <strong>${brand}</strong> has been officially approved and verified by the Anovra Trust & Safety compliance team.</p>
+        <p style="margin:0 0 14px;">Your storefront is now unlocked for public viewing, product sharing, and skin test referrals.</p>
+        ${button("Open your dashboard", appLink("/#/dashboard"))}
+      `,
+    });
+  }
+  if (template === "vendor_rejected") {
+    const reason = escapeHtml(payload.reason || "CAC verification review");
+    const details = escapeHtml(payload.message || "Please review and re-upload your documentation.");
+    return emailShell({
+      eyebrow: "Compliance Notice",
+      title: subjects[template],
+      preview: "Update regarding your Anovra business verification.",
+      body: `
+        <p style="margin:0 0 14px;">Hi ${name},</p>
+        <p style="margin:0 0 14px;">Our compliance team reviewed the verification submission for <strong>${brand}</strong> and requires an update before we can activate your storefront.</p>
+        ${detailsCard("Verification Feedback", [
+          { label: "Reason", value: reason },
+          { label: "Instructions", value: details },
+        ])}
+        <p style="margin:14px 0 14px;">Please sign in to your Anovra workspace to review your details and re-upload the required documentation.</p>
+        ${button("Sign in to your account", appLink("/#/dashboard"))}
+      `,
+    });
   }
 
   return emailShell({
