@@ -45,6 +45,85 @@ function generateCredentials(name: string) {
   return { username, password };
 }
 
+function CacStatusBadge({ v, compact = false }: { v: any; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+
+  if (v.cacDocumentUrl) {
+    return (
+      <a
+        href={v.cacDocumentUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cn(
+          "inline-flex items-center gap-1 text-accent hover:underline font-semibold transition-colors",
+          compact ? "text-[10px]" : "text-xs"
+        )}
+        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+      >
+        <FileText className={compact ? "w-3 h-3" : "w-3.5 h-3.5"} />
+        <span>{compact ? "View CAC document" : "View Certificate"}</span>
+      </a>
+    );
+  }
+
+  if (v.cacUploadFailed) {
+    return (
+      <div className="relative inline-flex items-center" onMouseLeave={() => setOpen(false)}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((prev) => !prev);
+          }}
+          onMouseEnter={() => setOpen(true)}
+          className={cn(
+            "inline-flex items-center gap-1 text-amber-700 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded-md font-semibold cursor-pointer transition-all shadow-2xs",
+            compact ? "text-[10px]" : "text-[11px]"
+          )}
+          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          aria-label="Upload incomplete details"
+        >
+          <AlertTriangle className={compact ? "w-3 h-3 text-amber-600 shrink-0" : "w-3.5 h-3.5 text-amber-600 shrink-0"} />
+          <span>Upload incomplete</span>
+          <Info className={compact ? "w-2.5 h-2.5 text-amber-600/90 shrink-0" : "w-3 h-3 text-amber-600/90 shrink-0"} />
+        </button>
+
+        {open && (
+          <div
+            className="absolute left-0 bottom-full mb-2 z-50 w-72 p-3 bg-popover text-popover-foreground border border-amber-500/40 rounded-xl shadow-xl animate-in fade-in-0 zoom-in-95 duration-150 text-left pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-1.5 font-bold text-xs text-amber-600 mb-1">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>Document Missing from Storage</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              The vendor submitted with file <strong className="text-foreground font-mono font-medium">"{v.cacDocumentName}"</strong>, but the file upload failed during registration and was never saved to storage.
+            </p>
+            <div className="mt-2 pt-2 border-t border-border flex items-center justify-between text-[10px]">
+              <span className="text-muted-foreground">Action needed:</span>
+              <span className="font-semibold text-accent">Request fresh upload from vendor</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-amber-600 font-semibold",
+        compact ? "text-[10px]" : "text-[11px]"
+      )}
+      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+    >
+      <AlertTriangle className={compact ? "w-3 h-3" : "w-3.5 h-3.5"} />
+      <span>{compact ? "CAC document missing" : "CAC certificate missing"}</span>
+    </span>
+  );
+}
+
 function mapTeamMember(row: any): TeamMember {
   return {
     id: row.id,
@@ -2123,32 +2202,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                                 CAC {v.cacNumber}
                               </span>
                             )}
-                            {v.cacDocumentUrl ? (
-                              <a
-                                href={v.cacDocumentUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] text-accent hover:underline font-medium"
-                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                              >
-                                <FileText className="w-3 h-3" />
-                                View CAC document
-                              </a>
-                            ) : v.cacUploadFailed ? (
-                              <span
-                                className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium"
-                                title={`Document '${v.cacDocumentName}' failed to upload during vendor registration and is not present in storage.`}
-                                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                              >
-                                <AlertTriangle className="w-3 h-3" />
-                                Upload incomplete ({v.cacDocumentName})
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                                <AlertTriangle className="w-3 h-3" />
-                                CAC document missing
-                              </span>
-                            )}
+                            <CacStatusBadge v={v} compact />
                           </div>
                           {isApproved && (
                             <p className="text-xs text-accent mt-0.5 font-mono truncate">
@@ -2285,30 +2339,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                               CAC: {v.cacNumber}
                             </span>
                           )}
-                          {v.cacDocumentUrl ? (
-                            <a
-                              href={v.cacDocumentUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-accent hover:underline font-semibold"
-                            >
-                              <FileText className="w-3.5 h-3.5" />
-                              View Certificate
-                            </a>
-                          ) : v.cacUploadFailed ? (
-                            <span
-                              className="inline-flex items-center gap-1 text-amber-600 font-semibold"
-                              title={`Document '${v.cacDocumentName}' failed to upload during registration and is missing from storage.`}
-                            >
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              Upload incomplete ({v.cacDocumentName})
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              CAC certificate missing
-                            </span>
-                          )}
+                          <CacStatusBadge v={v} />
                         </div>
                       </div>
 
