@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight, Building2, CheckCircle, Clock, Loader2, MapPin, Package, Scan, Search, ShieldCheck, Store,
+  ArrowLeft, ArrowRight, Building2, CheckCircle, Clock, Loader2, MapPin, Package, Plus, Scan, Search, ShieldCheck, Store,
 } from "lucide-react";
 import type { View } from "./types";
 import { cn } from "./types";
@@ -79,9 +79,20 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
             setIsPreviewMode(true);
             const { data: ownerBranches } = await supabase
               .from("brand_branches")
-              .select("id, branch_id, branch_name, branch_slug, location, created_at")
+              .select("id, branch_id, branch_name, branch_slug, location, created_at, status")
               .eq("brand_id", pendingBrand.id);
             setBranches(ownerBranches || []);
+
+            const branchIds = (ownerBranches || []).map((b: any) => b.branch_id).filter(Boolean);
+            if (branchIds.length) {
+              const { data: branchProducts } = await supabase
+                .from("products")
+                .select("id, vendor_id, name, price, category, image_url, nafdac_status")
+                .in("vendor_id", branchIds);
+              setProducts(branchProducts || []);
+            } else {
+              setProducts([]);
+            }
             return;
           } else {
             // Public visitor accessing an unverified brand
@@ -229,9 +240,20 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
       )}
       <header className="sticky top-0 z-40 bg-[#FAF7F2]/92 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
-          <button onClick={() => setView("landing")} className="flex items-center">
-            <img src="/logo.png" alt="Anovra" className="h-10 sm:h-12 w-auto object-contain" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setView("landing")} className="flex items-center">
+              <img src="/logo.png" alt="Anovra" className="h-10 sm:h-12 w-auto object-contain" />
+            </button>
+            {isPreviewMode && (
+              <button
+                onClick={() => setView("branddashboard")}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Return to Brand HQ</span>
+              </button>
+            )}
+          </div>
           <button
             onClick={() => {
               try {
@@ -396,10 +418,23 @@ export function BrandPublicView({ setView }: { setView: (v: View) => void }) {
           ) : (
             <div className="bg-card border border-dashed border-border rounded-2xl p-10 text-center">
               <Building2 className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
-              <p className="text-sm font-semibold text-foreground">No active branches found</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Active branches will appear here once the brand publishes them.
+              <p className="text-sm font-semibold text-foreground">
+                {isPreviewMode ? "No branches created yet" : "No active branches found"}
               </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                {isPreviewMode
+                  ? "You have not added any branches to your Brand HQ yet. Create your first branch from your Brand Dashboard to start publishing storefronts and skin test links."
+                  : "Active branches will appear here once the brand publishes them."}
+              </p>
+              {isPreviewMode && (
+                <button
+                  onClick={() => setView("branddashboard")}
+                  className="mt-4 inline-flex items-center gap-2 bg-[#008236] hover:bg-[#006c2c] text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create branch in Brand HQ</span>
+                </button>
+              )}
             </div>
           )}
         </section>
