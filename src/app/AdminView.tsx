@@ -247,6 +247,7 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
   const [declineReasonCode, setDeclineReasonCode] = useState("cac_incomplete");
   const [declineMessage, setDeclineMessage] = useState("");
   const [isDeclining, setIsDeclining] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
 
   // Add ingredient form states
   const [ingName, setIngName] = useState("");
@@ -268,6 +269,84 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     }
   }
 
+  const purgeOrphanedData = async () => {
+    setIsPurging(true);
+    const tid = toast.loading("Scanning and purging orphaned records across database tables...");
+    try {
+      const { data: allProfiles, error: pErr } = await supabase.from("profiles").select("id");
+      if (pErr) throw pErr;
+      const validProfileIds = new Set((allProfiles || []).map((p: any) => p.id));
+
+      let purgedCount = 0;
+
+      // 1. Purge orphaned payments
+      const { data: payments } = await supabase.from("payments").select("id, vendor_id");
+      const badPayments = (payments || []).filter((p: any) => !p.vendor_id || !validProfileIds.has(p.vendor_id));
+      if (badPayments.length > 0) {
+        const { error: delPayErr } = await supabase.from("payments").delete().in("id", badPayments.map((p: any) => p.id));
+        if (!delPayErr) {
+          purgedCount += badPayments.length;
+          setPaymentsList((prev) => prev.filter((p) => p.vendor_id && validProfileIds.has(p.vendor_id)));
+        }
+      }
+
+      // 2. Purge orphaned products
+      const { data: products } = await supabase.from("products").select("id, vendor_id");
+      const badProducts = (products || []).filter((p: any) => !p.vendor_id || !validProfileIds.has(p.vendor_id));
+      if (badProducts.length > 0) {
+        const { error: delProdErr } = await supabase.from("products").delete().in("id", badProducts.map((p: any) => p.id));
+        if (!delProdErr) {
+          purgedCount += badProducts.length;
+          setProductsList((prev) => prev.filter((p) => p.vendor_id && validProfileIds.has(p.vendor_id)));
+        }
+      }
+
+      // 3. Purge orphaned scans
+      const { data: scans } = await supabase.from("scans").select("id, vendor_id");
+      const badScans = (scans || []).filter((s: any) => s.vendor_id && !validProfileIds.has(s.vendor_id));
+      if (badScans.length > 0) {
+        const { error: delScanErr } = await supabase.from("scans").delete().in("id", badScans.map((s: any) => s.id));
+        if (!delScanErr) {
+          purgedCount += badScans.length;
+          setScansList((prev) => prev.filter((s) => !s.vendor_id || validProfileIds.has(s.vendor_id)));
+        }
+      }
+
+      // 4. Purge orphaned storefront reviews
+      const { data: reviews } = await supabase.from("storefront_reviews").select("id, vendor_id");
+      const badReviews = (reviews || []).filter((r: any) => !validProfileIds.has(r.vendor_id));
+      if (badReviews.length > 0) {
+        const { error: delRevErr } = await supabase.from("storefront_reviews").delete().in("id", badReviews.map((r: any) => r.id));
+        if (!delRevErr) {
+          purgedCount += badReviews.length;
+          setReviewsList((prev) => prev.filter((r) => validProfileIds.has(r.vendor_id)));
+        }
+      }
+
+      // 5. Purge orphaned brand branches
+      const { data: branches } = await supabase.from("brand_branches").select("id, brand_id, branch_id");
+      const badBranches = (branches || []).filter((b: any) => !validProfileIds.has(b.brand_id) || !validProfileIds.has(b.branch_id));
+      if (badBranches.length > 0) {
+        const { error: delBranchErr } = await supabase.from("brand_branches").delete().in("id", badBranches.map((b: any) => b.id));
+        if (!delBranchErr) {
+          purgedCount += badBranches.length;
+          setBrandBranchesList((prev) => prev.filter((b) => validProfileIds.has(b.brand_id) && validProfileIds.has(b.branch_id)));
+        }
+      }
+
+      if (purgedCount > 0) {
+        toast.success(`Purged ${purgedCount} orphaned record(s) belonging to deleted users.`);
+      } else {
+        toast.success("Database is healthy: zero orphaned records found.");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to purge orphaned records.");
+    } finally {
+      setIsPurging(false);
+      toast.dismiss(tid);
+    }
+  };
+
   useEffect(() => {
     const fetchAdminData = async () => {
       setIsLoading(true);
@@ -276,25 +355,30 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
           .from("profiles")
           .select("*");
           
+        const allProfileIds = new Set((profiles || []).map((p: any) => p.id));
         const vendors = (profiles || []).filter((p: any) => p.business_name !== null);
         setVendorsList(vendors);
 
         const { data: scans } = await supabase
           .from("scans")
           .select("*");
-        setScansList(scans || []);
+        const validScans = (scans || []).filter((s: any) => !s.vendor_id || allProfileIds.has(s.vendor_id));
+        setScansList(validScans);
 
         const { data: products } = await supabase
           .from("products")
           .select("*");
-        setProductsList(products || []);
+        const allProds = products || [];
+        const validProds = allProds.filter((p: any) => p.vendor_id && allProfileIds.has(p.vendor_id));
+        setProductsList(validProds);
 
         try {
           const { data: brandBranches } = await supabase
             .from("brand_branches")
             .select("*")
             .order("created_at", { ascending: false });
-          setBrandBranchesList(brandBranches || []);
+          const validBranches = (brandBranches || []).filter((b: any) => allProfileIds.has(b.brand_id) && allProfileIds.has(b.branch_id));
+          setBrandBranchesList(validBranches);
         } catch (brandBranchError) {
           setBrandBranchesList([]);
         }
@@ -304,7 +388,8 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             .from("storefront_reviews")
             .select("*")
             .order("created_at", { ascending: false });
-          setReviewsList(reviews || []);
+          const validReviews = (reviews || []).filter((r: any) => allProfileIds.has(r.vendor_id));
+          setReviewsList(validReviews);
         } catch (reviewError) {
           setReviewsList([]);
         }
@@ -322,7 +407,27 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
             console.warn("Payment telemetry is not available yet:", paymentsError.message);
             setPaymentsList([]);
           } else {
-            setPaymentsList(payments || []);
+            const allPayments = payments || [];
+            // Automatically purge orphaned payments whose vendor does not exist
+            const orphanedPayments = allPayments.filter((p: any) => !p.vendor_id || !allProfileIds.has(p.vendor_id));
+            if (orphanedPayments.length > 0) {
+              const orphanedIds = orphanedPayments.map((p: any) => p.id);
+              supabase.from("payments").delete().in("id", orphanedIds).then(({ error: delErr }) => {
+                if (!delErr) {
+                  console.info(`Auto-purged ${orphanedPayments.length} orphaned payment record(s).`);
+                }
+              });
+            }
+
+            // Always display only valid, non-orphaned payments in UI
+            const validPayments = allPayments.filter((p: any) => p.vendor_id && allProfileIds.has(p.vendor_id));
+            setPaymentsList(validPayments);
+          }
+
+          // Auto-purge any orphaned products from database
+          const orphanedProds = allProds.filter((p: any) => !p.vendor_id || !allProfileIds.has(p.vendor_id));
+          if (orphanedProds.length > 0) {
+            supabase.from("products").delete().in("id", orphanedProds.map((p: any) => p.id)).catch(() => {});
           }
         } else {
           setPaymentsList([]);
@@ -897,34 +1002,37 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
     return !q || brand.name.toLowerCase().includes(q) || brand.owner.toLowerCase().includes(q);
   });
   const filteredPayments = paymentsList.filter((p) => {
-    if (search === "") return true;
     const vendor = vendorsList.find((v) => v.id === p.vendor_id);
+    if (!vendor) return false;
+    if (search === "") return true;
     const searchLower = search.toLowerCase();
     return (
       (p.reference && p.reference.toLowerCase().includes(searchLower)) ||
       (p.id && p.id.toLowerCase().includes(searchLower)) ||
       (p.status && p.status.toLowerCase().includes(searchLower)) ||
       (p.tier_name && p.tier_name.toLowerCase().includes(searchLower)) ||
-      (vendor?.business_name && vendor.business_name.toLowerCase().includes(searchLower)) ||
-      (vendor?.name && vendor.name.toLowerCase().includes(searchLower)) ||
-      (vendor?.email && vendor.email.toLowerCase().includes(searchLower))
+      (vendor.business_name && vendor.business_name.toLowerCase().includes(searchLower)) ||
+      (vendor.name && vendor.name.toLowerCase().includes(searchLower)) ||
+      (vendor.email && vendor.email.toLowerCase().includes(searchLower))
     );
   });
 
   function downloadPaymentsCSV() {
     const headers = ["Transaction Reference", "Vendor Name", "Vendor Email", "Amount", "Billing Plan", "Date", "Status"];
-    const rows = filteredPayments.map((p) => {
-      const vendor = vendorsList.find((v) => v.id === p.vendor_id);
-      return [
-        p.reference || p.id,
-        vendor?.business_name || vendor?.name || "Unknown Vendor",
-        vendor?.email || "",
-        p.amount ? `₦${p.amount.toLocaleString()}` : "₦0",
-        p.plan || p.tier_name || "free",
-        p.created_at ? new Date(p.created_at).toLocaleDateString("en-GB") : "",
-        p.status || "success"
-      ];
-    });
+    const rows = filteredPayments
+      .filter((p) => vendorsList.some((v) => v.id === p.vendor_id))
+      .map((p) => {
+        const vendor = vendorsList.find((v) => v.id === p.vendor_id);
+        return [
+          p.reference || p.id,
+          vendor?.business_name || vendor?.name || "Vendor Partner",
+          vendor?.email || "",
+          p.amount ? `₦${p.amount.toLocaleString()}` : "₦0",
+          p.plan || p.tier_name || "free",
+          p.created_at ? new Date(p.created_at).toLocaleDateString("en-GB") : "",
+          p.status || "success"
+        ];
+      });
     const csvContent = [headers.join(","), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -1424,10 +1532,25 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
               ))}
             </div>
 
-            <div className="pt-4 border-t border-border mt-4">
+            <div className="pt-4 border-t border-border mt-4 space-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof (window as any).__triggerAppUpdateBanner === "function") {
+                    (window as any).__triggerAppUpdateBanner();
+                    toast.info("Triggered live update banner for preview.");
+                  }
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-accent hover:bg-accent/10 transition-colors rounded-lg font-medium whitespace-nowrap text-left cursor-pointer"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                title="Preview live app update banner"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-accent" />
+                <span>Test Update Banner</span>
+              </button>
               <button
                 onClick={handleSignOut}
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors rounded-lg font-medium whitespace-nowrap text-left"
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors rounded-lg font-medium whitespace-nowrap text-left cursor-pointer"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
                 <LogOut className="w-4 h-4 text-red-600" />
@@ -1538,10 +1661,26 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-border mt-4">
+              <div className="pt-4 border-t border-border mt-4 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    if (typeof (window as any).__triggerAppUpdateBanner === "function") {
+                      (window as any).__triggerAppUpdateBanner();
+                      toast.info("Triggered live update banner for preview.");
+                    }
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-accent hover:bg-accent/10 transition-colors rounded-lg font-medium whitespace-nowrap text-left cursor-pointer"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  title="Preview live app update banner"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-accent" />
+                  <span>Test Update Banner</span>
+                </button>
                 <button
                   onClick={handleSignOut}
-                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors rounded-lg font-medium whitespace-nowrap text-left"
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors rounded-lg font-medium whitespace-nowrap text-left cursor-pointer"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                 >
                   <LogOut className="w-4 h-4 text-red-600" />
@@ -3868,6 +4007,17 @@ export function AdminView({ setView }: { setView?: (v: View) => void }) {
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={purgeOrphanedData}
+                  disabled={isPurging}
+                  className="flex items-center justify-center gap-1.5 text-sm bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 dark:bg-rose-950/30 dark:text-rose-400 px-3.5 py-2.5 rounded-lg transition-colors cursor-pointer w-full sm:w-auto font-medium disabled:opacity-50"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  title="Purge payment and product records belonging to deleted users"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>{isPurging ? "Purging..." : "Purge Orphaned Records"}</span>
+                </button>
                 <button
                   onClick={downloadPaymentsCSV}
                   className="flex items-center justify-center gap-1.5 text-sm bg-accent text-white px-3.5 py-2.5 rounded-lg hover:bg-accent/90 transition-colors cursor-pointer w-full sm:w-auto font-medium"

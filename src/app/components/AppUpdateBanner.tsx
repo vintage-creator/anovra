@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw, Sparkles, X } from "lucide-react";
+
+declare const __APP_BUILD_TIME__: string;
 
 interface VersionPayload {
   version?: string;
@@ -10,12 +12,14 @@ export function AppUpdateBanner() {
   const [hasUpdate, setHasUpdate] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const initialVersionRef = useRef<string | null>(null);
+
+  // The version baked into this running javascript bundle at build time
+  const bundledVersion = typeof __APP_BUILD_TIME__ !== "undefined" ? __APP_BUILD_TIME__ : "dev";
 
   useEffect(() => {
     let isMounted = true;
 
-    async function checkVersion(isInitial = false) {
+    async function checkVersion() {
       try {
         const response = await fetch(`/version.json?t=${Date.now()}`, {
           cache: "no-store",
@@ -27,13 +31,13 @@ export function AppUpdateBanner() {
 
         if (!response.ok) return;
         const data: VersionPayload = await response.json();
-        const currentVer = data.version?.trim();
+        const serverVersion = data.version?.trim();
 
-        if (!currentVer) return;
+        if (!serverVersion) return;
 
-        if (isInitial || !initialVersionRef.current) {
-          initialVersionRef.current = currentVer;
-        } else if (currentVer !== initialVersionRef.current) {
+        // If the server's build timestamp is different from the bundle that loaded this page,
+        // an update has been deployed!
+        if (bundledVersion !== "dev" && serverVersion !== bundledVersion) {
           if (isMounted) {
             setHasUpdate(true);
           }
@@ -44,22 +48,28 @@ export function AppUpdateBanner() {
     }
 
     // 1. Initial check on mount
-    checkVersion(true);
+    checkVersion();
 
-    // 2. Periodic poll every 50 seconds
-    const intervalId = setInterval(() => {
-      checkVersion(false);
-    }, 50_000);
+    // 2. Periodic poll every 35 seconds
+    const intervalId = setInterval(checkVersion, 35_000);
 
     // 3. Check when user switches back to this tab
     function handleVisibilityOrFocus() {
       if (document.visibilityState === "visible") {
-        checkVersion(false);
+        checkVersion();
       }
     }
 
     window.addEventListener("focus", handleVisibilityOrFocus);
     document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    // Provide window helper for testing and demonstration
+    if (typeof window !== "undefined") {
+      (window as any).__triggerAppUpdateBanner = () => {
+        setIsDismissed(false);
+        setHasUpdate(true);
+      };
+    }
 
     return () => {
       isMounted = false;
@@ -67,7 +77,7 @@ export function AppUpdateBanner() {
       window.removeEventListener("focus", handleVisibilityOrFocus);
       document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
     };
-  }, []);
+  }, [bundledVersion]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
