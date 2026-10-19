@@ -7,7 +7,7 @@ import type { View } from "../types";
 import { supabase } from "../utils/supabase";
 import { NotificationCenter } from "./NotificationCenter";
 
-export type HeaderRole = "vendor" | "consumer" | "admin";
+export type HeaderRole = "vendor" | "consumer" | "admin" | "brand";
 
 interface UnifiedDashboardHeaderProps {
   currentView: View;
@@ -85,7 +85,19 @@ export function UnifiedDashboardHeader({
     { id: "landing", label: "Home", icon: Home },
   ];
 
-  const links = role === "consumer" ? consumerLinks : role === "admin" ? adminLinks : vendorLinks;
+  const brandLinks: { id: View; label: string; icon: React.ElementType }[] = [
+    { id: "branddashboard", label: "Overview", icon: LayoutDashboard },
+    { id: "landing", label: "Home", icon: Home },
+  ];
+
+  const links =
+    role === "consumer"
+      ? consumerLinks
+      : role === "admin"
+      ? adminLinks
+      : role === "brand"
+      ? brandLinks
+      : vendorLinks;
   const avatarInitials = (profileName || "User")
     .split(/\s+/)
     .filter(Boolean)

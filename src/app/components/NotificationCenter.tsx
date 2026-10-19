@@ -42,8 +42,10 @@ export interface NotificationItem {
   externalLink?: string;
 }
 
+export type NotificationRole = "admin" | "brand" | "vendor" | "consumer";
+
 interface NotificationCenterProps {
-  role?: "admin" | "vendor" | "consumer";
+  role?: NotificationRole;
   currentView?: View;
   setView: (v: View) => void;
   brandProfile?: any;
@@ -51,7 +53,7 @@ interface NotificationCenterProps {
 }
 
 export function NotificationCenter({
-  role = "consumer",
+  role,
   currentView,
   setView,
   brandProfile,
@@ -59,24 +61,6 @@ export function NotificationCenter({
 }: NotificationCenterProps) {
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  const [readIds, setReadIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem("anovra_read_notifications");
-      return new Set(stored ? JSON.parse(stored) : []);
-    } catch {
-      return new Set();
-    }
-  });
-
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem("anovra_dismissed_notifications");
-      return new Set(stored ? JSON.parse(stored) : []);
-    } catch {
-      return new Set();
-    }
-  });
 
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -108,13 +92,111 @@ export function NotificationCenter({
     };
   }, []);
 
-  // Construct contextual notifications based on role and account state
+  // Decisively resolve effective role:
+  // 1. Explicit prop passed to NotificationCenter
+  // 2. Deduced from currentView
+  // 3. Fallback to profile account_type
+  const effectiveRole: NotificationRole = useMemo(() => {
+    if (role) return role;
+    if (currentView === "admin") return "admin";
+    if (currentView === "branddashboard" || currentView === "brand" || currentView === "teamdashboard") return "brand";
+    if (currentView === "dashboard" || currentView === "catalog") return "vendor";
+    if (currentView === "userdashboard") return "consumer";
+    if (userProfile?.account_type === "brand") return "brand";
+    if (userProfile?.account_type === "vendor" || userProfile?.account_type === "branch") return "vendor";
+    if (userProfile?.account_type === "admin") return "admin";
+    return "consumer";
+  }, [role, currentView, userProfile]);
+
+  const readStorageKey = `anovra_read_notifications_${effectiveRole}_${currentUser?.id || "anon"}`;
+  const dismissedStorageKey = `anovra_dismissed_notifications_${effectiveRole}_${currentUser?.id || "anon"}`;
+
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`anovra_read_notifications_${role || "default"}`);
+      return new Set(stored ? JSON.parse(stored) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`anovra_dismissed_notifications_${role || "default"}`);
+      return new Set(stored ? JSON.parse(stored) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Re-synchronize storage keys whenever effectiveRole or user changes
+  useEffect(() => {
+    try {
+      const storedRead = localStorage.getItem(readStorageKey);
+      setReadIds(new Set(storedRead ? JSON.parse(storedRead) : []));
+    } catch {
+      setReadIds(new Set());
+    }
+    try {
+      const storedDismissed = localStorage.getItem(dismissedStorageKey);
+      setDismissedIds(new Set(storedDismissed ? JSON.parse(storedDismissed) : []));
+    } catch {
+      setDismissedIds(new Set());
+    }
+  }, [readStorageKey, dismissedStorageKey]);
+
+  // Construct contextual notifications based strictly on effectiveRole
   const computedNotifications = useMemo<NotificationItem[]>(() => {
     const list: NotificationItem[] = [];
     const profile = brandProfile || userProfile;
 
-    // --- BRAND HQ / VENDOR NOTIFICATIONS ---
-    if (role === "admin" || profile?.account_type === "brand") {
+    // --- 1. ADMIN NOTIFICATIONS (STRICTLY PLATFORM SUPER ADMIN) ---
+    if (effectiveRole === "admin") {
+      list.push({
+        id: "admin-partner-verification-queue",
+        title: "Partner Verification Queue",
+        summary: "Review pending CAC certificates and onboarding requests from brands and vendors.",
+        details:
+          "Corporate registration records and business certificates uploaded by vendors and brands require administrative audit. Once approved, partners are immediately granted live storefront and marketplace visibility.",
+        category: "compliance",
+        severity: "info",
+        timestamp: "Admin Queue",
+        actionLabel: "Review Vendors",
+        actionView: "admin",
+        actionTab: "vendors",
+      });
+
+      list.push({
+        id: "admin-safety-queue",
+        title: "Product Safety & Regulatory Queue",
+        summary: "Inspect cosmetic formulations, NAFDAC registrations, and ingredient disclosures.",
+        details:
+          "Formulations submitted by partner brands undergo ingredient safety analysis against banned cosmetic agents. Items requiring manual audit or verification of active NAFDAC permits are queued here.",
+        category: "compliance",
+        severity: "warning",
+        timestamp: "Safety Audit",
+        actionLabel: "Open Safety Queue",
+        actionView: "admin",
+        actionTab: "safety",
+      });
+
+      list.push({
+        id: "admin-platform-telemetry",
+        title: "Platform Activity & Telemetry",
+        summary: "Real-time telemetry across Nigerian vendor networks, AI scan volume, and reviews.",
+        details:
+          "Monitor platform health, customer scan volume across major cities (Lagos, Abuja, Port Harcourt), active vendor branches, and user review moderation.",
+        category: "system",
+        severity: "success",
+        timestamp: "Platform Status",
+        actionLabel: "Control Center",
+        actionView: "admin",
+        actionTab: "overview",
+      });
+    }
+
+    // --- 2. BRAND HQ NOTIFICATIONS (STRICTLY BRAND HQ WORKSPACE) ---
+    else if (effectiveRole === "brand") {
       const isVerified = Boolean(profile?.is_verified) && (profile?.verification_status ? profile.verification_status === "approved" : true);
       const isPending = !isVerified;
       const trialExpired = profile?.plan === "free"
@@ -190,8 +272,50 @@ export function NotificationCenter({
       });
     }
 
-    // --- CONSUMER / INDIVIDUAL NOTIFICATIONS ---
-    if (role === "consumer" || (!profile?.account_type || profile?.account_type === "consumer")) {
+    // --- 3. VENDOR / BRANCH NOTIFICATIONS (STRICTLY VENDOR OUTLETS) ---
+    else if (effectiveRole === "vendor") {
+      list.push({
+        id: "vendor-storefront-ready",
+        title: "Branch Storefront Link Active",
+        summary: "Your branch storefront is configured and ready to accept customer consultations.",
+        details:
+          "Customers who visit your branch link or scan your unique QR code receive recommendations mapped directly to your local stock inventory.",
+        category: "activity",
+        severity: "info",
+        timestamp: "Ready",
+        actionLabel: "View Storefront",
+        actionView: "shop",
+      });
+
+      list.push({
+        id: "vendor-inventory-sync",
+        title: "Product Inventory & Catalog",
+        summary: "Keep your product catalogue updated with active shelf stock and prices.",
+        details:
+          "AI skin analysis matches customers directly with items in your inventory. Keep your products updated to maximize branch sales.",
+        category: "compliance",
+        severity: "info",
+        timestamp: "Inventory",
+        actionLabel: "Open Catalogue",
+        actionView: "catalog",
+      });
+
+      list.push({
+        id: "vendor-consultation-scans",
+        title: "Dedicated Branch Skin Test",
+        summary: "Share your dedicated skin test QR code with in-store or social media shoppers.",
+        details:
+          "Every skin consultation completed through your branch link automatically prioritizes your inventory for product recommendations.",
+        category: "activity",
+        severity: "success",
+        timestamp: "Consultations",
+        actionLabel: "Preview Skin Test",
+        actionView: "skintest",
+      });
+    }
+
+    // --- 4. CONSUMER / INDIVIDUAL NOTIFICATIONS (STRICTLY CUSTOMERS) ---
+    else if (effectiveRole === "consumer") {
       list.push({
         id: "consumer-skin-analysis",
         title: "Personalised Skin Health Analysis",
@@ -232,25 +356,9 @@ export function NotificationCenter({
       });
     }
 
-    // --- VENDOR / BRANCH NOTIFICATIONS ---
-    if (role === "vendor" || profile?.account_type === "branch") {
-      list.push({
-        id: "vendor-storefront-ready",
-        title: "Branch Storefront Link Active",
-        summary: "Your branch storefront is configured and ready to accept customer consultations.",
-        details:
-          "Customers who visit your branch link or scan your unique QR code receive recommendations mapped directly to your local stock inventory.",
-        category: "activity",
-        severity: "info",
-        timestamp: "Ready",
-        actionLabel: "View Storefront",
-        actionView: "shop",
-      });
-    }
-
     // Merge custom notifications if any passed from parent
     return [...customNotifications, ...list];
-  }, [role, brandProfile, userProfile, customNotifications]);
+  }, [effectiveRole, brandProfile, userProfile, customNotifications]);
 
   // Filter out dismissed notifications
   const visibleNotifications = useMemo(() => {
@@ -267,7 +375,7 @@ export function NotificationCenter({
       const next = new Set(prev);
       next.add(id);
       try {
-        localStorage.setItem("anovra_dismissed_notifications", JSON.stringify(Array.from(next)));
+        localStorage.setItem(dismissedStorageKey, JSON.stringify(Array.from(next)));
       } catch {}
       return next;
     });
@@ -283,7 +391,7 @@ export function NotificationCenter({
     setDismissedIds((prev) => {
       const next = new Set([...prev, ...allIds]);
       try {
-        localStorage.setItem("anovra_dismissed_notifications", JSON.stringify(Array.from(next)));
+        localStorage.setItem(dismissedStorageKey, JSON.stringify(Array.from(next)));
       } catch {}
       return next;
     });
@@ -296,7 +404,7 @@ export function NotificationCenter({
     setReadIds((prev) => {
       const next = new Set([...prev, ...allIds]);
       try {
-        localStorage.setItem("anovra_read_notifications", JSON.stringify(Array.from(next)));
+        localStorage.setItem(readStorageKey, JSON.stringify(Array.from(next)));
       } catch {}
       return next;
     });
@@ -308,7 +416,7 @@ export function NotificationCenter({
       const next = new Set(prev);
       next.add(item.id);
       try {
-        localStorage.setItem("anovra_read_notifications", JSON.stringify(Array.from(next)));
+        localStorage.setItem(readStorageKey, JSON.stringify(Array.from(next)));
       } catch {}
       return next;
     });
@@ -326,6 +434,16 @@ export function NotificationCenter({
     }
 
     if (item.actionView) {
+      if (item.actionTab) {
+        try {
+          if (item.actionView === "admin") {
+            sessionStorage.setItem("active_admin_tab", item.actionTab);
+            sessionStorage.setItem("admin_active_tab", item.actionTab);
+          }
+          if (item.actionView === "branddashboard") sessionStorage.setItem("brand_active_tab", item.actionTab);
+          if (item.actionView === "dashboard") sessionStorage.setItem("vendor_active_tab", item.actionTab);
+        } catch {}
+      }
       if (item.actionView === "shop") {
         try {
           sessionStorage.removeItem("active_shop_slug");

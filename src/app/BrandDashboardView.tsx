@@ -748,13 +748,14 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
         currentView="branddashboard"
         setView={setView}
         title="Brand HQ"
-        role="admin"
+        badgeText="BRAND HQ"
+        role="brand"
         showShopLink={false}
         onMenuClick={() => setMobileMenuOpen(true)}
         menuLabel="Menu"
         actions={
           <NotificationCenter
-            role="admin"
+            role="brand"
             currentView="branddashboard"
             setView={setView}
             brandProfile={brandProfile}

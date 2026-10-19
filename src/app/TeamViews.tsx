@@ -465,7 +465,7 @@ export function TeamDashboardView({ setView }: { setView: (v: View) => void }) {
         setView={setView}
         title="Team workspace"
         badgeText={member.role || "TEAM"}
-        role="admin"
+        role="brand"
         showShopLink={false}
         onMenuClick={() => setSidebarOpen((open) => !open)}
         menuLabel={sidebarOpen ? "Close" : "Menu"}
