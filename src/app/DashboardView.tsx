@@ -14,6 +14,7 @@ import { cn } from "./types";
 import { CatalogView } from "./CatalogView";
 import { supabase } from "./utils/supabase";
 import { AccountDeletionSection } from "./components/AccountDeletionSection";
+import { NotificationCenter } from "./components/NotificationCenter";
 import { sendEmailNotification } from "./utils/notifications";
 import { toast } from "sonner";
 
@@ -1074,13 +1075,16 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
             </p>
           </div>
           
-          <button
-            onClick={handleGenerateShop}
-            className="flex items-center gap-1.5 text-xs bg-[#008236] text-white px-4 py-2.5 rounded-xl hover:bg-[#006c2c] transition-colors font-bold shadow-xs cursor-pointer self-start sm:self-auto"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
-            <Store className="w-4 h-4" /> {isBranchAccount ? "Preview Branch Shop" : "Preview Live Shop"}
-          </button>
+          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+            <NotificationCenter role="vendor" currentView="dashboard" setView={setView} />
+            <button
+              onClick={handleGenerateShop}
+              className="flex items-center gap-1.5 text-xs bg-[#008236] text-white px-4 py-2.5 rounded-xl hover:bg-[#006c2c] transition-colors font-bold shadow-xs cursor-pointer"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              <Store className="w-4 h-4" /> {isBranchAccount ? "Preview Branch Shop" : "Preview Live Shop"}
+            </button>
+          </div>
         </div>
 
         {tab === "catalog" && (

@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import type { View } from "../types";
 import { supabase } from "../utils/supabase";
+import { NotificationCenter } from "./NotificationCenter";
 
 export type HeaderRole = "vendor" | "consumer" | "admin";
 
@@ -220,8 +221,14 @@ export function UnifiedDashboardHeader({
               </button>
             )}
 
-            {/* Custom Header Actions (e.g. Notifications Bell) */}
-            {actions}
+            {/* Notifications Bell & Custom Actions */}
+            {actions !== undefined ? actions : (
+              <NotificationCenter
+                role={role}
+                currentView={currentView}
+                setView={setView}
+              />
+            )}
 
             {/* Mobile/Tablet Hamburger Menu Button - ALWAYS PINNED ON THE RIGHT */}
             {onMenuClick && (

@@ -11,6 +11,7 @@ import { cn } from "./types";
 import { supabase } from "./utils/supabase";
 import { toast } from "sonner";
 import { UnifiedDashboardHeader } from "./components/UnifiedDashboardHeader";
+import { NotificationCenter } from "./components/NotificationCenter";
 import { AccountDeletionSection } from "./components/AccountDeletionSection";
 import { BrandTeamSection } from "./BrandTeamSection";
 import { NIGERIA_LOCATIONS } from "./AuthViews";
@@ -665,115 +666,12 @@ export function BrandDashboardView({ setView }: { setView: (v: View) => void }) 
         onMenuClick={() => setMobileMenuOpen(true)}
         menuLabel="Menu"
         actions={
-          <DropdownMenu open={notificationsOpen} onOpenChange={setNotificationsOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-border bg-card hover:bg-muted text-foreground flex items-center justify-center transition-colors cursor-pointer"
-                aria-label="Notifications"
-                title="Notifications"
-              >
-                <Bell className="w-4 h-4" />
-                {!isBrandVerified && (
-                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-background animate-pulse" />
-                )}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              className="w-[min(92vw,380px)] p-0 rounded-2xl border border-border bg-card shadow-2xl overflow-hidden"
-            >
-              <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/30">
-                <div className="flex items-center gap-2">
-                  <Bell className="w-4 h-4 text-foreground" />
-                  <span className="text-sm font-semibold text-foreground">Notifications</span>
-                </div>
-                {!isBrandVerified ? (
-                  <span className="text-[10px] font-bold font-mono uppercase bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded-full">
-                    1 Pending
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-mono text-muted-foreground">All caught up</span>
-                )}
-              </div>
-              <div className="p-3 space-y-2 max-h-[70vh] overflow-y-auto">
-                {!isBrandVerified ? (
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 mt-0.5">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold text-foreground">CAC Verification Pending</p>
-                        <span className="text-[9px] font-mono uppercase font-bold text-amber-700 bg-amber-200/80 px-1.5 py-0.5 rounded">
-                          In Review
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                        Your CAC documentation is currently under review by Anovra compliance. Public storefront and scan links remain locked until verified.
-                      </p>
-                      <button
-                        onClick={() => {
-                          setNotificationsOpen(false);
-                          setView("contact");
-                        }}
-                        className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300 hover:underline inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        Contact Compliance <ChevronRight className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5">
-                      <CheckCircle2 className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-foreground">Account Verified</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                        Your brand identity and CAC credentials are fully verified. Public profile and branch links are active.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {brandTrialExpired ? (
-                  <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/25 flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-700 dark:text-orange-300 flex items-center justify-center shrink-0 mt-0.5">
-                      <AlertCircle className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-foreground">Trial Expired</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                        Your 3-day Brand HQ trial has ended. Contact Anovra to activate your annual subscription.
-                      </p>
-                      <button
-                        onClick={() => {
-                          setNotificationsOpen(false);
-                          setView("contact");
-                        }}
-                        className="mt-2 text-[11px] font-semibold text-orange-700 dark:text-orange-300 hover:underline inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        Upgrade Plan <ChevronRight className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 rounded-xl bg-muted/40 border border-border flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center shrink-0 mt-0.5">
-                      <Info className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-foreground">Brand HQ Trial Active</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                        You have full access to branch setup, team collaboration, and product indexing.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <NotificationCenter
+            role="admin"
+            currentView="branddashboard"
+            setView={setView}
+            brandProfile={brandProfile}
+          />
         }
       />
 
