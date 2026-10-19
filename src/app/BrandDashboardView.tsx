@@ -1695,26 +1695,46 @@ function OverviewBranchDirectory({
 
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => copy(branch.shopUrl, `shop-${branch.branch_id}`)}
-                        className="text-[11px] px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium transition-colors"
-                        title="Copy branch storefront URL"
+                        onClick={() => {
+                          if (!isBrandVerified) {
+                            toast.error("Storefront links cannot be copied until your brand is CAC-verified.");
+                            return;
+                          }
+                          copy(branch.shopUrl, `shop-${branch.branch_id}`);
+                        }}
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
+                        title={isBrandVerified ? "Copy branch storefront URL" : "Locked pending CAC verification"}
                       >
                         {copied === `shop-${branch.branch_id}` ? (
                           <span className="text-emerald-700 flex items-center gap-1">
                             <Check className="w-3 h-3" /> Copied
+                          </span>
+                        ) : !isBrandVerified ? (
+                          <span className="flex items-center gap-1 text-amber-700">
+                            <Lock className="w-3 h-3" /> Shop link
                           </span>
                         ) : (
                           "Shop link"
                         )}
                       </button>
                       <button
-                        onClick={() => copy(branch.scanUrl, `scan-${branch.branch_id}`)}
-                        className="text-[11px] px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium transition-colors"
-                        title="Copy skin test QR URL"
+                        onClick={() => {
+                          if (!isBrandVerified) {
+                            toast.error("Skin test links cannot be copied until your brand is CAC-verified.");
+                            return;
+                          }
+                          copy(branch.scanUrl, `scan-${branch.branch_id}`);
+                        }}
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
+                        title={isBrandVerified ? "Copy skin test QR URL" : "Locked pending CAC verification"}
                       >
                         {copied === `scan-${branch.branch_id}` ? (
                           <span className="text-emerald-700 flex items-center gap-1">
                             <Check className="w-3 h-3" /> Copied
+                          </span>
+                        ) : !isBrandVerified ? (
+                          <span className="flex items-center gap-1 text-amber-700">
+                            <Lock className="w-3 h-3" /> Scan link
                           </span>
                         ) : (
                           "Scan link"
@@ -1800,11 +1820,25 @@ function OverviewBranchDirectory({
                         Manage
                       </button>
                       <button
-                        onClick={() => copy(branch.shopUrl, `shop-${branch.branch_id}`)}
-                        className="min-h-10 rounded-xl bg-muted text-muted-foreground hover:text-foreground font-semibold text-xs transition-colors"
-                        title="Copy storefront link"
+                        onClick={() => {
+                          if (!isBrandVerified) {
+                            toast.error("Storefront links cannot be copied until your brand is CAC-verified.");
+                            return;
+                          }
+                          copy(branch.shopUrl, `shop-${branch.branch_id}`);
+                        }}
+                        className="min-h-10 rounded-xl bg-muted text-muted-foreground hover:text-foreground font-semibold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                        title={isBrandVerified ? "Copy storefront link" : "Locked pending CAC verification"}
                       >
-                        {copied === `shop-${branch.branch_id}` ? "Copied" : "Copy shop link"}
+                        {copied === `shop-${branch.branch_id}` ? (
+                          "Copied"
+                        ) : !isBrandVerified ? (
+                          <span className="flex items-center gap-1 text-amber-700">
+                            <Lock className="w-3.5 h-3.5" /> Locked
+                          </span>
+                        ) : (
+                          "Copy shop link"
+                        )}
                       </button>
                     </div>
                   </article>
@@ -1876,11 +1910,25 @@ function OverviewBranchDirectory({
                               Manage
                             </button>
                             <button
-                              onClick={() => copy(branch.shopUrl, `shop-${branch.branch_id}`)}
-                              className="px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium text-xs transition-colors"
-                              title="Copy storefront link"
+                              onClick={() => {
+                                if (!isBrandVerified) {
+                                  toast.error("Storefront links cannot be copied until your brand is CAC-verified.");
+                                  return;
+                                }
+                                copy(branch.shopUrl, `shop-${branch.branch_id}`);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                              title={isBrandVerified ? "Copy storefront link" : "Locked pending CAC verification"}
                             >
-                              {copied === `shop-${branch.branch_id}` ? "Copied" : "Shop"}
+                              {copied === `shop-${branch.branch_id}` ? (
+                                "Copied"
+                              ) : !isBrandVerified ? (
+                                <span className="flex items-center gap-1 text-amber-700">
+                                  <Lock className="w-3 h-3" /> Locked
+                                </span>
+                              ) : (
+                                "Shop"
+                              )}
                             </button>
                           </div>
                         </td>

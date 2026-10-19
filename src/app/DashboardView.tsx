@@ -734,7 +734,7 @@ export function DashboardView({ setView }: { setView: (v: View) => void }) {
         return;
       }
 
-      const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_live_c200939ad943bf0e7578a0b07ff9d41cf7feb8a9";
+      const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_c5005bfa3bf2e425baeba8300cf4d20333e4a9e2";
       if (!paystackPublicKey) {
         toast.error("Paystack public key is not configured.");
         return;
